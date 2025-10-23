@@ -101,7 +101,7 @@ export function ActionsSummaryChart() {
           <CardTitle className="text-base">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[240px] flex items-center justify-center">
+          <div className="h-[280px] flex items-center justify-center">
             <div className="text-muted-foreground">Loading chart...</div>
           </div>
         </CardContent>
@@ -165,22 +165,27 @@ export function ActionsSummaryChart() {
     tooltip: { show: false },
     grid: {
       left: '3%',
-      right: '8%',
-      bottom: '3%',
-      top: '8%',
+      right: '3%',
+      bottom: '15%',
+      top: '10%',
       containLabel: true,
     },
     xAxis: {
       type: 'category',
       data: periods,
+      axisLabel: {
+        interval: 0, // Show all labels
+        rotate: 0,   // Keep horizontal
+        fontSize: 11,
+      },
     },
     yAxis: {
       type: 'value',
       max: 100,
       show: false,
     },
-    barWidth: 100,
-    barCategoryGap: 10,
+    barWidth: '85%',
+    barCategoryGap: '0%',
     series: [
       {
         name: 'Drafted',
@@ -329,7 +334,7 @@ export function ActionsSummaryChart() {
         <CardTitle className="text-base">Recent Activity</CardTitle>
       </CardHeader>
       <CardContent>
-        <ReactECharts option={option} style={{ height: '240px' }} />
+        <ReactECharts option={option} style={{ height: '280px', width: '100%' }} />
       </CardContent>
     </Card>
   );
