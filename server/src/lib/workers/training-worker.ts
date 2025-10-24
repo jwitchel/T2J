@@ -159,7 +159,10 @@ const trainingWorker = new Worker(
   {
     connection,
     concurrency: 2,
-    autorun: false  // Don't start automatically - let WorkerManager control this
+    autorun: false,  // Don't start automatically - let WorkerManager control this
+    // Training jobs can take 5-10 minutes (pattern analysis with LLM calls)
+    lockDuration: 600000, // 10 minutes - max time for training jobs
+    lockRenewTime: 60000  // Renew lock every 60 seconds
   }
 );
 

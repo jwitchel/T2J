@@ -165,7 +165,11 @@ const inboxWorker = new Worker(
   {
     connection,
     concurrency: 5,
-    autorun: false
+    autorun: false,
+    // Increase lock duration for long-running email processing jobs
+    // Each email can take 30-60s (spam check + 3 LLM calls + vector search + IMAP operations)
+    lockDuration: 120000, // 2 minutes - max time a job can run
+    lockRenewTime: 30000  // Renew lock every 30 seconds
   }
 );
 
