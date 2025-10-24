@@ -989,7 +989,7 @@ export class ImapOperations {
     preserveConnection: boolean = false
   ): Promise<void> {
     const conn = await this.getConnection();
-    
+
     try {
       // Select the source folder
       await conn.selectFolder(sourceFolder);
@@ -999,14 +999,18 @@ export class ImapOperations {
       let subject: string | undefined;
       try {
         const headerMsgs = await conn.fetch(uid.toString(), {
-          bodies: 'HEADER.FIELDS (MESSAGE-ID)',
+          bodies: 'HEADER.FIELDS (MESSAGE-ID SUBJECT)',
           envelope: true,
           flags: true
         });
         if (headerMsgs.length > 0) {
-          const midArr = (headerMsgs[0] as any).headers?.messageId;
+          const msg = headerMsgs[0] as any;
+          const midArr = msg.headers?.messageId;
           messageId = Array.isArray(midArr) ? midArr[0] : undefined;
-          subject = (headerMsgs[0] as any).envelope?.subject || 'No subject';
+
+          // Try headers.subject first, then envelope.subject as fallback
+          const subjectArr = msg.headers?.subject;
+          subject = Array.isArray(subjectArr) ? subjectArr[0] : (subjectArr || msg.envelope?.subject || 'No subject');
         }
       } catch {
         // Non-fatal: continue without verification

@@ -96,13 +96,6 @@ export class JobSchedulerManager {
       throw new Error(`Unknown scheduler: ${schedulerId}`);
     }
 
-    // Get email address for logging
-    const { pool } = await import('../server');
-    const emailResult = await pool.query('SELECT email_address FROM email_accounts WHERE id = $1', [accountId]);
-    const emailAddress = emailResult.rows[0]?.email_address || accountId;
-
-    console.log(`[JobSchedulerManager] Enabling scheduler: ${schedulerId} for ${emailAddress}`);
-
     // Create or update the JobScheduler using BullMQ's native functionality
     // Note: JobScheduler ID includes userId AND accountId to make it unique per account
     const jobSchedulerId = `${schedulerId}-${accountId}`;
@@ -123,8 +116,6 @@ export class JobSchedulerManager {
     await this.redis.set(`${SCHEDULER_STATE_PREFIX}${jobSchedulerId}:enabled`, 'true');
     await this.redis.set(`${SCHEDULER_STATE_PREFIX}${jobSchedulerId}:userId`, userId);
     await this.redis.set(`${SCHEDULER_STATE_PREFIX}${jobSchedulerId}:accountId`, accountId);
-
-    console.log(`[JobSchedulerManager] Scheduler ${schedulerId} enabled for ${emailAddress} (${config.interval}ms)`);
   }
 
   /**
@@ -137,13 +128,6 @@ export class JobSchedulerManager {
       throw new Error(`Unknown scheduler: ${schedulerId}`);
     }
 
-    // Get email address for logging
-    const { pool } = await import('../server');
-    const emailResult = await pool.query('SELECT email_address FROM email_accounts WHERE id = $1', [accountId]);
-    const emailAddress = emailResult.rows[0]?.email_address || accountId;
-
-    console.log(`[JobSchedulerManager] Disabling scheduler: ${schedulerId} for ${emailAddress}`);
-
     // Remove the JobScheduler
     const jobSchedulerId = `${schedulerId}-${accountId}`;
     await config.queue.removeJobScheduler(jobSchedulerId);
@@ -152,8 +136,6 @@ export class JobSchedulerManager {
     await this.redis.del(`${SCHEDULER_STATE_PREFIX}${jobSchedulerId}:enabled`);
     await this.redis.del(`${SCHEDULER_STATE_PREFIX}${jobSchedulerId}:userId`);
     await this.redis.del(`${SCHEDULER_STATE_PREFIX}${jobSchedulerId}:accountId`);
-
-    console.log(`[JobSchedulerManager] Scheduler ${schedulerId} disabled for ${emailAddress}`);
   }
 
   /**
@@ -367,10 +349,12 @@ export class JobSchedulerManager {
    * 2. Disabling schedulers for accounts with monitoring_enabled = false
    */
   async initializeUserSchedulers(userId: string): Promise<void> {
-    console.log(`[JobSchedulerManager] Initializing schedulers for user: ${userId}`);
-
     // Import pool here to avoid circular dependencies
     const { pool } = await import('../server');
+
+    // Get user's name for logging
+    const userResult = await pool.query('SELECT name FROM "user" WHERE id = $1', [userId]);
+    const userName = userResult.rows[0]?.name || 'Unknown User';
 
     // Query ALL accounts for this user with email addresses
     const result = await pool.query(
@@ -378,8 +362,7 @@ export class JobSchedulerManager {
       [userId]
     );
 
-    const monitoredCount = result.rows.filter(r => r.monitoring_enabled).length;
-    console.log(`[JobSchedulerManager] Found ${result.rows.length} active accounts (${monitoredCount} monitored)`);
+    const enabledEmails: string[] = [];
 
     // Sync each account's scheduler with its monitoring_enabled state
     for (const row of result.rows) {
@@ -390,6 +373,7 @@ export class JobSchedulerManager {
       try {
         if (monitoringEnabled) {
           await this.enableScheduler(SchedulerId.CHECK_MAIL, userId, accountId);
+          enabledEmails.push(emailAddress);
         } else {
           // Disable if currently enabled
           const status = await this.getSchedulerStatus(SchedulerId.CHECK_MAIL, accountId);
@@ -400,6 +384,11 @@ export class JobSchedulerManager {
       } catch (error) {
         console.error(`[JobSchedulerManager] Failed to sync scheduler for ${emailAddress}:`, error);
       }
+    }
+
+    // Print consolidated summary
+    if (enabledEmails.length > 0) {
+      console.log(`[JobSchedulerManager] Initialized ${enabledEmails.length} scheduler${enabledEmails.length === 1 ? '' : 's'} for ${userName} (${enabledEmails.join(', ')})`);
     }
   }
 
