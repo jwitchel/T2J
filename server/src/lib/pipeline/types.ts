@@ -46,6 +46,39 @@ export interface GeneratedDraft {
   createdAt: Date;
 }
 
+/**
+ * Unified result type for email processing operations
+ * Used by both SpamDetector and DraftGenerator to ensure consistent return values
+ */
+export interface EmailProcessingResult {
+  success: boolean;
+  draft?: {
+    id: string;
+    from: string;
+    to: string;
+    cc: string;
+    subject: string;
+    body: string;
+    bodyHtml?: string;
+    inReplyTo: string;
+    references: string;
+    meta: LLMMetadata;
+    relationship: {
+      type: string;
+      confidence: number;
+      detectionMethod: string;
+    };
+    metadata: {
+      originalSubject?: string;
+      originalFrom?: string;
+      exampleCount: number;
+      directCorrespondence?: number;
+      timestamp: string;
+    };
+  };
+  error?: string;
+}
+
 export interface EmailFeatures {
   relationshipHints: {
     familiarityLevel: string;

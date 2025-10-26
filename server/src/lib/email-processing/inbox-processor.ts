@@ -6,7 +6,7 @@
 
 import { ImapOperations } from '../imap-operations';
 import { EmailActionTracker } from '../email-action-tracker';
-import { draftGenerator } from './draft-generator';
+import { emailProcessingService } from './email-processing-service';
 import { emailMover } from './email-mover';
 import { withImapContext } from '../imap-context';
 import { emailStorageService } from '../email-storage-service';
@@ -98,23 +98,35 @@ export class InboxProcessor {
     try {
       let generatedDraft: any;
 
-      // Step 1: Use existing draft if provided, otherwise generate new one
+      // Step 1: Use existing draft if provided, otherwise process email (spam check + draft generation)
       if (existingDraft) {
         generatedDraft = existingDraft;
       } else {
-        // Generate draft (timeout is handled internally by draftGenerator)
-        const draftResponse = await draftGenerator.generateDraft({
+        // Use EmailProcessingService - handles spam check and draft generation
+        // with NO duplicate parsing or DB queries
+        const processingResult = await emailProcessingService.processEmail({
           rawMessage: message.rawMessage,
           emailAccountId: accountId,
           providerId,
           userId
         });
 
-        if (!draftResponse.success || !draftResponse.draft) {
-          throw new Error(draftResponse.error || 'Failed to generate draft');
+        if (!processingResult.success || !processingResult.draft) {
+          const error = processingResult.error || 'Failed to process email';
+
+          // Check if this is a permanent failure (account not found/deleted)
+          // These should NOT retry - they're user configuration issues
+          if (error.includes('not found') || error.includes('does not belong')) {
+            const permanentError = new Error(error);
+            (permanentError as any).permanent = true; // Mark as permanent for worker to skip retry
+            throw permanentError;
+          }
+
+          // Retryable error (LLM timeout, network issues, etc.)
+          throw new Error(error);
         }
 
-        generatedDraft = draftResponse.draft;
+        generatedDraft = processingResult.draft;
       }
 
       // Critical check: Abort if lock expired during draft generation
