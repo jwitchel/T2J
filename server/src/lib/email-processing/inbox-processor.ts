@@ -111,7 +111,7 @@ export class InboxProcessor {
           userId
         });
 
-        if (!processingResult.success || !processingResult.draft) {
+        if (!processingResult.success) {
           const error = processingResult.error || 'Failed to process email';
 
           // Check if this is a permanent failure (account not found/deleted)

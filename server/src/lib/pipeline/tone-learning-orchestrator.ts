@@ -3,7 +3,7 @@ import { EmbeddingService } from '../vector/embedding-service';
 import { ExampleSelector } from './example-selector';
 import { PromptFormatterV2 } from './prompt-formatter-v2';
 import { EmailIngestPipeline } from './email-ingest-pipeline';
-import { ProcessedEmail, GeneratedDraft } from './types';
+import { ProcessedEmail, LLMDraftResult } from './types';
 import { RelationshipService } from '../relationships/relationship-service';
 import { RelationshipDetector } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
@@ -153,7 +153,7 @@ Email Details:
    * 1. Action analysis to determine what to do
    * 2. Response generation (if needed) with tone/style
    */
-  async generateDraft(request: DraftGenerationRequest): Promise<GeneratedDraft> {
+  async generateDraft(request: DraftGenerationRequest): Promise<LLMDraftResult> {
     const {
       incomingEmail,
       recipientEmail,
@@ -462,7 +462,7 @@ Email Details:
       };
     }
     
-    const draft: GeneratedDraft = {
+    const draft: LLMDraftResult = {
       id: `draft-${Date.now()}`,
       userId,
       incomingEmailId: incomingEmail.uid,

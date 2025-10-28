@@ -1,10 +1,10 @@
 // Email action tracking types
 
-export type EmailActionType = 
-  | 'none' 
-  | 'replied' 
-  | 'forwarded' 
-  | 'draft_created' 
+export type EmailActionType =
+  | 'none'
+  | 'replied'
+  | 'forwarded'
+  | 'draft_created'
   | 'manually_handled';
 
 export interface EmailActionTracking {
@@ -33,3 +33,4 @@ export interface EmailMessageWithAction {
   actionTaken?: EmailActionType;
   updatedAt?: Date;  // When the action was taken
 }
+
