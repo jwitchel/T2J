@@ -8,7 +8,6 @@ import { RelationshipService } from '../relationships/relationship-service';
 import { RelationshipDetector } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import { WritingPatternAnalyzer } from './writing-pattern-analyzer';
-import { EmailAttachmentStripper } from '../email-attachment-stripper';
 import chalk from 'chalk';
 
 export interface ToneLearningConfig {
@@ -262,7 +261,6 @@ Email Details:
     }
     
     // Declare prompts at wider scope
-    let spamCheckPrompt = '';
     let metaContextPrompt = '';
     let actionPrompt = '';
     let responsePrompt = '';
@@ -270,128 +268,10 @@ Email Details:
     // Retry logic configuration
     const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
     let retryCount = 0;
-    
-    // Step 3: Spam Check (First LLM Call - if we have raw message)
-    let isSpam = false;
-    let spamIndicators: string[] = [];
-    
-    if (incomingEmail.rawMessage) {
-      if (verbose) {
-        console.log(chalk.blue('\n3️⃣ Checking for spam...'));
-      }
-      
-      // Strip attachments from email to reduce token count
-      let emailForSpamCheck = incomingEmail.rawMessage;
-      const hasAttachments = EmailAttachmentStripper.hasAttachments(incomingEmail.rawMessage);
-      
-      if (hasAttachments) {
-        const originalSize = incomingEmail.rawMessage.length;
-        emailForSpamCheck = await EmailAttachmentStripper.stripAttachments(incomingEmail.rawMessage);
-        const strippedSize = emailForSpamCheck.length;
-        
-        const sizeMetrics = EmailAttachmentStripper.calculateSizeReduction(originalSize, strippedSize);
-        
-        if (verbose) {
-          console.log(chalk.yellow(`📎 Stripped attachments for spam check:`));
-          console.log(chalk.gray(`   Original: ${sizeMetrics.originalSizeKB}KB → Stripped: ${sizeMetrics.strippedSizeKB}KB`));
-          console.log(chalk.gray(`   Reduction: ${sizeMetrics.reductionKB}KB (${sizeMetrics.reductionPercent}%)`));
-        }
-      }
-      
-      // Format prompt for spam check with stripped email
-      spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
-        rawEmail: emailForSpamCheck,
-        userNames
-      });
-      
-      // Use the pattern analyzer's LLM client
-      if (!this.patternAnalyzer['llmClient']) {
-        throw new Error('LLM client not initialized. Please configure an LLM provider.');
-      }
-      
-      // Perform spam check with retry logic
-      let spamCheckResult;
-      retryCount = 0;
-      
-      while (retryCount <= maxRetries) {
-        try {
-          spamCheckResult = await this.patternAnalyzer['llmClient'].generateSpamCheck(spamCheckPrompt);
-          break; // Success, exit loop
-        } catch (error: any) {
-          if (error.message?.includes('JSON') && retryCount < maxRetries) {
-            retryCount++;
-            console.log(`[ToneLearning] Spam check failed, retrying (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-            continue;
-          }
-          throw error;
-        }
-      }
-      
-      if (!spamCheckResult) {
-        throw new Error('Failed to check for spam after retries');
-      }
-      
-      isSpam = spamCheckResult.meta.isSpam;
-      spamIndicators = spamCheckResult.meta.spamIndicators || [];
-      
-      if (verbose) {
-        console.log(chalk.green('  ✓ Spam check complete'));
-        console.log(chalk.gray(`  Is spam: ${isSpam}`));
-        if (spamIndicators.length > 0) {
-          console.log(chalk.gray(`  Spam indicators: ${spamIndicators.join(', ')}`));
-        }
-      }
-      
-      // If it's spam, return early with silent-spam action
-      if (isSpam) {
-        const draft: GeneratedDraft = {
-          id: `draft-${Date.now()}`,
-          userId,
-          incomingEmailId: incomingEmail.uid,
-          recipientEmail,
-          subject: `Re: ${incomingEmail.subject}`,
-          body: '',
-          meta: {
-            inboundMsgAddressedTo: 'you',
-            inboundMsgIsRequesting: 'none',
-            urgencyLevel: 'low',
-            contextFlags: {
-              isThreaded: false,
-              hasAttachments: false,
-              isGroupEmail: false
-            },
-            recommendedAction: 'silent-spam',
-            keyConsiderations: spamIndicators
-          },
-          relationship: {
-            type: 'external',
-            confidence: 0.9,
-            detectionMethod: 'spam-override'
-          },
-          examplesUsed: [],
-          metadata: {
-            exampleCount: 0,
-            directCorrespondence: 0,
-            timestamp: new Date().toISOString()
-          },
-          createdAt: new Date()
-        };
-        
-        if (verbose) {
-          console.log(chalk.red('\n⛔ Email identified as spam. Skipping further processing.\n'));
-        }
-        
-        return draft;
-      }
-    } else {
-      if (verbose) {
-        console.log(chalk.yellow('\n⚠️  No raw message available for spam check, skipping...'));
-      }
-    }
-    
-    // Step 4: Meta-Context Analysis (Second LLM Call)
+
+    // Step 3: Meta-Context Analysis (First LLM Call)
     if (verbose) {
-      console.log(chalk.blue('\n4️⃣ Analyzing email meta-context...'));
+      console.log(chalk.blue('\n3️⃣ Analyzing email meta-context...'));
     }
     
     // Format prompt for meta-context analysis
@@ -443,9 +323,9 @@ Email Details:
       console.log(chalk.gray(`  Is threaded: ${metaContextAnalysis.meta.contextFlags.isThreaded}`));
     }
     
-    // Step 5: Action Analysis (Third LLM Call)
+    // Step 4: Action Analysis (Second LLM Call)
     if (verbose) {
-      console.log(chalk.blue('\n5️⃣ Determining email action...'));
+      console.log(chalk.blue('\n4️⃣ Determining email action...'));
     }
     
     // Format prompt for action analysis
@@ -503,9 +383,9 @@ Email Details:
     let responseMessage = '';
     
     if (needsResponse) {
-      // Step 6: Response Generation (Fourth LLM Call)
+      // Step 5: Response Generation (Third LLM Call)
       if (verbose) {
-        console.log(chalk.blue('\n6️⃣ Generating response with tone and style...'));
+        console.log(chalk.blue('\n5️⃣ Generating response with tone and style...'));
         if (enhancedProfile?.aggregatedStyle) {
           console.log(chalk.gray(`  Using aggregated style from ${enhancedProfile.aggregatedStyle.emailCount} emails`));
         }

@@ -147,6 +147,10 @@ const inboxWorker = new Worker(
       return await processInboxJob(job as Job<ProcessInboxJobData>);
 
     } catch (error) {
+      // Check if this is a permanent failure (account not found, user deleted account, etc.)
+      // Permanent failures should not retry - they're configuration issues
+      const isPermanent = error instanceof Error && (error as any).permanent === true;
+
       // Log error once
       realTimeLogger.log(userId, {
         userId,
@@ -154,11 +158,23 @@ const inboxWorker = new Worker(
         level: 'error',
         command: 'worker.error',
         data: {
-          raw: `Job ${job.id} failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          parsed: { jobId: job.id, jobName: job.name }
+          raw: `Job ${job.id} failed${isPermanent ? ' (permanent)' : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          parsed: { jobId: job.id, jobName: job.name, permanent: isPermanent }
         }
       });
 
+      // For permanent failures, don't retry - just mark as failed
+      if (isPermanent) {
+        // BullMQ will not retry if we don't throw
+        console.log(`[InboxWorker] Job ${job.id} marked as permanent failure - will not retry`);
+        return {
+          success: false,
+          permanent: true,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
+
+      // For retryable errors (LLM timeout, network issues), throw to trigger retry
       throw error;
     }
   },

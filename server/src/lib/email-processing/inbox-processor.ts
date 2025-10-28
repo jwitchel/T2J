@@ -116,7 +116,7 @@ export class InboxProcessor {
 
           // Check if this is a permanent failure (account not found/deleted)
           // These should NOT retry - they're user configuration issues
-          if (error.includes('not found') || error.includes('does not belong')) {
+          if (processingResult.errorCode === 'ACCOUNT_NOT_FOUND') {
             const permanentError = new Error(error);
             (permanentError as any).permanent = true; // Mark as permanent for worker to skip retry
             throw permanentError;
