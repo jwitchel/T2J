@@ -1,454 +1,369 @@
 /**
  * DraftGenerator Service
  * Handles AI-powered email draft generation
- * Extracted from inbox-draft route to enable direct service-to-service calls
+ * Requires pre-parsed email data and user context from EmailProcessingService
  */
 
 import { ToneLearningOrchestrator } from '../pipeline/tone-learning-orchestrator';
-import { ProcessedEmail } from '../pipeline/types';
+import { ProcessedEmail, EmailProcessingResult, DraftEmail } from '../pipeline/types';
 import { realTimeLogger } from '../real-time-logger';
-import PostalMime from 'postal-mime';
-import { pool } from '../../server';
 import { TypedNameRemover } from '../typed-name-remover';
+import { pool } from '../../server';
+import { ParsedEmailData, UserContext } from './email-processing-service';
 
-// Initialize services (singleton pattern)
-let orchestrator: ToneLearningOrchestrator | null = null;
+// Provider-keyed cache to avoid race conditions when processing emails concurrently
+const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
 
-async function ensureServicesInitialized() {
+async function getOrchestrator(providerId: string): Promise<ToneLearningOrchestrator> {
+  let orchestrator = orchestratorCache.get(providerId);
+
   if (!orchestrator) {
     orchestrator = new ToneLearningOrchestrator();
     await orchestrator.initialize();
+    await orchestrator['patternAnalyzer'].initialize(providerId);
+    orchestratorCache.set(providerId, orchestrator);
   }
+
+  return orchestrator;
 }
 
-// Format reply with quoted original message
-function formatReplyEmail(
-  originalFromName: string,
-  originalFromEmail: string,
-  originalDate: Date,
-  originalBody: string,
-  replyBody: string,
-  typedName?: string,
-  originalHtml?: string,
-  signatureBlock?: string
-): { text: string; html?: string } {
-  // Format date to match email client format: "August 12, 2025 at 4:44:56 PM"
-  const formattedDate = originalDate.toLocaleString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true
-  });
+const SILENT_ACTIONS = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
 
-  // Add "at" between date and time
-  const dateParts = formattedDate.split(', ');
-  const dateFormatted = dateParts.length === 3
-    ? `${dateParts[0]}, ${dateParts[1]} at ${dateParts[2]}`
-    : formattedDate;
+export class DraftGenerator {
+  /**
+   * Generate an AI-powered email draft
+   */
+  async generateDraft(
+    userId: string,
+    providerId: string,
+    parsedData: ParsedEmailData,
+    userContext: UserContext
+  ): Promise<EmailProcessingResult> {
+    const { parsed, processedEmail } = parsedData;
 
-  // Format the sender info with email in parentheses
-  const senderInfo = originalFromName && originalFromName !== originalFromEmail
-    ? `${originalFromName} (${originalFromEmail})`
-    : originalFromEmail;
+    try {
+      // Step 1: Get provider-specific orchestrator (cached, already initialized)
+      const orchestrator = await getOrchestrator(providerId);
 
-  // Create email link for HTML version
-  const senderInfoHtml = originalFromName && originalFromName !== originalFromEmail
-    ? `${originalFromName} (<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>)`
-    : `<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>`;
+      // Step 2: Generate draft using orchestrator (with timeout protection)
+      const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
+      const draft = await this.generateDraftWithTimeout(orchestrator, processedEmail, userId, userContext, llmTimeout);
 
-  // Build the reply with typed name if provided
-  let formattedReply = replyBody;
-  if (typedName) {
-    // Ensure there's a line break before the typed name
-    formattedReply = `${replyBody}\n${typedName}`;
+      // Step 3: Clean any typed name that the LLM may have added
+      const cleanedBody = await this.removeTypedName(draft.body, userId);
+
+      // Step 4: Determine if this is a silent action
+      const isSilentAction = draft.meta && SILENT_ACTIONS.includes(draft.meta.recommendedAction);
+
+      // Step 5: Format complete draft response
+      const formattedDraft = isSilentAction
+        ? this.buildSilentDraft(parsed, draft, userContext)
+        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, draft, userContext);
+
+      // Step 6: Log completion
+      this.logDraftCompletion(userId, draft);
+
+      return {
+        success: true,
+        draft: formattedDraft
+      };
+
+    } catch (error) {
+      console.error('[DraftGenerator] Error generating draft:', error);
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = errorMessage.includes('timeout') ? 'LLM_TIMEOUT' : 'UNKNOWN';
+
+      return {
+        success: false,
+        error: errorMessage,
+        errorCode
+      };
+    }
   }
 
-  // Add signature block if provided
-  let finalTextReply = formattedReply;
-  if (signatureBlock) {
-    finalTextReply = `${formattedReply}\n${signatureBlock}`;
+  /**
+   * Generate draft with timeout protection
+   * @private
+   */
+  private async generateDraftWithTimeout(
+    orchestrator: ToneLearningOrchestrator,
+    processedEmail: ProcessedEmail,
+    userId: string,
+    userContext: UserContext,
+    timeoutMs: number
+  ) {
+    const draftPromise = orchestrator.generateDraft({
+      incomingEmail: processedEmail,
+      recipientEmail: processedEmail.from[0].address,
+      config: {
+        userId,
+        userNames: userContext.userNames
+      }
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`LLM timeout after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    return Promise.race([draftPromise, timeoutPromise]);
   }
 
-  // Plain text version
-  const quotedBody = originalBody
-    .split('\n')
-    .map(line => `> ${line}`)
-    .join('\n');
+  /**
+   * Remove typed name signature from draft body
+   * @private
+   */
+  private async removeTypedName(body: string, userId: string): Promise<string> {
+    const typedNameRemover = new TypedNameRemover(pool);
+    const cleaned = await typedNameRemover.removeTypedName(body, userId);
+    return cleaned.cleanedText;
+  }
 
-  const textReply = `${finalTextReply}
+  /**
+   * Build base draft email structure with common fields
+   * @private
+   */
+  private buildBaseDraft(
+    parsed: any,
+    draft: any,
+    userContext: UserContext
+  ): Omit<DraftEmail, 'to' | 'cc' | 'subject' | 'body' | 'bodyHtml'> {
+    return {
+      id: draft.id,
+      from: userContext.userEmail,
+      inReplyTo: parsed.messageId || `<${Date.now()}>`,
+      references: parsed.messageId || `<${Date.now()}>`,
+      meta: draft.meta!,
+      relationship: draft.relationship,
+      draftMetadata: {
+        ...draft.metadata,
+        originalSubject: parsed.subject,
+        originalFrom: parsed.from?.address
+      }
+    };
+  }
 
-On ${dateFormatted}, ${senderInfo} wrote:
+  /**
+   * Build draft for silent actions (no reply needed)
+   * @private
+   */
+  private buildSilentDraft(
+    parsed: any,
+    draft: any,
+    userContext: UserContext
+  ): DraftEmail {
+    return {
+      ...this.buildBaseDraft(parsed, draft, userContext),
+      to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address),
+      cc: '',
+      subject: parsed.subject || '',
+      body: ''
+    };
+  }
 
-${quotedBody}`;
+  /**
+   * Build draft for reply actions
+   * @private
+   */
+  private buildReplyDraft(
+    parsed: any,
+    emailBody: string,
+    cleanedBody: string,
+    draft: any,
+    userContext: UserContext
+  ): DraftEmail {
+    const formattedReply = this.formatReplyEmail(
+      parsed.from?.name || parsed.from?.address,
+      parsed.from?.address,
+      parsed.date ? new Date(parsed.date) : new Date(),
+      emailBody,
+      cleanedBody,
+      userContext.typedNameSignature,
+      parsed.html || undefined,
+      userContext.signatureBlock
+    );
 
-  // HTML version if original had HTML
-  let htmlReply: string | undefined;
-  if (originalHtml) {
-    // Convert reply body to HTML with proper paragraph handling
-    const replyLines = replyBody.split('\n');
-    const replyHtml = replyLines
-      .map(line => {
-        if (line.trim() === '') {
-          return '<br>';
-        }
-        // Escape HTML entities
-        const escaped = line
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-        return `<p style="margin: 0 0 1em 0;">${escaped}</p>`;
-      })
+    const replySubject = (parsed.subject || '').toLowerCase().startsWith('re:')
+      ? parsed.subject
+      : `Re: ${parsed.subject}`;
+
+    const isReplyAll = draft.meta?.recommendedAction === 'reply-all';
+    const { to, cc } = isReplyAll
+      ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
+      : { to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address), cc: '' };
+
+    return {
+      ...this.buildBaseDraft(parsed, draft, userContext),
+      to,
+      cc,
+      subject: replySubject,
+      body: formattedReply.text,
+      bodyHtml: formattedReply.html
+    };
+  }
+
+  /**
+   * Format reply email with quoted original message
+   * @private
+   */
+  private formatReplyEmail(
+    originalFromName: string,
+    originalFromEmail: string,
+    originalDate: Date,
+    originalBody: string,
+    replyBody: string,
+    typedName?: string,
+    originalHtml?: string,
+    signatureBlock?: string
+  ): { text: string; html?: string } {
+    const formattedDate = this.formatEmailDate(originalDate);
+    const senderInfo = originalFromName && originalFromName !== originalFromEmail
+      ? `${originalFromName} (${originalFromEmail})`
+      : originalFromEmail;
+
+    // Build reply with typed name and signature
+    let fullReply = replyBody;
+    if (typedName) fullReply = `${fullReply}\n${typedName}`;
+    if (signatureBlock) fullReply = `${fullReply}\n${signatureBlock}`;
+
+    // Plain text version
+    const quotedBody = originalBody.split('\n').map(line => `> ${line}`).join('\n');
+    const textReply = `${fullReply}\n\nOn ${formattedDate}, ${senderInfo} wrote:\n\n${quotedBody}`;
+
+    // HTML version if original had HTML
+    const htmlReply = originalHtml
+      ? this.formatHtmlReply(replyBody, typedName, signatureBlock, formattedDate, originalFromName, originalFromEmail, originalHtml)
+      : undefined;
+
+    return { text: textReply, html: htmlReply };
+  }
+
+  /**
+   * Format HTML version of reply
+   * @private
+   */
+  private formatHtmlReply(
+    replyBody: string,
+    typedName: string | undefined,
+    signatureBlock: string | undefined,
+    formattedDate: string,
+    originalFromName: string,
+    originalFromEmail: string,
+    originalHtml: string
+  ): string {
+    const replyHtml = replyBody.split('\n')
+      .map(line => line.trim() === '' ? '<br>' : `<p style="margin: 0 0 1em 0;">${this.escapeHtml(line)}</p>`)
       .join('\n');
 
-    // Format typed name for HTML
-    let typedNameHtml = '';
-    if (typedName) {
-      const escapedTypedName = typedName
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-      typedNameHtml = `<p style="margin: 0;">${escapedTypedName}</p>`;
-    }
+    const typedNameHtml = typedName ? `<p style="margin: 0;">${this.escapeHtml(typedName)}</p>` : '';
+    const signatureHtml = signatureBlock
+      ? signatureBlock.split('\n').map(line => `<p style="margin: 0;">${this.escapeHtml(line)}</p>`).join('\n')
+      : '';
 
-    // Format signature block for HTML
-    let signatureHtml = '';
-    if (signatureBlock) {
-      const signatureLines = signatureBlock.split('\n');
-      signatureHtml = signatureLines
-        .map(line => {
-          const escaped = line
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-          return `<p style="margin: 0;">${escaped}</p>`;
-        })
-        .join('\n');
-    }
+    const senderInfoHtml = originalFromName && originalFromName !== originalFromEmail
+      ? `${originalFromName} (<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>)`
+      : `<a href="mailto:${originalFromEmail}">${originalFromEmail}</a>`;
 
-    // Simple HTML structure that works well with email clients
-    htmlReply = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
 ${replyHtml}
 ${typedNameHtml}
 ${signatureHtml ? `<div style="margin-top: 1em;">${signatureHtml}</div>` : ''}
 <br>
-<div style="margin-top: 1em;">On ${dateFormatted}, ${senderInfoHtml} wrote:</div>
+<div style="margin-top: 1em;">On ${formattedDate}, ${senderInfoHtml} wrote:</div>
 <blockquote type="cite" style="margin: 1em 0 0 0; padding-left: 1em; border-left: 2px solid #ccc;">
 ${originalHtml}
 </blockquote>
 </div>`;
   }
 
-  return { text: textReply, html: htmlReply };
-}
-
-export interface GenerateDraftParams {
-  rawMessage: string;
-  emailAccountId: string;
-  providerId: string;
-  userId: string;
-}
-
-export interface GenerateDraftResult {
-  success: boolean;
-  draft?: {
-    id: string;
-    from: string;
-    to: string;
-    cc: string;
-    subject: string;
-    body: string;
-    bodyHtml?: string;
-    inReplyTo: string;
-    references: string;
-    meta: any;
-    relationship: any;
-    metadata: any;
-  };
-  error?: string;
-}
-
-export class DraftGenerator {
   /**
-   * Generate an AI-powered email draft from a raw email message
+   * Calculate recipients for reply-all
+   * @private
    */
-  async generateDraft(params: GenerateDraftParams): Promise<GenerateDraftResult> {
-    const { rawMessage, emailAccountId, providerId, userId } = params;
+  private calculateReplyAllRecipients(parsed: any, userEmail: string): { to: string; cc: string } {
+    const allTo: string[] = [this.formatEmailAddress(parsed.from?.name, parsed.from?.address)];
+    const allCc: string[] = [];
 
-    try {
-      // Parse the raw email
-      const parser = new PostalMime();
-      const parsed = await parser.parse(rawMessage);
-
-      // Extract email details
-      const fromAddress = parsed.from?.address || '';
-      const fromName = parsed.from?.name || parsed.from?.address || '';
-      const subject = parsed.subject || '';
-      const toAddresses = parsed.to || [];
-      const ccAddresses = parsed.cc || [];
-
-      // Extract email body - if HTML exists, convert it to plain text
-      let emailBody = parsed.text || '';
-
-      // Handle malformed emails that have empty text/plain parts (e.g., Venmo receipts)
-      // Check if text is empty AFTER trimming (not before)
-      if (emailBody.trim().length === 0 && parsed.html) {
-        // Use proper HTML to text conversion
-        const { convert } = await import('html-to-text');
-        emailBody = convert(parsed.html, {
-          wordwrap: false,
-          preserveNewlines: true,
-          selectors: [
-            { selector: 'a', options: { ignoreHref: true } },
-            { selector: 'img', format: 'skip' }
-          ]
-        });
+    // Add all TO recipients (except the user)
+    (parsed.to || []).forEach((addr: any) => {
+      if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
+        allTo.push(this.formatEmailAddress(addr.name, addr.address));
       }
+    });
 
-      // Trust that caller provided valid email with content
-      if (!emailBody || emailBody.trim().length === 0) {
-        emailBody = '(No content)'; // Fallback for edge case
+    // Add all CC recipients (except the user)
+    (parsed.cc || []).forEach((addr: any) => {
+      if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
+        allCc.push(this.formatEmailAddress(addr.name, addr.address));
       }
+    });
 
-      const messageId = parsed.messageId || `<${Date.now()}@${emailAccountId}>`;
+    return {
+      to: allTo.join(', '),
+      cc: allCc.join(', ')
+    };
+  }
 
-      // Get user's email from the account
-      const accountResult = await pool.query(
-        'SELECT email_address FROM email_accounts WHERE id = $1 AND user_id = $2',
-        [emailAccountId, userId]
-      );
+  /**
+   * Format email address with optional name
+   * @private
+   */
+  private formatEmailAddress(name: string | undefined, email: string): string {
+    return name && name !== email ? `${name} <${email}>` : email;
+  }
 
-      // Trust that caller validated account ownership
+  /**
+   * Format date for email reply header
+   * @private
+   */
+  private formatEmailDate(date: Date): string {
+    const formatted = date.toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
 
-      const userEmail = accountResult.rows[0].email_address;
+    // Add "at" between date and time: "August 12, 2025 at 4:44:56 PM"
+    const parts = formatted.split(', ');
+    return parts.length === 3 ? `${parts[0]}, ${parts[1]} at ${parts[2]}` : formatted;
+  }
 
-      // Log the start of draft generation
-      // realTimeLogger.log(userId, {
-      //   userId,
-      //   emailAccountId,
-      //   level: 'info',
-      //   command: 'DRAFT_GENERATION_START',
-      //   data: {
-      //     parsed: {
-      //       from: fromAddress,
-      //       subject: subject,
-      //       providerId: providerId
-      //     }
-      //   }
-      // });
+  /**
+   * Escape HTML entities
+   * @private
+   */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
-      // Initialize services
-      await ensureServicesInitialized();
-
-      // Initialize pattern analyzer with the selected provider
-      await orchestrator!['patternAnalyzer'].initialize(providerId);
-
-      // Create a ProcessedEmail object for the orchestrator
-      const processedEmail: ProcessedEmail = {
-        uid: messageId,
-        messageId: messageId,
-        inReplyTo: null,
-        date: parsed.date ? new Date(parsed.date) : new Date(),
-        from: [{ address: fromAddress, name: fromName }],
-        to: toAddresses.map(addr => ({ address: addr.address || '', name: addr.name || '' })),
-        cc: ccAddresses.map(addr => ({ address: addr.address || '', name: addr.name || '' })),
-        bcc: [],
-        subject: subject,
-        textContent: emailBody,
-        htmlContent: parsed.html || null,
-        userReply: emailBody,
-        respondedTo: '',
-        rawMessage: rawMessage
-      };
-
-      // Get user's preferences including name and typed name
-      const userResult = await pool.query(
-        'SELECT name, preferences FROM "user" WHERE id = $1',
-        [userId]
-      );
-
-      let userNames: { name: string; nicknames: string } | undefined;
-      if (userResult.rows.length > 0) {
-        const user = userResult.rows[0];
-        const preferences = user.preferences || {};
-
-        // Get user names for detection
-        userNames = {
-          name: preferences.name || user.name || '',
-          nicknames: preferences.nicknames || ''
-        };
+  /**
+   * Log draft generation completion
+   * @private
+   */
+  private logDraftCompletion(userId: string, draft: any): void {
+    realTimeLogger.log(userId, {
+      userId,
+      emailAccountId: 'unknown', // Not available in this context
+      level: 'info',
+      command: 'DRAFT_GENERATION_COMPLETE',
+      data: {
+        parsed: {
+          draftId: draft.id,
+          wordCount: draft.body.split(/\s+/).length,
+          relationship: draft.relationship.type,
+          recommendedAction: draft.meta?.recommendedAction
+        }
       }
-
-      // Generate the draft using the orchestrator with timeout protection
-      const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
-
-      const draftPromise = orchestrator!.generateDraft({
-        incomingEmail: processedEmail,
-        recipientEmail: fromAddress,
-        config: {
-          userId,
-          userNames
-        }
-      });
-
-      // Wrap draft generation with timeout to prevent infinite hangs
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`LLM timeout after ${llmTimeout}ms`)), llmTimeout);
-      });
-
-      const draft = await Promise.race([draftPromise, timeoutPromise]);
-
-      // Clean any typed name that the LLM may have added despite instructions
-      const typedNameRemover = new TypedNameRemover(pool);
-      const cleanedDraft = await typedNameRemover.removeTypedName(draft.body, userId);
-      draft.body = cleanedDraft.cleanedText;
-
-      // Check if this is a silent action
-      const ignoreActions = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
-      const isIgnoreAction = draft.meta && ignoreActions.includes(draft.meta.recommendedAction);
-
-      let formattedReply: { text: string; html?: string } = { text: '', html: undefined };
-      let replySubject = subject;
-
-      if (!isIgnoreAction) {
-        // Only format as reply for non-silent actions
-        let typedNameSignature = '';
-        let signatureBlock = '';
-        if (userResult.rows.length > 0) {
-          const preferences = userResult.rows[0].preferences || {};
-
-          // Get typed name signature
-          if (preferences.typedName?.appendString) {
-            typedNameSignature = preferences.typedName.appendString;
-          }
-
-          // Get signature block
-          if (preferences.signatureBlock) {
-            signatureBlock = preferences.signatureBlock;
-          }
-        }
-
-        // Format the complete reply email with typed name signature and signature block
-        formattedReply = formatReplyEmail(
-          fromName || fromAddress,
-          fromAddress,
-          parsed.date ? new Date(parsed.date) : new Date(),
-          emailBody,
-          draft.body,
-          typedNameSignature,
-          parsed.html || undefined,
-          signatureBlock
-        );
-
-        // Create reply subject
-        replySubject = subject.toLowerCase().startsWith('re:')
-          ? subject
-          : `Re: ${subject}`;
-      }
-
-      realTimeLogger.log(userId, {
-        userId,
-        emailAccountId,
-        level: 'info',
-        command: 'DRAFT_GENERATION_COMPLETE',
-        data: {
-          parsed: {
-            draftId: draft.id,
-            wordCount: draft.body.split(/\s+/).length,
-            relationship: draft.relationship.type,
-            recommendedAction: draft.meta?.recommendedAction
-          }
-        }
-      });
-
-      // Determine recipients based on recommended action
-      let recipients = fromName && fromName !== fromAddress
-        ? `${fromName} <${fromAddress}>`
-        : fromAddress;
-
-      let ccRecipients = '';
-
-      if (draft.meta?.recommendedAction === 'reply-all') {
-        // For reply-all, include all original recipients
-        const allRecipients: string[] = [];
-        const allCc: string[] = [];
-
-        // Add the sender to recipients
-        allRecipients.push(recipients);
-
-        // Add all TO recipients (except the user)
-        toAddresses.forEach(addr => {
-          if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
-            const formatted = addr.name && addr.name !== addr.address
-              ? `${addr.name} <${addr.address}>`
-              : addr.address;
-            allRecipients.push(formatted);
-          }
-        });
-
-        // Add all CC recipients (except the user)
-        ccAddresses.forEach(addr => {
-          if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
-            const formatted = addr.name && addr.name !== addr.address
-              ? `${addr.name} <${addr.address}>`
-              : addr.address;
-            allCc.push(formatted);
-          }
-        });
-
-        // Join recipients
-        recipients = allRecipients.join(', ');
-        ccRecipients = allCc.join(', ');
-      }
-
-      return {
-        success: true,
-        draft: {
-          id: draft.id,
-          from: userEmail,
-          to: recipients,
-          cc: ccRecipients,
-          subject: replySubject,
-          body: formattedReply.text,
-          bodyHtml: formattedReply.html,
-          inReplyTo: messageId,
-          references: messageId,
-          meta: draft.meta,
-          relationship: draft.relationship,
-          metadata: {
-            ...draft.metadata,
-            originalSubject: subject,
-            originalFrom: fromAddress
-          }
-        }
-      };
-
-    } catch (error) {
-      console.error('Error generating draft:', error);
-
-      realTimeLogger.log(userId, {
-        userId,
-        emailAccountId: emailAccountId,
-        level: 'error',
-        command: 'DRAFT_GENERATION_ERROR',
-        data: {
-          error: error instanceof Error ? error.message : 'Unknown error'
-        }
-      });
-
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+    });
   }
 }
 
