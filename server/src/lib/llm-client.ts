@@ -278,9 +278,6 @@ export class LLMClient {
         maxTokens: options?.maxTokens ?? 300,
       });
       
-      // Log verbose response disabled for cleaner console output
-      // console.log('[LLMClient] Spam check raw response:', text.substring(0, 500) + '...');
-      
       // Extract JSON from response
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
