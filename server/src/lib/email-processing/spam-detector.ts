@@ -68,28 +68,8 @@ export class SpamDetector {
       userNames
     });
 
-    // Perform spam check with retry logic
-    const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
-    let retryCount = 0;
-    let spamCheckResult;
-
-    while (retryCount <= maxRetries) {
-      try {
-        spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
-        break; // Success, exit loop
-      } catch (error: any) {
-        if (error.message?.includes('JSON') && retryCount < maxRetries) {
-          retryCount++;
-          console.log(`[SpamDetector] Spam check failed, retrying (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    if (!spamCheckResult) {
-      throw new Error('Failed to check for spam after retries');
-    }
+    // Perform spam check (retry logic is handled in LLMClient.generate())
+    const spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
 
     const isSpam = spamCheckResult.meta.isSpam;
     const indicators = spamCheckResult.meta.spamIndicators || [];

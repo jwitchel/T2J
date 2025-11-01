@@ -114,28 +114,4 @@ describe('LLMClient', () => {
     });
   });
 
-  describe('temperature adjustment', () => {
-    it('should use appropriate temperatures for different relationship types', () => {
-      const config: LLMProviderConfig = {
-        id: 'test-id',
-        type: 'openai',
-        apiKey: 'sk-test',
-        modelName: 'gpt-3.5-turbo'
-      };
-
-      const client = new LLMClient(config);
-      
-      // Access private method for testing
-      const getTemp = (client as any).getTemperatureForRelationship.bind(client);
-
-      expect(getTemp('spouse')).toBe(0.8);
-      expect(getTemp('family')).toBe(0.7);
-      expect(getTemp('friend')).toBe(0.7);
-      expect(getTemp('colleague')).toBe(0.5);
-      expect(getTemp('manager')).toBe(0.4);
-      expect(getTemp('client')).toBe(0.3);
-      expect(getTemp('unknown')).toBe(0.5);
-      expect(getTemp('random')).toBe(0.5); // default fallback
-    });
-  });
 });

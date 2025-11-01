@@ -29,7 +29,6 @@
     "redis:logs": "docker compose logs -f redis",
     "db:migrate": "node db/migrate.js",
     "seed": "cd server && npx tsx src/scripts/seed-demo.ts",
-    "tone:e2e": "cd server && npx tsx src/scripts/tests/test-e2e-flow.ts",
     "vector:test": "cd server && npx tsx src/scripts/tests/vector-comprehensive-test.ts",
     "qdrant:up": "docker compose up -d qdrant",
     "qdrant:down": "docker compose stop qdrant && docker compose rm -f qdrant",

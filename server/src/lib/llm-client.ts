@@ -1,19 +1,9 @@
-import { generateText, streamText } from 'ai';
+import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType } from '../types/llm-provider';
-
-export interface PipelineOutput {
-  llmPrompt: string;
-  nlpFeatures: any;
-  relationship: {
-    type: string;
-    confidence: number;
-  };
-  enhancedProfile: any;
-}
 
 export interface MetaContext {
   inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
@@ -32,11 +22,6 @@ export interface ActionData {
 }
 
 export interface LLMMetadata extends MetaContext, ActionData {}
-
-export interface StructuredLLMResponse {
-  meta: LLMMetadata;
-  message: string;
-}
 
 export interface SpamCheckResponse {
   meta: {
@@ -128,118 +113,53 @@ export class LLMClient {
   }
 
   /**
-   * Main method for pipeline integration - accepts pipeline output directly
-   */
-  async generateFromPipeline(pipelineOutput: PipelineOutput): Promise<string> {
-    // Use the pre-generated prompt from the pipeline
-    const temperature = this.getTemperatureForRelationship(pipelineOutput.relationship.type);
-    
-    try {
-      const { text } = await generateText({
-        model: this.model,
-        prompt: pipelineOutput.llmPrompt,
-        temperature,
-        maxTokens: 1000,
-      });
-      
-      return text;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * Generate with streaming support
-   */
-  async generateStream(prompt: string, options?: {
-    temperature?: number;
-    maxTokens?: number;
-    onToken?: (token: string) => void;
-  }) {
-    try {
-      const result = await streamText({
-        model: this.model,
-        prompt,
-        temperature: options?.temperature ?? 0.7,
-        maxTokens: options?.maxTokens ?? 1000,
-      });
-
-      // Return the stream for consumption
-      return result;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
-
-  /**
-   * Generic generation method for direct API calls
+   * Generic generation method for direct API calls with built-in retry logic
    */
   async generate(prompt: string, options?: {
     temperature?: number;
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<string> {
-    try {
-      const messages = options?.systemPrompt 
-        ? [
-            { role: 'system' as const, content: options.systemPrompt },
-            { role: 'user' as const, content: prompt }
-          ]
-        : prompt;
+    const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
+    let lastError: any;
 
-      const { text } = await generateText({
-        model: this.model,
-        messages: typeof messages === 'string' ? undefined : messages,
-        prompt: typeof messages === 'string' ? messages : undefined,
-        temperature: options?.temperature ?? 0.7,
-        maxTokens: options?.maxTokens ?? 1000,
-      });
-      
-      return text;
-    } catch (error: any) {
-      throw this.handleError(error);
-    }
-  }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const messages = options?.systemPrompt
+          ? [
+              { role: 'system' as const, content: options.systemPrompt },
+              { role: 'user' as const, content: prompt }
+            ]
+          : prompt;
 
-  /**
-   * Generate structured JSON response for email drafts
-   */
-  async generateStructured(prompt: string, options?: {
-    temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
-  }): Promise<StructuredLLMResponse> {
-    try {
-      const jsonSystemPrompt = `${options?.systemPrompt || ''}\n\nIMPORTANT: You must respond with a valid JSON object only. Do not include any text before or after the JSON.`;
+        const { text } = await generateText({
+          model: this.model,
+          messages: typeof messages === 'string' ? undefined : messages,
+          prompt: typeof messages === 'string' ? messages : undefined,
+          temperature: options?.temperature ?? 0.7,
+          maxTokens: options?.maxTokens ?? 1000,
+        });
 
-      const text = await this.generate(prompt, {
-        ...options,
-        systemPrompt: jsonSystemPrompt,
-        maxTokens: options?.maxTokens ?? 2000,
-      });
+        return text;
+      } catch (error: any) {
+        lastError = error;
 
-      console.log('[LLMClient] Raw LLM response:', text.substring(0, 500) + '...');
+        // Only retry on JSON parsing errors or temporary failures
+        const shouldRetry = error.message?.includes('JSON') ||
+                           error.message?.includes('rate limit') ||
+                           error.message?.includes('timeout');
 
-      const parsed = this.extractJSON(text, 'draft generation');
+        if (shouldRetry && attempt < maxRetries) {
+          console.log(`[LLMClient] Request failed, retrying (attempt ${attempt + 2}/${maxRetries + 1})...`);
+          continue;
+        }
 
-      this.validateJSON(
-        parsed,
-        (p) => p.meta && typeof p.message === 'string',
-        'missing meta or message field',
-        'draft generation'
-      );
-
-      // For silent actions, empty message is acceptable
-      const ignoreActions = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
-      if (parsed.message === '' && !ignoreActions.includes(parsed.meta.recommendedAction)) {
-        console.error('[LLMClient] Empty message for non-silent action:', parsed.meta.recommendedAction);
-        throw new Error('Empty message content for action that requires a response');
+        // Final attempt failed or non-retryable error
+        break;
       }
-
-      return parsed;
-    } catch (error: any) {
-      this.handleJSONError(error, 'Draft generation');
     }
+
+    throw this.handleError(lastError);
   }
 
   /**
@@ -449,23 +369,6 @@ export class LLMClient {
       throw new Error(`Failed to parse ${context} as JSON: ${error.message}`);
     }
     throw this.handleError(error);
-  }
-
-  /**
-   * Helper to adjust temperature based on relationship type
-   */
-  private getTemperatureForRelationship(relationshipType: string): number {
-    const temperatureMap: Record<string, number> = {
-      'spouse': 0.8,      // More creative for personal
-      'family': 0.7,
-      'friend': 0.7,
-      'colleague': 0.5,   // More consistent for professional
-      'manager': 0.4,
-      'client': 0.3,      // Most conservative for clients
-      'unknown': 0.5
-    };
-
-    return temperatureMap[relationshipType] || 0.5;
   }
 
   /**
