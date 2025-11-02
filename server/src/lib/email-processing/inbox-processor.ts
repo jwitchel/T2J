@@ -11,9 +11,42 @@ import { emailMover } from './email-mover';
 import { withImapContext } from '../imap-context';
 import { emailStorageService } from '../email-storage-service';
 import { emailLockManager } from '../email-lock-manager';
+import { DraftEmail } from '../pipeline/types';
+import { pool } from '../../server';
 
-// Silent actions that don't require draft creation
+// Constants
 const SILENT_ACTIONS = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
+const DEFAULT_SOURCE_FOLDER = 'INBOX';
+const DEFAULT_DESTINATION = 'INBOX';
+
+// Internal types for processing
+interface ProcessingContext {
+  message: ProcessEmailParams['message'];
+  accountId: string;
+  accountEmail?: string; // Email address of the account (for logging)
+  userId: string;
+  providerId: string;
+  messageKey: string; // Computed once: messageId || `${uid}@${accountId}`
+}
+
+interface ProcessingState {
+  draft: DraftEmail;
+  moved: boolean;
+  destination: string;
+  actionDescription: string;
+}
+
+interface DraftGenerationResult {
+  shouldSkip: boolean; // true for spam
+  draft?: DraftEmail;
+  skipReason?: string;
+}
+
+interface ImapOperationResult {
+  moved: boolean;
+  destination: string;
+  actionDescription: string;
+}
 
 export interface ProcessEmailParams {
   message: {
@@ -86,6 +119,295 @@ export class InboxProcessor {
   }
 
   /**
+   * Build processing context from parameters
+   * @private
+   */
+  private async _buildContext(params: ProcessEmailParams): Promise<ProcessingContext> {
+    const { message, accountId, userId, providerId } = params;
+
+    // Fetch account email for logging
+    let accountEmail: string | undefined;
+    try {
+      const result = await pool.query(
+        'SELECT email_address FROM email_accounts WHERE id = $1',
+        [accountId]
+      );
+      accountEmail = result.rows[0]?.email_address;
+    } catch (error) {
+      console.error('[InboxProcessor] Failed to fetch account email:', error);
+    }
+
+    return {
+      message,
+      accountId,
+      accountEmail,
+      userId,
+      providerId,
+      messageKey: message.messageId || `${message.uid}@${accountId}`
+    };
+  }
+
+  /**
+   * Generate draft or detect spam
+   * @private
+   */
+  private async _generateDraft(
+    context: ProcessingContext,
+    existingDraft?: DraftEmail
+  ): Promise<DraftGenerationResult> {
+    if (existingDraft) {
+      return { shouldSkip: false, draft: existingDraft };
+    }
+
+    const processingResult = await emailProcessingService.processEmail({
+      rawMessage: context.message.rawMessage,
+      emailAccountId: context.accountId,
+      providerId: context.providerId,
+      userId: context.userId
+    });
+
+    if (!processingResult.success) {
+      if (processingResult.errorCode === 'SPAM_DETECTED') {
+        return { shouldSkip: true, skipReason: 'spam' };
+      }
+
+      if (processingResult.errorCode === 'ACCOUNT_NOT_FOUND') {
+        const error = new Error(processingResult.error || 'Account not found');
+        (error as any).permanent = true;
+        throw error;
+      }
+
+      throw new Error(processingResult.error || 'Failed to process email');
+    }
+
+    return { shouldSkip: false, draft: processingResult.draft as DraftEmail };
+  }
+
+  /**
+   * Check if lock has expired
+   * @private
+   */
+  private _checkLockExpired(signal: AbortSignal, stage: string): void {
+    if (signal.aborted) {
+      throw new Error(`Lock expired during ${stage} - aborting to prevent duplicate`);
+    }
+  }
+
+  /**
+   * Perform IMAP operation (move or upload draft)
+   * @private
+   */
+  private async _performImapOperation(
+    context: ProcessingContext,
+    draft: DraftEmail
+  ): Promise<ImapOperationResult> {
+    const recommendedAction = draft.meta.recommendedAction;
+
+    if (SILENT_ACTIONS.includes(recommendedAction)) {
+      const result = await emailMover.moveEmail({
+        emailAccountId: context.accountId,
+        userId: context.userId,
+        messageUid: context.message.uid,
+        messageId: context.message.messageId,
+        sourceFolder: DEFAULT_SOURCE_FOLDER,
+        recommendedAction
+      });
+
+      if (!result.success) {
+        throw new Error(`Failed to move email: ${result.error || 'Unknown error'}`);
+      }
+
+      return {
+        moved: true,
+        destination: result.folder || DEFAULT_DESTINATION,
+        actionDescription: result.message || `Moved to ${result.folder}`
+      };
+    } else {
+      const result = await emailMover.uploadDraft({
+        emailAccountId: context.accountId,
+        userId: context.userId,
+        to: draft.to,
+        cc: draft.cc,
+        subject: draft.subject,
+        body: draft.body,
+        bodyHtml: draft.bodyHtml,
+        inReplyTo: draft.inReplyTo,
+        references: draft.references,
+        recommendedAction
+      });
+
+      if (!result.success) {
+        throw new Error(`Failed to upload draft: ${result.error || 'Unknown error'}`);
+      }
+
+      return {
+        moved: true,
+        destination: result.folder || DEFAULT_DESTINATION,
+        actionDescription: result.message || 'Draft created'
+      };
+    }
+  }
+
+  /**
+   * Record initial action tracking (before IMAP operations)
+   * @private
+   */
+  private async _recordInitialTracking(context: ProcessingContext, draft: DraftEmail): Promise<void> {
+    await EmailActionTracker.recordAction(
+      context.userId,
+      context.accountId,
+      context.messageKey,
+      draft.meta.recommendedAction as any, // recommendedAction type mismatch - cast for now
+      context.message.subject,
+      undefined, // Will be updated after IMAP
+      context.message.uid,
+      context.message.from
+    );
+  }
+
+  /**
+   * Update action tracking with final destination (after IMAP operations)
+   * @private
+   */
+  private async _updateTracking(
+    context: ProcessingContext,
+    draft: DraftEmail,
+    destination: string
+  ): Promise<void> {
+    await EmailActionTracker.recordAction(
+      context.userId,
+      context.accountId,
+      context.messageKey,
+      draft.meta.recommendedAction as any, // recommendedAction type mismatch - cast for now
+      context.message.subject,
+      destination,
+      context.message.uid,
+      context.message.from
+    );
+  }
+
+  /**
+   * Rollback action tracking on failure
+   * @private
+   */
+  private async _rollbackTracking(context: ProcessingContext): Promise<void> {
+    try {
+      await EmailActionTracker.resetAction(context.accountId, context.messageKey);
+    } catch (error) {
+      console.error('[InboxProcessor] Rollback failed:', error);
+    }
+  }
+
+  /**
+   * Save email to Qdrant (best effort - doesn't throw on error)
+   * @private
+   */
+  private async _saveToQdrant(
+    context: ProcessingContext,
+    draft: DraftEmail
+  ): Promise<void> {
+    try {
+      const emailData = {
+        uid: context.message.uid,
+        messageId: context.message.messageId,
+        subject: context.message.subject,
+        from: context.message.from,
+        rawMessage: context.message.rawMessage,
+        to: [],
+        cc: [],
+        date: new Date(),
+        flags: [],
+        size: context.message.rawMessage.length
+      };
+
+      const llmResponse = {
+        meta: draft.meta,
+        generatedAt: (draft as any).generatedAt || draft.draftMetadata?.timestamp || new Date().toISOString(),
+        providerId: context.providerId,
+        modelName: (draft as any).modelName || 'unknown',
+        draftId: draft.id || '',
+        relationship: draft.relationship || {
+          type: 'professional',
+          confidence: 0.5,
+          detectionMethod: 'default'
+        }
+      };
+
+      await emailStorageService.saveEmail({
+        userId: context.userId,
+        emailAccountId: context.accountId,
+        emailData,
+        emailType: 'incoming',
+        folderName: DEFAULT_SOURCE_FOLDER,
+        llmResponse
+      });
+    } catch (error) {
+      console.error(`[InboxProcessor] Failed to save to Qdrant:`, error);
+      // Don't throw - Qdrant is best-effort
+    }
+  }
+
+  /**
+   * Log concise two-line processing summary
+   * @private
+   */
+  private _logProcessingSummary(
+    context: ProcessingContext,
+    result: ProcessEmailResult,
+    isSpam: boolean
+  ): void {
+    // Extract clean sender email from "Name <email>" format
+    const fromEmail = context.message.from?.match(/<(.+?)>/)?.[1] || context.message.from || 'unknown';
+    const subject = (context.message.subject || 'No subject').substring(0, 60);
+    const account = context.accountEmail || context.accountId.slice(0, 8);
+
+    // Build status and action
+    const status = result.success ? '✓' : '✗';
+    const spamTag = isSpam ? ' [SPAM]' : '';
+    const action = result.action.replace(/-/g, '_').toUpperCase();
+    const dest = result.destination !== DEFAULT_DESTINATION ? ` → ${result.destination}` : '';
+
+    // Single line format: [status] Account: from@example.com | "Subject" | ACTION → dest
+    console.log(`[EMAIL ${status}${spamTag}] ${account}: ${fromEmail} | "${subject}" | ${action}${dest}`);
+  }
+
+  /**
+   * Build standardized result object
+   * @private
+   */
+  private _buildResult(
+    context: ProcessingContext,
+    state?: Partial<ProcessingState>,
+    error?: Error
+  ): ProcessEmailResult {
+    if (error) {
+      return {
+        success: false,
+        messageId: context.message.messageId,
+        subject: context.message.subject,
+        from: context.message.from,
+        action: 'error',
+        actionDescription: 'Failed to process',
+        destination: DEFAULT_DESTINATION,
+        moved: false,
+        error: error.message
+      };
+    }
+
+    return {
+      success: true,
+      messageId: context.message.messageId,
+      subject: context.message.subject,
+      from: context.message.from,
+      action: state?.draft?.meta.recommendedAction || 'skipped-spam',
+      actionDescription: state?.actionDescription || 'Spam detected - message skipped',
+      destination: state?.destination || DEFAULT_DESTINATION,
+      draftId: state?.draft?.id,
+      moved: state?.moved || false
+    };
+  }
+
+  /**
    * Execute email processing with lock held
    * @private
    */
@@ -93,208 +415,60 @@ export class InboxProcessor {
     params: ProcessEmailParams,
     signal: AbortSignal
   ): Promise<ProcessEmailResult> {
-    const { message, accountId, userId, providerId, generatedDraft: existingDraft } = params;
+    // 1. INITIALIZE CONTEXT (fetch account email for logging)
+    const context = await this._buildContext(params);
 
     try {
-      let generatedDraft: any;
+      // 2. GENERATE DRAFT (or detect spam) - early returns for special cases
+      const draftResult = await this._generateDraft(context, params.generatedDraft as DraftEmail);
 
-      // Step 1: Use existing draft if provided, otherwise process email (spam check + draft generation)
-      if (existingDraft) {
-        generatedDraft = existingDraft;
-      } else {
-        // Use EmailProcessingService - handles spam check and draft generation
-        // with NO duplicate parsing or DB queries
-        const processingResult = await emailProcessingService.processEmail({
-          rawMessage: message.rawMessage,
-          emailAccountId: accountId,
-          providerId,
-          userId
-        });
-
-        if (!processingResult.success) {
-          const error = processingResult.error || 'Failed to process email';
-
-          // Check if this is a permanent failure (account not found/deleted)
-          // These should NOT retry - they're user configuration issues
-          if (processingResult.errorCode === 'ACCOUNT_NOT_FOUND') {
-            const permanentError = new Error(error);
-            (permanentError as any).permanent = true; // Mark as permanent for worker to skip retry
-            throw permanentError;
-          }
-
-          // Retryable error (LLM timeout, network issues, etc.)
-          throw new Error(error);
-        }
-
-        generatedDraft = processingResult.draft;
+      if (draftResult.shouldSkip) {
+        const result = this._buildResult(context); // Returns spam skip result
+        this._logProcessingSummary(context, result, true);
+        return result;
       }
 
-      // Critical check: Abort if lock expired during draft generation
-      // This prevents duplicate drafts when operations run long
-      if (signal.aborted) {
-        throw new Error('Lock expired during draft generation - aborting to prevent duplicate');
-      }
+      const draft = draftResult.draft!;
 
-      const recommendedAction = generatedDraft.meta.recommendedAction; // Always present
+      // 3. CHECK LOCK AFTER DRAFT GENERATION
+      this._checkLockExpired(signal, 'draft generation');
 
-      let moved = false;
-      let destination = 'INBOX';
-      let actionDescription = 'Reply sent';
+      // 4. RECORD INITIAL ACTION TRACKING (optimistic locking)
+      await this._recordInitialTracking(context, draft);
 
-      // Step 2: Record action tracking BEFORE IMAP operations (optimistic locking)
-      // This prevents duplicates if process crashes after IMAP but before tracking
+      // 5. CHECK LOCK BEFORE IMAP OPERATIONS
+      this._checkLockExpired(signal, 'IMAP operations');
+
+      // 6. PERFORM IMAP OPERATIONS (move or upload) - throws on failure
+      let imapResult: ImapOperationResult;
       try {
-        await EmailActionTracker.recordAction(
-          userId,
-          accountId,
-          message.messageId || `${message.uid}@${accountId}`,
-          recommendedAction,  // Record the actual recommended action
-          message.subject,     // Store subject for dashboard display
-          undefined,           // Destination will be updated after IMAP operations
-          message.uid,         // Store UID for fallback IMAP fetching
-          message.from         // Store sender email for dashboard display
-        );
-      } catch (trackingError) {
-        console.error(`[InboxProcessor] Failed to record action tracking:`, trackingError);
-        throw trackingError;
+        imapResult = await this._performImapOperation(context, draft);
+      } catch (imapError) {
+        await this._rollbackTracking(context);
+        throw imapError;
       }
 
-      // Step 3: Check signal before IMAP operations (lock may have expired during draft generation)
-      if (signal.aborted) {
-        throw new Error('Lock expired before IMAP operations - aborting to prevent duplicate');
-      }
+      // 7. UPDATE ACTION TRACKING WITH FINAL DESTINATION
+      await this._updateTracking(context, draft, imapResult.destination);
 
-      // Step 4: Process based on action type (matching /inbox page logic exactly)
-      try {
-        if (SILENT_ACTIONS.includes(recommendedAction)) {
-          // For silent actions, just move the email (no draft to upload)
-          const moveResponse = await emailMover.moveEmail({
-            emailAccountId: accountId,
-            userId,
-            messageUid: message.uid,
-            messageId: message.messageId,
-            sourceFolder: 'INBOX',
-            recommendedAction
-          });
+      // 8. SAVE TO QDRANT (best effort - doesn't fail on error)
+      await this._saveToQdrant(context, draft);
 
-          if (moveResponse.success) {
-            moved = true;
-            destination = moveResponse.folder || destination;
-            actionDescription = moveResponse.message || `Moved to ${destination}`;
-          }
-        } else {
-          // For other actions (reply, etc), upload the draft (original stays in INBOX)
-          const uploadResponse = await emailMover.uploadDraft({
-            emailAccountId: accountId,
-            userId,
-            to: generatedDraft.to,
-            cc: generatedDraft.cc,
-            subject: generatedDraft.subject,
-            body: generatedDraft.body,
-            bodyHtml: generatedDraft.bodyHtml,
-            inReplyTo: generatedDraft.inReplyTo,
-            references: generatedDraft.references,
-            recommendedAction
-          });
+      // 9. BUILD SUCCESS RESULT AND LOG SUMMARY
+      const result = this._buildResult(context, {
+        draft,
+        moved: imapResult.moved,
+        destination: imapResult.destination,
+        actionDescription: imapResult.actionDescription
+      });
 
-          if (uploadResponse.success) {
-            moved = true;
-            destination = uploadResponse.folder || destination;
-            actionDescription = uploadResponse.message || 'Draft created and email moved';
-          }
-        }
-
-        // Update action tracking with final destination after IMAP operations
-        await EmailActionTracker.recordAction(
-          userId,
-          accountId,
-          message.messageId || `${message.uid}@${accountId}`,
-          recommendedAction,  // Use the actual recommended action
-          message.subject,
-          destination,
-          message.uid,         // Store UID for fallback IMAP fetching
-          message.from         // Store sender email for dashboard display
-        );
-
-      } catch (moveError) {
-        console.error(`[InboxProcessor] Failed to process message ${message.messageId}:`, moveError);
-        // Rollback action tracking on failure
-        try {
-          await EmailActionTracker.resetAction(accountId, message.messageId || `${message.uid}@${accountId}`);
-        } catch (rollbackError) {
-          console.error(`[InboxProcessor] Failed to rollback action tracking:`, rollbackError);
-        }
-        throw moveError;
-      }
-
-      // Step 5: Save incoming email to Qdrant (same as processBatch)
-      try {
-        // Construct full email data structure matching EmailMessageWithRaw
-        const emailData = {
-          uid: message.uid,
-          messageId: message.messageId,
-          subject: message.subject,
-          from: message.from,
-          rawMessage: message.rawMessage,
-          to: [], // These will be parsed from rawMessage by emailStorageService
-          cc: [],
-          date: new Date(),
-          flags: [],
-          size: message.rawMessage.length
-        };
-
-        // Construct LLM response metadata from generated draft
-        const llmResponse = generatedDraft ? {
-          meta: generatedDraft.meta, // Contains recommendedAction, urgency, keyConsiderations, etc.
-          generatedAt: generatedDraft.generatedAt || new Date().toISOString(),
-          providerId: providerId,
-          modelName: generatedDraft.modelName || 'unknown',
-          draftId: generatedDraft.id || '',
-          relationship: generatedDraft.relationship || {
-            type: 'professional',
-            confidence: 0.5,
-            detectionMethod: 'default'
-          }
-        } : undefined;
-
-        await emailStorageService.saveEmail({
-          userId,
-          emailAccountId: accountId,
-          emailData,
-          emailType: 'incoming',
-          folderName: 'INBOX',
-          llmResponse
-        });
-      } catch (storageError) {
-        // Log error but don't fail inbox processing
-        console.error(`[InboxProcessor] Failed to save email ${message.messageId} to Qdrant:`, storageError);
-      }
-
-      return {
-        success: true,
-        messageId: message.messageId,
-        subject: message.subject,
-        from: message.from,
-        action: recommendedAction,
-        actionDescription,
-        destination,
-        draftId: generatedDraft?.id,
-        moved
-      };
+      this._logProcessingSummary(context, result, false);
+      return result;
 
     } catch (error) {
-      console.error(`[InboxProcessor] Error processing message ${message.messageId}:`, error);
-      return {
-        success: false,
-        messageId: message.messageId,
-        subject: message.subject,
-        from: message.from,
-        action: 'error',
-        actionDescription: 'Failed to process',
-        destination: 'INBOX',
-        moved: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      const result = this._buildResult(context, undefined, error as Error);
+      this._logProcessingSummary(context, result, false);
+      return result;
     }
   }
 

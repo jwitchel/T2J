@@ -38,7 +38,10 @@ async function createEmailMessage(
     subject,
     messageId,
     date: new Date(),
-    text: body
+    text: body,
+    // Use base64 encoding for better compatibility with email clients
+    // Base64 is more universally supported than quoted-printable for Unicode
+    textEncoding: 'base64' as const
   };
 
   // Add CC if provided
@@ -61,6 +64,9 @@ async function createEmailMessage(
   }
 
   // Build the message
+  // Note: nodemailer automatically adds proper MIME headers including
+  // Content-Type: text/plain; charset=UTF-8
+  // Content-Transfer-Encoding: quoted-printable
   const info = await transporter.sendMail(mailOptions);
   const message = info.message.toString();
 

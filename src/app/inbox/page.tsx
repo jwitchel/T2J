@@ -1045,7 +1045,7 @@ function InboxContent() {
                     </div>
                     
                     {/* Key Considerations */}
-                    {generatedDraft.meta.keyConsiderations.length > 0 && (
+                    {Array.isArray(generatedDraft.meta?.keyConsiderations) && generatedDraft.meta.keyConsiderations.length > 0 && (
                       <div className="mt-4">
                         <div className="text-sm font-medium text-muted-foreground mb-2">Key Considerations</div>
                         <ul className="list-disc list-inside space-y-1">

@@ -280,8 +280,8 @@ export class EmailStorageService {
     } = params;
 
     try {
-      // Generate unique ID
-      const emailId = this.generateEmailId(userId, emailData.messageId!, otherPartyEmail);
+      // Generate unique ID (includes emailAccountId to prevent cross-account collisions)
+      const emailId = this.generateEmailId(userId, emailAccountId, emailData.messageId!, otherPartyEmail);
 
       // Determine which collection to use based on email type
       const collectionName = emailType === 'sent' ? SENT_COLLECTION : RECEIVED_COLLECTION;
@@ -385,20 +385,22 @@ export class EmailStorageService {
 
   /**
    * Generate unique Qdrant point ID
-   * Format: ${userId}-${messageId}-${otherPartyEmail}
+   * Format: ${userId}-${emailAccountId}-${messageId}-${otherPartyEmail}
    * - For sent emails: otherPartyEmail = recipient
    * - For incoming emails: otherPartyEmail = sender
+   * - emailAccountId ensures uniqueness when same user has multiple accounts
    */
   private generateEmailId(
     userId: string,
+    emailAccountId: string,
     messageId: string,
     otherPartyEmail: string
   ): string {
     // Normalize email to lowercase for consistency
     const normalizedEmail = otherPartyEmail.toLowerCase();
 
-    // Create unique ID
-    return `${userId}-${messageId}-${normalizedEmail}`;
+    // Create unique ID including emailAccountId to prevent cross-account collisions
+    return `${userId}-${emailAccountId}-${messageId}-${normalizedEmail}`;
   }
 }
 

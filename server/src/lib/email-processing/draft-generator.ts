@@ -1,15 +1,17 @@
 /**
  * DraftGenerator Service
- * Handles AI-powered email draft generation
- * Requires pre-parsed email data and user context from EmailProcessingService
+ * Handles AI-powered email draft generation with tone learning
+ * Combines AI pipeline (tone learning, example selection) with email formatting
  */
 
 import { ToneLearningOrchestrator } from '../pipeline/tone-learning-orchestrator';
 import { ProcessedEmail, EmailProcessingResult, DraftEmail } from '../pipeline/types';
+import { LLMMetadata } from '../llm-client';
 import { realTimeLogger } from '../real-time-logger';
 import { TypedNameRemover } from '../typed-name-remover';
 import { pool } from '../../server';
 import { ParsedEmailData, UserContext } from './email-processing-service';
+import { encode as encodeHtml } from 'he';
 
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
@@ -31,7 +33,8 @@ const SILENT_ACTIONS = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscr
 
 export class DraftGenerator {
   /**
-   * Generate an AI-powered email draft
+   * Generate an AI-powered email draft with tone learning
+   * Full pipeline: example selection → pattern analysis → LLM calls → email formatting
    */
   async generateDraft(
     userId: string,
@@ -40,28 +43,48 @@ export class DraftGenerator {
     userContext: UserContext
   ): Promise<EmailProcessingResult> {
     const { parsed, processedEmail } = parsedData;
+    const recipientEmail = processedEmail.from[0].address;
+    const maxExamples = parseInt(process.env.EXAMPLE_COUNT || '25');
 
     try {
       // Step 1: Get provider-specific orchestrator (cached, already initialized)
       const orchestrator = await getOrchestrator(providerId);
 
-      // Step 2: Generate draft using orchestrator (with timeout protection)
+      // Initialize constants
+      const incomingEmailMetadata = {
+        from: processedEmail.from,
+        to: processedEmail.to,
+        cc: processedEmail.cc,
+        subject: processedEmail.subject,
+        date: processedEmail.date
+      };
+
+      // Step 2: Run AI pipeline with timeout protection
       const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
-      const draft = await this.generateDraftWithTimeout(orchestrator, processedEmail, userId, userContext, llmTimeout);
+      const aiResult = await this.runAIPipelineWithTimeout(
+        orchestrator,
+        processedEmail,
+        recipientEmail,
+        userId,
+        userContext,
+        maxExamples,
+        incomingEmailMetadata,
+        llmTimeout
+      );
 
       // Step 3: Clean any typed name that the LLM may have added
-      const cleanedBody = await this.removeTypedName(draft.body, userId);
+      const cleanedBody = await this.removeTypedName(aiResult.body, userId);
 
       // Step 4: Determine if this is a silent action
-      const isSilentAction = draft.meta && SILENT_ACTIONS.includes(draft.meta.recommendedAction);
+      const isSilentAction = aiResult.meta && SILENT_ACTIONS.includes(aiResult.meta.recommendedAction);
 
       // Step 5: Format complete draft response
       const formattedDraft = isSilentAction
-        ? this.buildSilentDraft(parsed, draft, userContext)
-        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, draft, userContext);
+        ? this.buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext)
+        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext);
 
       // Step 6: Log completion
-      this.logDraftCompletion(userId, draft);
+      this.logDraftCompletion(userId, aiResult);
 
       return {
         success: true,
@@ -83,30 +106,150 @@ export class DraftGenerator {
   }
 
   /**
-   * Generate draft with timeout protection
+   * Run complete AI pipeline with timeout protection (moved from ToneLearningOrchestrator.generateDraft)
+   * Incorporates: example selection, pattern analysis, LLM calls (meta-context, action, response)
    * @private
    */
-  private async generateDraftWithTimeout(
+  private async runAIPipelineWithTimeout(
     orchestrator: ToneLearningOrchestrator,
     processedEmail: ProcessedEmail,
+    recipientEmail: string,
     userId: string,
     userContext: UserContext,
+    maxExamples: number,
+    incomingEmailMetadata: any,
     timeoutMs: number
-  ) {
-    const draftPromise = orchestrator.generateDraft({
-      incomingEmail: processedEmail,
-      recipientEmail: processedEmail.from[0].address,
-      config: {
+  ): Promise<{ body: string; meta: LLMMetadata; relationship: { type: string; confidence: number; detectionMethod: string } }> {
+    const SILENT_ACTIONS_FOR_PIPELINE = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
+
+    // Validate LLM client is available (should be already checked, but for type safety)
+    const llmClient = orchestrator['patternAnalyzer']['llmClient'];
+    if (!llmClient) {
+      throw new Error('LLM client not initialized');
+    }
+
+    const pipelinePromise = (async () => {
+      // Step 1: Select relevant examples
+      const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
         userId,
-        userNames: userContext.userNames
+        incomingEmail: processedEmail.userReply,
+        recipientEmail,
+        desiredCount: maxExamples
+      });
+
+      // Get the detected relationship
+      const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
+        userId,
+        recipientEmail
+      });
+
+      // Get enhanced profile with aggregated style
+      const enhancedProfile = await orchestrator['relationshipService'].getEnhancedProfile(
+        userId,
+        recipientEmail
+      );
+
+      // Step 2: Analyze writing patterns
+      let writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
+        userId,
+        exampleSelection.relationship
+      );
+
+      // If no patterns exist, analyze from available examples
+      if (!writingPatterns && exampleSelection.examples.length > 0) {
+        const emailsForAnalysis: ProcessedEmail[] = exampleSelection.examples.map(ex => ({
+          uid: ex.id,
+          messageId: ex.id,
+          inReplyTo: null,
+          date: new Date(ex.metadata.sentAt || Date.now()),
+          from: [{ address: ex.metadata.senderEmail || '', name: '' }],
+          to: [{ address: ex.metadata.recipientEmail || recipientEmail, name: '' }],
+          cc: [],
+          bcc: [],
+          subject: ex.metadata.subject || '',
+          textContent: ex.text,
+          htmlContent: null,
+          userReply: ex.text,
+          respondedTo: ''
+        }));
+
+        writingPatterns = await orchestrator['patternAnalyzer'].analyzeWritingPatterns(
+          userId,
+          emailsForAnalysis,
+          exampleSelection.relationship
+        );
+
+        await orchestrator['patternAnalyzer'].savePatterns(
+          userId,
+          writingPatterns,
+          exampleSelection.relationship,
+          emailsForAnalysis.length
+        );
       }
-    });
+
+      // Step 3: Meta-Context Analysis (First LLM Call)
+      const metaContextPrompt = await orchestrator['promptFormatter'].formatMetaContextAnalysis({
+        incomingEmail: processedEmail.userReply,
+        recipientEmail,
+        userNames: userContext.userNames,
+        incomingEmailMetadata
+      });
+
+      const metaContextAnalysis = await llmClient.generateMetaContextAnalysis(metaContextPrompt);
+
+      // Step 4: Action Analysis (Second LLM Call)
+      const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
+        incomingEmail: processedEmail.userReply,
+        recipientEmail,
+        userNames: userContext.userNames,
+        incomingEmailMetadata
+      });
+
+      const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
+
+      // Combine meta-context and action into full metadata
+      const combinedMeta: LLMMetadata = {
+        ...metaContextAnalysis.meta,
+        ...actionAnalysis.meta
+      };
+
+      // Step 5: Response Generation (Third LLM Call - conditional)
+      const needsResponse = !SILENT_ACTIONS_FOR_PIPELINE.includes(combinedMeta.recommendedAction);
+      let responseMessage = '';
+
+      if (needsResponse) {
+        const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
+          incomingEmail: processedEmail.userReply,
+          recipientEmail,
+          examples: exampleSelection.examples,
+          relationship: exampleSelection.relationship,
+          relationshipProfile: enhancedProfile,
+          writingPatterns,
+          userNames: userContext.userNames,
+          incomingEmailMetadata,
+          actionMeta: combinedMeta
+        });
+
+        responseMessage = await llmClient.generateResponseMessage(responsePrompt);
+      }
+
+      // Build final relationship
+      const finalRelationship = combinedMeta.recommendedAction === 'silent-spam'
+        ? { type: 'external', confidence: 0.9, detectionMethod: 'spam-override' }
+        : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence, detectionMethod: detectedRelationship.method };
+
+      return {
+        body: responseMessage,
+        meta: combinedMeta,
+        relationship: finalRelationship
+      };
+    })();
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error(`LLM timeout after ${timeoutMs}ms`)), timeoutMs);
     });
 
-    return Promise.race([draftPromise, timeoutPromise]);
+    return Promise.race([pipelinePromise, timeoutPromise]);
   }
 
   /**
@@ -125,18 +268,20 @@ export class DraftGenerator {
    */
   private buildBaseDraft(
     parsed: any,
-    draft: any,
+    meta: LLMMetadata,
+    relationship: { type: string; confidence: number; detectionMethod: string },
     userContext: UserContext
   ): Omit<DraftEmail, 'to' | 'cc' | 'subject' | 'body' | 'bodyHtml'> {
     return {
-      id: draft.id,
+      id: `draft-${Date.now()}`,
       from: userContext.userEmail,
       inReplyTo: parsed.messageId || `<${Date.now()}>`,
       references: parsed.messageId || `<${Date.now()}>`,
-      meta: draft.meta!,
-      relationship: draft.relationship,
+      meta,
+      relationship,
       draftMetadata: {
-        ...draft.metadata,
+        exampleCount: 0, // Will be overridden if needed
+        timestamp: new Date().toISOString(),
         originalSubject: parsed.subject,
         originalFrom: parsed.from?.address
       }
@@ -149,11 +294,12 @@ export class DraftGenerator {
    */
   private buildSilentDraft(
     parsed: any,
-    draft: any,
+    meta: LLMMetadata,
+    relationship: { type: string; confidence: number; detectionMethod: string },
     userContext: UserContext
   ): DraftEmail {
     return {
-      ...this.buildBaseDraft(parsed, draft, userContext),
+      ...this.buildBaseDraft(parsed, meta, relationship, userContext),
       to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address),
       cc: '',
       subject: parsed.subject || '',
@@ -169,7 +315,8 @@ export class DraftGenerator {
     parsed: any,
     emailBody: string,
     cleanedBody: string,
-    draft: any,
+    meta: LLMMetadata,
+    relationship: { type: string; confidence: number; detectionMethod: string },
     userContext: UserContext
   ): DraftEmail {
     const formattedReply = this.formatReplyEmail(
@@ -187,13 +334,13 @@ export class DraftGenerator {
       ? parsed.subject
       : `Re: ${parsed.subject}`;
 
-    const isReplyAll = draft.meta?.recommendedAction === 'reply-all';
+    const isReplyAll = meta.recommendedAction === 'reply-all';
     const { to, cc } = isReplyAll
       ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
       : { to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address), cc: '' };
 
     return {
-      ...this.buildBaseDraft(parsed, draft, userContext),
+      ...this.buildBaseDraft(parsed, meta, relationship, userContext),
       to,
       cc,
       subject: replySubject,
@@ -252,12 +399,12 @@ export class DraftGenerator {
     originalHtml: string
   ): string {
     const replyHtml = replyBody.split('\n')
-      .map(line => line.trim() === '' ? '<br>' : `<p style="margin: 0 0 1em 0;">${this.escapeHtml(line)}</p>`)
+      .map(line => line.trim() === '' ? '<br>' : `<p style="margin: 0 0 1em 0;">${encodeHtml(line)}</p>`)
       .join('\n');
 
-    const typedNameHtml = typedName ? `<p style="margin: 0;">${this.escapeHtml(typedName)}</p>` : '';
+    const typedNameHtml = typedName ? `<p style="margin: 0;">${encodeHtml(typedName)}</p>` : '';
     const signatureHtml = signatureBlock
-      ? signatureBlock.split('\n').map(line => `<p style="margin: 0;">${this.escapeHtml(line)}</p>`).join('\n')
+      ? signatureBlock.split('\n').map(line => `<p style="margin: 0;">${encodeHtml(line)}</p>`).join('\n')
       : '';
 
     const senderInfoHtml = originalFromName && originalFromName !== originalFromEmail
@@ -334,22 +481,19 @@ ${originalHtml}
 
   /**
    * Escape HTML entities
-   * @private
+   * NOTE: Now using 'he' library's encode() function instead of custom implementation
+   * The 'he' library is the industry-standard, well-tested HTML entity encoder/decoder
+   * @deprecated - Replaced by he.encode() imported at top of file
    */
-  private escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
 
   /**
    * Log draft generation completion
    * @private
    */
-  private logDraftCompletion(userId: string, draft: any): void {
+  private logDraftCompletion(
+    userId: string,
+    aiResult: { body: string; meta: LLMMetadata; relationship: { type: string; confidence: number; detectionMethod: string } }
+  ): void {
     realTimeLogger.log(userId, {
       userId,
       emailAccountId: 'unknown', // Not available in this context
@@ -357,10 +501,10 @@ ${originalHtml}
       command: 'DRAFT_GENERATION_COMPLETE',
       data: {
         parsed: {
-          draftId: draft.id,
-          wordCount: draft.body.split(/\s+/).length,
-          relationship: draft.relationship.type,
-          recommendedAction: draft.meta?.recommendedAction
+          draftId: `draft-${Date.now()}`,
+          wordCount: aiResult.body.split(/\s+/).length,
+          relationship: aiResult.relationship.type,
+          recommendedAction: aiResult.meta?.recommendedAction
         }
       }
     });

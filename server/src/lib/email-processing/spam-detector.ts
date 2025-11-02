@@ -36,15 +36,32 @@ export class SpamDetector {
   async initialize(providerId: string): Promise<void> {
     // Load LLM provider config from database
     const result = await pool.query(
-      'SELECT config FROM llm_providers WHERE id = $1',
+      `SELECT id, provider_type, api_key_encrypted as api_key, api_endpoint, model_name
+       FROM llm_providers
+       WHERE id = $1 AND is_active = true`,
       [providerId]
     );
 
     if (result.rows.length === 0) {
-      throw new Error(`LLM provider ${providerId} not found`);
+      throw new Error(`LLM provider ${providerId} not found or not active`);
     }
 
-    this.llmClient = new LLMClient(result.rows[0].config);
+    const provider = result.rows[0];
+
+    // Decrypt the API key
+    const { decryptPassword } = await import('../crypto');
+    const decryptedApiKey = decryptPassword(provider.api_key);
+
+    // Build LLMProviderConfig object
+    const config = {
+      id: provider.id,
+      type: provider.provider_type,
+      apiKey: decryptedApiKey,
+      apiEndpoint: provider.api_endpoint,
+      modelName: provider.model_name
+    };
+
+    this.llmClient = new LLMClient(config);
   }
 
   /**
@@ -74,19 +91,7 @@ export class SpamDetector {
     const isSpam = spamCheckResult.meta.isSpam;
     const indicators = spamCheckResult.meta.spamIndicators || [];
 
-    // Extract email headers for logging
-    const fromMatch = rawMessage.match(/^From:\s*(.+?)$/mi);
-    const subjectMatch = rawMessage.match(/^Subject:\s*(.+?)$/mi);
-
-    // Log spam check result for debugging
-    console.log('\n=================================================');
-    console.log('[SpamDetector] SPAM CHECK RESULT');
-    console.log('=================================================');
-    console.log('Is Spam:', isSpam);
-    console.log('From:', fromMatch?.[1]?.trim() || 'unknown');
-    console.log('Subject:', subjectMatch?.[1]?.replace(/\r?\n\s*/g, ' ').trim() || 'unknown');
-    console.log('Indicators:', indicators.length > 0 ? indicators : ['None detected']);
-    console.log('=================================================\n');
+    // Log spam check result for debugging (removed verbose multi-line format)
 
     return {
       isSpam,

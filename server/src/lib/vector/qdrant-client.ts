@@ -374,43 +374,10 @@ export class VectorStore {
     }
   }
 
-  async debugUserEmails(userId: string, limit: number = 5, collectionName?: string): Promise<void> {
+  async debugUserEmails(_userId: string, _limit: number = 5, _collectionName?: string): Promise<void> {
     await this.initialize();
-
-    const collection = collectionName || SENT_COLLECTION;
-
-    try {
-      // Get a few emails for this user to debug
-      const results = await this.client.scroll(collection, {
-        filter: {
-          must: [
-            { key: 'userId', match: { value: userId } }
-          ]
-        },
-        limit,
-        with_payload: true,
-        with_vector: true
-      });
-
-      // Also check total count without userId filter
-      const allResults = await this.client.scroll(collection, {
-        limit: 1000,
-        with_payload: false,
-        with_vector: false
-      });
-
-      // Count emails by relationship type
-      const relationshipCounts: Record<string, number> = {};
-      results.points.forEach(point => {
-        const payload = point.payload as any;
-        const relType = payload.relationship?.type || 'unknown';
-        relationshipCounts[relType] = (relationshipCounts[relType] || 0) + 1;
-      });
-
-      console.log(`[VectorStore] Retrieved ${results.points.length} emails from ${collection} (total: ${allResults.points.length}) - ${Object.entries(relationshipCounts).map(([type, count]) => `${type}:${count}`).join(', ')}`);
-    } catch (error) {
-      console.error('[VectorStore Debug] Error:', error);
-    }
+    // Removed verbose logging - summary now in InboxProcessor
+    // Debug function no longer needed - kept for API compatibility
   }
 
   async getRelationshipStats(userId: string, collectionName?: string): Promise<Record<string, number>> {

@@ -1,66 +1,18 @@
 === INSTRUCTIONS ===
-Analyze the email below to decide whether it is unsolicited commercial email (UCE) or junk marketing. This step runs AFTER traditional spam filters, so optimize for HIGH PRECISION (avoid false positives).
+Is this email spam?
 
 IMPORTANT: You must respond with a valid JSON object only. Do not include any text before or after the JSON.
 
-=== YOUR IDENTITY ===
-Your name is: {{userNames.name}}.
-
 === RESPONSE FORMAT ===
-CRITICAL: You must return a JSON object with this exact structure:
+Return a JSON object with this exact structure:
 {
   "meta": {
     "isSpam": <true|false>,
-    "spamIndicators": ["<indicator1>", "<indicator2>", ...]
+    "spamIndicators": ["<brief reason 1>", "<brief reason 2>", ...]
   }
 }
 
-=== DECISION POLICY ===
-Primary question: Is this email unsolicited commercial or bulk promotional content?
+If `isSpam` is false set: `"spamIndicators": ["Not spam"]`
 
-Mark `isSpam` true ONLY when there is strong evidence of unsolicited commercial/junk marketing. Otherwise, prefer `false` to avoid false positives.
-
-Strong evidence examples (non-exhaustive):
-- Cold outreach or sales pitch promoting products/services (e.g., SEO, lead-gen, development, investment/crypto, affiliate/referral pitches)
-- Generic mass-marketing language or templated promos unrelated to an existing conversation
-- Bulk marketing traits (e.g., marketing platform footer/unsubscribe) combined with no clear prior relationship or consent
-- Irrelevant vendor solicitations not tied to ongoing work or context
-
-Do NOT mark as spam when the content appears to be:
-- Replies/forwards, ongoing threads, calendar invites, personal messages
-- Transactional/account emails (receipts, 2FA, password resets, system notifications)
-- Legitimate customer/vendor correspondence related to current business
-- Opt-in newsletters from recognized brands the user plausibly subscribed to (unless deceptive or clearly irrelevant)
-
-Evidence to consider (lightweight, not prescriptive):
-- Content intent (promotional vs conversational/transactional)
-- Threading cues: "Re:", "Fwd:", quoted content, In-Reply-To/References headers
-- The presence of an unsubscribe/footer alone is not sufficient; combine with lack of relationship/relevance
-
-Common cold outreach phrasing/tactics (paraphrased examples; treat as signals, not rules):
-- "Noticed your profile/work in [industry] and wanted to connect/reach out"
-- "Following up/just checking back in" with no prior thread context
-- Flattery + industry labels ("leading voice/thought leader in [domain]")
-- "We’re working with/partnering with companies like yours" generic social proof
-- Offers to acquire, broker, or finance your business/assets/investments
-- "Exclusive/invite-only community/event/opportunity" invitations
-- Generic problem/solution pitch ("If [operations/reporting/tasks] are overwhelming, we can handle it")
-- Broad services pitch (SEO, lead-gen, dev shop, growth, fundraising, staffing, outsourcing)
-- Time pressure or scarcity framing ("unique opportunity", "limited slots", "this week")
-- Request to schedule an intro/demo call without clear prior relationship
-- "Are you the right person" requests or handoffs ("who handles X?", "can you point me to the appropriate person/team?")
-
-Opt-out/stop phrasing often seen in cold outreach (signals, not rules):
-- "If you're not interested, I'll stop following up/stop reaching out"
-- "Reply NO/NO THANKS/STOP/UNSUBSCRIBE and I won't bother you"
-- "Let me know and I can close the loop/stop pestering/leave you be"
-- "If now isn't a fit, I'm happy to stop and not circle back"
-- "If I'm not the right person, I can stop emailing you"
-
-## Response Requirements
-- Set `isSpam` to true only with strong evidence of unsolicited commercial/junk content; otherwise set to false
-- In `spamIndicators`, list brief natural-language reasons you used (e.g., "cold sales pitch for SEO", "bulk marketing footer + no prior relationship")
-- If no clear evidence, return "No clear indicators of unsolicited commercial content" for `spamIndicators`
-
-=== RAW EMAIL TO ANALYZE ===
+=== EMAIL TO ANALYZE ===
 {{rawEmail}}

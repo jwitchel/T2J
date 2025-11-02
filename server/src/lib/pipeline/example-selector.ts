@@ -91,10 +91,9 @@ export class ExampleSelector {
     // Calculate how many direct emails to use (up to the maximum percentage)
     const directEmailsToUse = Math.min(directEmails.length, maxDirectEmails);
     const remainingSlots = desiredCount - directEmailsToUse;
-    
-    console.log(`Using ${directEmailsToUse}/${directEmails.length} direct emails (max ${maxDirectEmails} allowed)`);
-    console.log(`Need ${remainingSlots} more examples from ${relationship.relationship} category`);
-    
+
+    // Removed verbose logging - summary now in InboxProcessor
+
     // Phase 2: Search for same relationship category to fill remaining slots
     // These show the writer's general pattern for this type of relationship
     let categoryEmails: EmailVector[] = [];

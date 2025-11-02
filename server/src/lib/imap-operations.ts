@@ -994,9 +994,8 @@ export class ImapOperations {
       // Select the source folder
       await conn.selectFolder(sourceFolder);
 
-      // Fetch Message-ID and subject for verification and logging
+      // Fetch Message-ID for verification
       let messageId: string | undefined;
-      let subject: string | undefined;
       try {
         const headerMsgs = await conn.fetch(uid.toString(), {
           bodies: 'HEADER.FIELDS (MESSAGE-ID SUBJECT)',
@@ -1007,10 +1006,6 @@ export class ImapOperations {
           const msg = headerMsgs[0] as any;
           const midArr = msg.headers?.messageId;
           messageId = Array.isArray(midArr) ? midArr[0] : undefined;
-
-          // Try headers.subject first, then envelope.subject as fallback
-          const subjectArr = msg.headers?.subject;
-          subject = Array.isArray(subjectArr) ? subjectArr[0] : (subjectArr || msg.envelope?.subject || 'No subject');
         }
       } catch {
         // Non-fatal: continue without verification
@@ -1068,9 +1063,7 @@ export class ImapOperations {
         });
       }
 
-      // Log with truncated subject and email account
-      const truncSubject = subject ? subject.substring(0, 40) + (subject.length > 40 ? '...' : '') : 'No subject';
-      console.log(`Moved '${truncSubject}' on ${this.account.email} to ${destFolder}`);
+      // Removed verbose logging - summary now in InboxProcessor
 
       // Verify removal from source; if still present by Message-ID, force delete and expunge
       if (messageId) {
