@@ -6,13 +6,7 @@
 
 import Redis from 'ioredis';
 import Redlock from 'redlock';
-
-const REDIS_URL = process.env.REDIS_URL!;
-
-// Shared Redis connection for lock manager (same pattern as queue-events.ts)
-const lockRedisConnection = new Redis(REDIS_URL, {
-  maxRetriesPerRequest: null
-});
+import { sharedConnection } from './redis-connection';
 
 export interface LockResult<T> {
   acquired: boolean;
@@ -23,7 +17,7 @@ export interface LockResult<T> {
 export class EmailLockManager {
   private redlock: InstanceType<typeof Redlock>;
 
-  constructor(redis: Redis = lockRedisConnection) {
+  constructor(redis: Redis = sharedConnection) {
     // Initialize Redlock with no retries - fail fast if lock is held or Redis unavailable
     this.redlock = new Redlock([redis], {
       retryCount: 0,  // No retries - lock held means skip email immediately

@@ -3,7 +3,7 @@
  * Manages BullMQ JobSchedulers for automated background tasks
  */
 
-import Redis from 'ioredis';
+import { sharedConnection } from './redis-connection';
 import {
   inboxQueue,
   trainingQueue,
@@ -36,13 +36,10 @@ interface SchedulerConfig {
 
 export class JobSchedulerManager {
   private static instance: JobSchedulerManager;
-  private redis: Redis;
+  private redis = sharedConnection;
   private schedulerConfigs: Map<string, SchedulerConfig> = new Map();
 
   private constructor() {
-    this.redis = new Redis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: null
-    });
 
     // Initialize scheduler configurations
     this.initializeSchedulerConfigs();
@@ -103,12 +100,18 @@ export class JobSchedulerManager {
     await config.queue.upsertJobScheduler(
       jobSchedulerId,
       {
-        every: config.interval // Repeat interval in milliseconds
+        every: config.interval, // Repeat interval in milliseconds
+        immediately: false // Don't run immediately, wait for first interval
       },
       {
         name: config.jobType,
         data: await config.jobData(userId, accountId),
-        opts: config.jobOpts
+        opts: {
+          ...config.jobOpts,
+          // Let BullMQ's JobScheduler generate unique IDs automatically
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 50 }
+        }
       }
     );
 

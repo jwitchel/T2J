@@ -4,15 +4,10 @@
  */
 
 import { Worker, Job } from 'bullmq';
-import Redis from 'ioredis';
 import { JobType, BuildToneProfileJobData, LearnFromEditJobData } from '../queue';
 import { makeServiceRequest } from '../../middleware/service-auth';
 import { realTimeLogger } from '../real-time-logger';
-
-// Redis connection for worker
-const connection = new Redis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: null
-});
+import { sharedConnection as connection } from '../redis-connection';
 
 // Handler for building tone profiles
 async function buildToneProfile(job: Job<BuildToneProfileJobData>) {
@@ -158,11 +153,17 @@ const trainingWorker = new Worker(
   },
   {
     connection,
-    concurrency: 2,
-    autorun: false,  // Don't start automatically - let WorkerManager control this
-    // Training jobs can take 5-10 minutes (pattern analysis with LLM calls)
-    lockDuration: 600000, // 10 minutes - max time for training jobs
-    lockRenewTime: 60000  // Renew lock every 60 seconds
+    concurrency: parseInt(process.env.BULLMQ_TRAINING_CONCURRENCY!),
+    autorun: false,
+    // Lock configuration from environment
+    lockDuration: parseInt(process.env.BULLMQ_TRAINING_LOCK_DURATION!),
+    lockRenewTime: parseInt(process.env.BULLMQ_TRAINING_LOCK_RENEW_TIME!),
+    // Stalled job handling - critical for OS sleep/wake recovery
+    stalledInterval: parseInt(process.env.BULLMQ_TRAINING_STALLED_INTERVAL!),
+    maxStalledCount: parseInt(process.env.BULLMQ_TRAINING_MAX_STALLED_COUNT!),
+    // Ensure stalled checks and lock renewal are enabled
+    skipStalledCheck: false,
+    skipLockRenewal: false
   }
 );
 
@@ -173,6 +174,20 @@ trainingWorker.on('completed', (job) => {
 
 trainingWorker.on('failed', (job, err) => {
   console.error(`[TrainingWorker] Job ${job?.id} failed:`, err);
+});
+
+// Handle lock renewal errors (OS sleep/wake scenario)
+trainingWorker.on('error', (err) => {
+  if (err.message.includes('could not renew lock')) {
+    console.warn('[TrainingWorker] Lock renewal failed - job will be marked as stalled and handled by stalledInterval');
+  } else {
+    console.error('[TrainingWorker] Worker error:', err);
+  }
+});
+
+// Handle stalled jobs
+trainingWorker.on('stalled', (jobId) => {
+  console.warn(`[TrainingWorker] Job ${jobId} stalled - will be retried or failed based on maxStalledCount`);
 });
 
 export default trainingWorker;

@@ -4,15 +4,11 @@
  */
 
 import { Worker, Job } from 'bullmq';
-import Redis from 'ioredis';
 import { JobType, ProcessInboxJobData } from '../queue';
 import { realTimeLogger } from '../real-time-logger';
 import { inboxProcessor } from '../email-processing/inbox-processor';
 import { pool } from '../../server';
-
-const connection = new Redis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: null
-});
+import { sharedConnection as connection } from '../redis-connection';
 
 async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
   const { userId, accountId, fanOut, folderName, since } = job.data;
@@ -180,12 +176,17 @@ const inboxWorker = new Worker(
   },
   {
     connection,
-    concurrency: 5,
+    concurrency: parseInt(process.env.BULLMQ_INBOX_CONCURRENCY!),
     autorun: false,
-    // Increase lock duration for long-running email processing jobs
-    // Each email can take 30-60s (spam check + 3 LLM calls + vector search + IMAP operations)
-    lockDuration: 120000, // 2 minutes - max time a job can run
-    lockRenewTime: 30000  // Renew lock every 30 seconds
+    // Lock configuration from environment
+    lockDuration: parseInt(process.env.BULLMQ_INBOX_LOCK_DURATION!),
+    lockRenewTime: parseInt(process.env.BULLMQ_INBOX_LOCK_RENEW_TIME!),
+    // Stalled job handling - critical for OS sleep/wake recovery
+    stalledInterval: parseInt(process.env.BULLMQ_INBOX_STALLED_INTERVAL!),
+    maxStalledCount: parseInt(process.env.BULLMQ_INBOX_MAX_STALLED_COUNT!),
+    // Ensure stalled checks and lock renewal are enabled
+    skipStalledCheck: false,
+    skipLockRenewal: false
   }
 );
 
@@ -201,6 +202,20 @@ inboxWorker.on('failed', (job, err) => {
     ? job.id.split(':').slice(-1)[0]
     : job?.id;
   console.error(`[InboxWorker] Job ${shortId} failed:`, err);
+});
+
+// Handle lock renewal errors (OS sleep/wake scenario)
+inboxWorker.on('error', (err) => {
+  if (err.message.includes('could not renew lock')) {
+    console.warn('[InboxWorker] Lock renewal failed - job will be marked as stalled and handled by stalledInterval');
+  } else {
+    console.error('[InboxWorker] Worker error:', err);
+  }
+});
+
+// Handle stalled jobs
+inboxWorker.on('stalled', (jobId) => {
+  console.warn(`[InboxWorker] Job ${jobId} stalled - will be retried or failed based on maxStalledCount`);
 });
 
 export default inboxWorker;

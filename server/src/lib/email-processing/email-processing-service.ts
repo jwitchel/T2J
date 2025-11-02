@@ -171,19 +171,35 @@ export class EmailProcessingService {
     const { rawMessage, emailAccountId, providerId, userId } = params;
 
     try {
-      // Step 1: Parse email 
+      // Step 1: Parse email
+      const parseStartTime = Date.now();
+      console.log('[EmailProcessingService] ⏱️ Step 1: Parsing email...');
+
       const parsedData = await this.parseEmail(rawMessage, emailAccountId);
 
+      console.log(`[EmailProcessingService] ✓ Email parsed (${Date.now() - parseStartTime}ms)`);
+
       // Step 2: Load user context
+      const contextStartTime = Date.now();
+      console.log('[EmailProcessingService] ⏱️ Step 2: Loading user context...');
+
       const userContext = await this.loadUserContext(userId, emailAccountId);
 
+      console.log(`[EmailProcessingService] ✓ User context loaded (${Date.now() - contextStartTime}ms)`);
+
       // Step 3: Check for spam
+      const spamCheckStartTime = Date.now();
+      console.log('[EmailProcessingService] ⏱️ Step 3: Starting spam check...');
+
       const spamDetector = await getSpamDetector(providerId);
 
       const spamCheckResult = await spamDetector.checkSpam({
         rawMessage,
         userNames: userContext.userNames
       });
+
+      const spamCheckDuration = Date.now() - spamCheckStartTime;
+      console.log(`[EmailProcessingService] ✓ Spam check complete: isSpam=${spamCheckResult.isSpam} (${spamCheckDuration}ms)`);
 
       // If spam detected, skip draft generation and return error
       if (spamCheckResult.isSpam) {
@@ -196,7 +212,13 @@ export class EmailProcessingService {
       }
 
       // Step 4: Not spam - generate draft using pre-parsed email and context
-      return await draftGenerator.generateDraft(userId, providerId, parsedData, userContext);
+      console.log('[EmailProcessingService] ⏱️ Step 4: Starting draft generation...');
+      const draftStartTime = Date.now();
+
+      const result = await draftGenerator.generateDraft(userId, providerId, parsedData, userContext);
+
+      console.log(`[EmailProcessingService] ✅ Draft generation complete (${Date.now() - draftStartTime}ms)`);
+      return result;
 
     } catch (error) {
       console.error('[EmailProcessingService] Error processing email:', error);

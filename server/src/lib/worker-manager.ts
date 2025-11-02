@@ -4,7 +4,7 @@
  */
 
 import { Worker } from 'bullmq';
-import Redis from 'ioredis';
+import { sharedConnection } from './redis-connection';
 import inboxWorker from './workers/inbox-worker';
 import trainingWorker from './workers/training-worker';
 import { inboxQueue, trainingQueue } from './queue';
@@ -17,13 +17,11 @@ export class WorkerManager {
   private static instance: WorkerManager;
   private workers: Map<string, Worker> = new Map();
   private queues: Map<string, any> = new Map();
-  private redis: Redis;
+  private redis = sharedConnection;
   private isPaused: boolean = false;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
-    this.redis = new Redis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: null
-    });
 
     // Register workers - log for debugging
     console.log('[WorkerManager] Registering workers:', {
@@ -72,6 +70,9 @@ export class WorkerManager {
         // If not paused, start all workers (since they have autorun: false)
         await this.resumeAllWorkers();
       }
+
+      // Start periodic cleanup to handle runtime stalls (OS sleep/wake scenarios)
+      this.startPeriodicCleanup();
     } catch (error) {
       console.error('[WorkerManager] Error during initialization:', error);
       // Default to paused state on error for safety
@@ -104,6 +105,17 @@ export class WorkerManager {
           console.warn(`[WorkerManager] Could not clean stale active jobs in ${name}:`, err);
         }
 
+        // ALSO clean delayed jobs that are stale (repeatable job scheduling artifacts)
+        try {
+          const staleDelayed = await queue.clean(60000, 1000, 'delayed');
+          if (staleDelayed && staleDelayed.length > 0) {
+            console.log(`[WorkerManager] Cleaned ${staleDelayed.length} stale delayed jobs from ${name} queue`);
+            totalCleaned += staleDelayed.length;
+          }
+        } catch (err) {
+          console.warn(`[WorkerManager] Could not clean stale delayed jobs in ${name}:`, err);
+        }
+
         // Clean failed jobs older than 1 hour (3600000ms)
         const failedCleaned = await queue.clean(3600000, 1000, 'failed');
 
@@ -127,6 +139,44 @@ export class WorkerManager {
       console.error('[WorkerManager] Error cleaning up stale jobs:', error);
       // Don't throw - we want initialization to continue even if cleanup fails
     }
+  }
+
+  /**
+   * CRITICAL: Periodic cleanup to handle jobs that stall during runtime
+   * This catches the OS sleep scenario where jobs get stuck with expired locks
+   * Uses queue-specific thresholds to account for different lock durations
+   */
+  private startPeriodicCleanup(): void {
+    const cleanupInterval = parseInt(process.env.BULLMQ_CLEANUP_INTERVAL!);
+    const inboxStaleAge = parseInt(process.env.BULLMQ_INBOX_CLEANUP_STALE_AGE!);
+    const trainingStaleAge = parseInt(process.env.BULLMQ_TRAINING_CLEANUP_STALE_AGE!);
+
+    console.log(`[WorkerManager] Starting periodic cleanup (interval: ${cleanupInterval}ms)`);
+    console.log(`[WorkerManager] Inbox cleanup threshold: ${inboxStaleAge}ms, Training cleanup threshold: ${trainingStaleAge}ms`);
+
+    this.cleanupInterval = setInterval(async () => {
+      try {
+        // Clean inbox queue with shorter threshold (2 min lock + 1 min buffer = 3 min)
+        const inboxQueue = this.queues.get('inbox');
+        if (inboxQueue) {
+          const inboxCleaned = await inboxQueue.clean(inboxStaleAge, 100, 'active');
+          if (inboxCleaned && inboxCleaned.length > 0) {
+            console.log(`[WorkerManager] Runtime cleanup: Removed ${inboxCleaned.length} stale active jobs from inbox queue`);
+          }
+        }
+
+        // Clean training queue with longer threshold (10 min lock + 1 min buffer = 11 min)
+        const trainingQueue = this.queues.get('training');
+        if (trainingQueue) {
+          const trainingCleaned = await trainingQueue.clean(trainingStaleAge, 100, 'active');
+          if (trainingCleaned && trainingCleaned.length > 0) {
+            console.log(`[WorkerManager] Runtime cleanup: Removed ${trainingCleaned.length} stale active jobs from training queue`);
+          }
+        }
+      } catch (error) {
+        console.error('[WorkerManager] Error in periodic cleanup:', error);
+      }
+    }, cleanupInterval);
   }
 
   /**
@@ -283,25 +333,32 @@ export class WorkerManager {
    */
   async shutdown(): Promise<void> {
     console.log('[WorkerManager] Shutting down...');
-    
+
+    // Stop periodic cleanup
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      console.log('[WorkerManager] Stopped periodic cleanup');
+    }
+
     // Pause all workers first
     await this.pauseAllWorkers(false);
-    
+
     // Close all workers
     const closePromises = Array.from(this.workers.values()).map(worker =>
       worker.close()
     );
-    
+
     // Close all queues
     const queueClosePromises = Array.from(this.queues.values()).map(queue =>
       queue.close()
     );
-    
+
     await Promise.all([...closePromises, ...queueClosePromises]);
-    
+
     // Close Redis connection
     await this.redis.quit();
-    
+
     console.log('[WorkerManager] Shutdown complete');
   }
 }

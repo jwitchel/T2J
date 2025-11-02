@@ -4,23 +4,17 @@
  */
 
 import { QueueEvents } from 'bullmq';
-import Redis from 'ioredis';
+import { sharedConnection } from './redis-connection';
 import { getUnifiedWebSocketServer } from '../websocket/unified-websocket';
 import { inboxQueue, trainingQueue } from './queue';
 
-const REDIS_URL = process.env.REDIS_URL!;
-
-// Create queue event listeners with proper Redis config
+// Create queue event listeners using shared Redis connection
 const inboxQueueEvents = new QueueEvents('inbox', {
-  connection: new Redis(REDIS_URL, {
-    maxRetriesPerRequest: null
-  })
+  connection: sharedConnection
 });
 
 const trainingQueueEvents = new QueueEvents('training', {
-  connection: new Redis(REDIS_URL, {
-    maxRetriesPerRequest: null
-  })
+  connection: sharedConnection
 });
 
 // Helper to broadcast job events via WebSocket

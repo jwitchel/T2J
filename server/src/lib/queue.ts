@@ -1,10 +1,5 @@
 import { Queue, Job } from 'bullmq';
-import Redis from 'ioredis';
-
-// Redis connection configuration
-const connection = new Redis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: null
-});
+import { sharedConnection as connection } from './redis-connection';
 
 // Simple job options - no retry logic as requested
 const defaultJobOptions = {

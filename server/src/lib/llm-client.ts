@@ -121,9 +121,17 @@ export class LLMClient {
     systemPrompt?: string;
   }): Promise<string> {
     const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
+    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
     let lastError: any;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      // Create AbortController for this attempt with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.error(`[LLMClient] ⏱️ TIMEOUT: LLM call exceeded ${llmTimeout}ms - aborting at generateText() level`);
+        controller.abort();
+      }, llmTimeout);
+
       try {
         const messages = options?.systemPrompt
           ? [
@@ -132,25 +140,38 @@ export class LLMClient {
             ]
           : prompt;
 
+        const llmStartTime = Date.now();
+        console.log(`[LLMClient] 🔄 Calling ${this.modelName} (attempt ${attempt + 1}/${maxRetries + 1})...`);
+
         const { text } = await generateText({
           model: this.model,
           messages: typeof messages === 'string' ? undefined : messages,
           prompt: typeof messages === 'string' ? messages : undefined,
           temperature: options?.temperature ?? 0.7,
           maxTokens: options?.maxTokens ?? 1000,
+          abortSignal: controller.signal,
         });
 
+        const llmDuration = Date.now() - llmStartTime;
+        console.log(`[LLMClient] ✅ ${this.modelName} returned successfully (${llmDuration}ms)`);
+
+        clearTimeout(timeoutId);
         return text;
       } catch (error: any) {
+        clearTimeout(timeoutId);
         lastError = error;
 
-        // Only retry on JSON parsing errors or temporary failures
+        // Check if this was an abort (timeout)
+        const isAborted = error.name === 'AbortError' || error.message?.includes('aborted');
+
+        // Only retry on JSON parsing errors, temporary failures, or timeouts
         const shouldRetry = error.message?.includes('JSON') ||
                            error.message?.includes('rate limit') ||
-                           error.message?.includes('timeout');
+                           error.message?.includes('timeout') ||
+                           isAborted;
 
         if (shouldRetry && attempt < maxRetries) {
-          console.log(`[LLMClient] Request failed, retrying (attempt ${attempt + 2}/${maxRetries + 1})...`);
+          console.log(`[LLMClient] Request failed${isAborted ? ' (timeout)' : ''}, retrying (attempt ${attempt + 2}/${maxRetries + 1})...`);
           continue;
         }
 
@@ -199,13 +220,19 @@ export class LLMClient {
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<MetaContextAnalysisResponse> {
+    const methodStartTime = Date.now();
     try {
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 500,
       });
+      const generateDuration = Date.now() - methodStartTime;
 
+      const parseStartTime = Date.now();
       const parsed = this.extractJSON(text, 'meta-context analysis');
+      const parseDuration = Date.now() - parseStartTime;
+
+      console.log(`[LLMClient] 📊 generateMetaContextAnalysis: generate=${generateDuration}ms, parse=${parseDuration}ms, total=${Date.now() - methodStartTime}ms`);
 
       this.validateJSON(
         parsed,
@@ -228,13 +255,19 @@ export class LLMClient {
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<ActionAnalysisResponse> {
+    const methodStartTime = Date.now();
     try {
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 1000,
       });
+      const generateDuration = Date.now() - methodStartTime;
 
+      const parseStartTime = Date.now();
       const parsed = this.extractJSON(text, 'action analysis');
+      const parseDuration = Date.now() - parseStartTime;
+
+      console.log(`[LLMClient] 📊 generateActionAnalysis: generate=${generateDuration}ms, parse=${parseDuration}ms, total=${Date.now() - methodStartTime}ms`);
 
       this.validateJSON(
         parsed,
@@ -257,13 +290,19 @@ export class LLMClient {
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<string> {
+    const methodStartTime = Date.now();
     try {
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 2000,
       });
+      const generateDuration = Date.now() - methodStartTime;
 
+      const parseStartTime = Date.now();
       const parsed = this.extractJSON(text, 'response generation');
+      const parseDuration = Date.now() - parseStartTime;
+
+      console.log(`[LLMClient] 📊 generateResponseMessage: generate=${generateDuration}ms, parse=${parseDuration}ms, total=${Date.now() - methodStartTime}ms`);
 
       this.validateJSON(
         parsed,

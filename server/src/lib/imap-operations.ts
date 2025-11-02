@@ -5,12 +5,7 @@ import { pool } from '../server';
 import { simpleParser } from 'mailparser';
 import { OAuthTokenService } from './oauth-token-service';
 import { getActiveContext, hasActiveContextFor, setContextConnection } from './imap-context';
-import Redis from 'ioredis';
-
-// Redis instance for UID tracking
-const redis = new Redis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: null
-});
+import { sharedConnection as redis } from './redis-connection';
 
 export interface EmailAccountConfig {
   id: string;
