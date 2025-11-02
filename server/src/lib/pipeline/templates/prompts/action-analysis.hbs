@@ -29,23 +29,23 @@ Using step-by-step logic, evaluate the email through these steps in cascade orde
 ### STEP 1 - AUTO-GENERATED
 Check for system-generated emails by looking for:
 1.1. **Calendar notifications**: sender contains "calendar-notification@google.com", "calendar@microsoft.com", or similar calendar service addresses
-2.2. **Meeting responses**: subject starts with "Accepted:", "Declined:", "Tentative:", "New Event:", "Updated:", "Canceled:", or similar meeting status indicators
-2.3. **Auto-generated headers**: email headers contain "auto-submitted: auto-generated", "X-Auto-Response-Suppress: All", "Precedence: bulk", or similar automation headers
-2.4. **System senders**: noreply@, no-reply@, donotreply@, automated@, system@, notifications@, or similar unmonitored addresses
-2.5. **Automated signatures**: "This is an automated message", "Do not reply to this email", "This mailbox is not monitored", or similar automated disclaimers
+1.2. **Meeting responses**: subject starts with "Accepted:", "Declined:", "Tentative:", "New Event:", "Updated:", "Canceled:", or similar meeting status indicators
+1.3. **Auto-generated headers**: email headers contain "auto-submitted: auto-generated", "X-Auto-Response-Suppress: All", "Precedence: bulk", or similar automation headers
+1.4. **System senders**: noreply@, no-reply@, donotreply@, automated@, system@, notifications@, or similar unmonitored addresses
+1.5. **Automated signatures**: "This is an automated message", "Do not reply to this email", "This mailbox is not monitored", or similar automated disclaimers
 
 **If any match → return `responseAction: "silent-fyi-only"`**
 
-### STEP 3 - MASS EMAIL CHECKS
+### STEP 2 - MASS EMAIL CHECKS
 Check for mass distribution emails:
-3.1. **Newsletter indicators**:
+2.1. **Newsletter indicators**:
    2.1.1. "Unsubscribe" or "Communication Preferences" link at bottom or similar opt-out mechanisms
    2.1.2. "View in browser" link or similar web viewing options
    2.1.3. Distribution lists with 8+ recipients
    2.1.4. "This email was sent to ..." footer or similar recipient confirmations
    2.1.5. Newsletter formatting with multiple sections/articles
    2.1.6. Regular digest emails (Daily digest, Weekly roundup, or similar periodic summaries)
-3.2. **Marketing/promotional indicators**:
+2.2. **Marketing/promotional indicators**:
    2.2.1. Product announcements from vendors or similar commercial updates
    2.2.2. Sales pitches, special offers, or similar promotional content
    2.2.3. Event invitations to public events or similar mass gatherings
@@ -55,38 +55,38 @@ Check for mass distribution emails:
 
 **If newsletter/large list → return `responseAction: "silent-large-list"`**
 
-### STEP 4 - INFORMATIONAL EMAILS (NO RESPONSE EXPECTED)
+### STEP 3 - INFORMATIONAL EMAILS (NO RESPONSE EXPECTED)
 Check for purely informational content where no response is expected:
-4.1. **System notifications**:
+3.1. **System notifications**:
    3.1.1. "Your password will expire in X days" or similar security notices
    3.1.2. "Backup completed successfully" or similar operation confirmations
    3.1.3. "Server maintenance scheduled" or similar system announcements
    3.1.4. "Your report is ready" or similar completion notifications
    3.1.5. Service status updates or similar availability notices
    3.1.6. One time passcodes or similar one-time codes
-4.2. **Automated status updates**:
+3.2. **Automated status updates**:
    3.2.1. Ticket status changes or similar issue tracking updates
    3.2.2. Build/deployment notifications or similar CI/CD messages
    3.2.3. Monitoring alerts or similar automated notifications
    3.2.4. Daily/weekly automated reports or similar scheduled updates
-4.3. **Receipts and confirmations**:
+3.3. **Receipts and confirmations**:
    3.3.1. Order confirmations or similar purchase acknowledgments
    3.3.2. Payment receipts or similar transaction records
    3.3.3. Shipping notifications or similar delivery updates
    3.3.4. Booking confirmations or similar reservation notices
    3.3.5. Form submission confirmations or similar data receipt notices
    3.3.6. Email delivery status notifications or similar confirmation of delivery (delayed, failed, delivered, etc.)
-4.4. **Pure informational emails**:
+3.4. **Pure informational emails**:
    3.4.1. "FYI" or "For your information" in subject or body
    3.4.2. Meeting notes being shared or similar documentation
    3.4.3. Document shared for reference or similar resource sharing
    3.4.4. Status updates with no ask or similar one-way communications
    3.4.5. "No action needed" explicitly stated or similar disclaimers
-4.5. **Business discussions where no response expected**:
+3.5. **Business discussions where no response expected**:
    3.5.1. Conclusions already reached or similar finalized decisions
    3.5.2. Decisions already made and communicated
    3.5.3. Updates where you're not a decision maker or similar informational copies
-4.6  **Account management notifications**:
+3.6. **Account management notifications**:
    3.6.1. Account creation, deletion, suspension, reactivation, verification, recovery, password reset notifications or similar account setup confirmations
    3.6.2. Account password reset notifications or similar account password reset notices
    3.6.3. Magic link notifications or similar one-time login links
@@ -95,7 +95,7 @@ Check for purely informational content where no response is expected:
 
 **If any match → return `responseAction: "silent-fyi-only"`**
 
-### STEP 5 - TRIVIAL RESPONSES
+### STEP 4 - TRIVIAL RESPONSES
 Check if the email is essentially just a trivial response that doesn't warrant further action:
 4.1. **Simple acknowledgments**: "confirmed", "got it", "gotcha", "received", "acknowledged", "noted", "understood", "roger that", or similar brief confirmations
 4.2. **Thanks only**: "thanks", "thank you", "thx", "ty", "thanks!", "many thanks", "much appreciated", or similar gratitude expressions
@@ -108,20 +108,20 @@ Check if the email is essentially just a trivial response that doesn't warrant f
 
 **If matches → return `responseAction: "silent-fyi-only"`**
 
-### STEP 6 - ADDRESSEE DETERMINATION
+### STEP 5 - ADDRESSEE DETERMINATION
 Determine who the email is primarily addressed to:
-5.1. **someone-else indicators**: 
+5.1. **someone-else indicators**:
    5.1.1. You're only in CC or BCC, not in TO field
    5.1.2. Email starts with "Hi [Other Name]", "Dear [Other Name]", or similar greetings to others
-   3.1.3. Body clearly addresses someone else: "John, can you..." when you're not John, or similar misdirected content
-   5.1.3. You're included "for visibility", "FYI only", or similar observation-only language
-   5.1.4. Forward where you're not the intended final recipient
-   5.1.5. You're being moved to BCC after an introduction ("moving you to BCC", "sending you to BCC, nice to meet you Bob", or similar transition language)
-5.2. **you indicators**: 
+   5.1.3. Body clearly addresses someone else: "John, can you..." when you're not John, or similar misdirected content
+   5.1.4. You're included "for visibility", "FYI only", or similar observation-only language
+   5.1.5. Forward where you're not the intended final recipient
+   5.1.6. You're being moved to BCC after an introduction ("moving you to BCC", "sending you to BCC, nice to meet you Bob", or similar transition language)
+5.2. **you indicators**:
    5.2.1. You're the only person in TO field
    5.2.2. Email addresses you by name specifically
    5.2.3. Content is specifically about something you are being asked to do, or respond to, take action, or is a question you are being asked to answer
-5.3. **group indicators**: 
+5.3. **group indicators**:
    5.3.1. Multiple people in TO field including you
    5.3.2. Addresses like "Hi team", "All", "Everyone", or similar group greetings
    5.3.3. Department or group emails where you're an active member
@@ -129,7 +129,7 @@ Determine who the email is primarily addressed to:
 **If addressed to "someone-else" → return `responseAction: "silent-fyi-only"`**
 **Otherwise, continue (email is to "you" or "group")**
 
-### STEP 7 - SPECIAL FORWARDING NEEDS
+### STEP 6 - SPECIAL FORWARDING NEEDS
 Check if email needs forwarding:
 6.1. **Forward needed**:
    6.1.1. "Can you forward this to [Person not on thread]" or similar forwarding requests
@@ -147,7 +147,7 @@ Check if email needs forwarding:
 **If needs forwarding → return `responseAction: "forward"`**
 **If needs forward with comment → return `responseAction: "forward-with-comment"`**
 
-### STEP 8 - RESPONSE TYPE DETERMINATION
+### STEP 7 - RESPONSE TYPE DETERMINATION
 If no response type is specified, the default response type is "reply-all".
 
 ## Response Requirements
@@ -155,10 +155,4 @@ If no response type is specified, the default response type is "reply-all".
 **CRITICAL**: If your action is "reply" add to the `meta.keyConsiderations` field the reason you chose to reply.
 
 === EMAIL TO ANALYZE ===
-From: {{#each incomingEmailMetadata.from}}{{#if name}}{{name}} <{{address}}>{{else}}{{address}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}
-To: {{#each incomingEmailMetadata.to}}{{#if name}}{{name}} <{{address}}>{{else}}{{address}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}
-{{#if incomingEmailMetadata.cc}}CC: {{#each incomingEmailMetadata.cc}}{{#if name}}{{name}} <{{address}}>{{else}}{{address}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}
-Subject: {{incomingEmailMetadata.subject}}
-Date: {{incomingEmailMetadata.date}}
-
-{{incomingEmail}}
+{{incomingEmailMetadata.rawMessage}}

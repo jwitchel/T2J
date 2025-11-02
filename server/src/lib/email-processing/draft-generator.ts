@@ -50,13 +50,14 @@ export class DraftGenerator {
       // Step 1: Get provider-specific orchestrator (cached, already initialized)
       const orchestrator = await getOrchestrator(providerId);
 
-      // Initialize constants
+      // Initialize constants - pass complete raw email for LLM analysis
       const incomingEmailMetadata = {
         from: processedEmail.from,
         to: processedEmail.to,
         cc: processedEmail.cc,
         subject: processedEmail.subject,
-        date: processedEmail.date
+        date: processedEmail.date,
+        rawMessage: processedEmail.rawMessage
       };
 
       // Step 2: Run AI pipeline with timeout protection
@@ -170,7 +171,8 @@ export class DraftGenerator {
           textContent: ex.text,
           htmlContent: null,
           userReply: ex.text,
-          respondedTo: ''
+          respondedTo: '',
+          rawMessage: '' // Not needed for pattern analysis
         }));
 
         writingPatterns = await orchestrator['patternAnalyzer'].analyzeWritingPatterns(

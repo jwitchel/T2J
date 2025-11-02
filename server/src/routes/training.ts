@@ -414,7 +414,8 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
               textContent: textForAnalysis,
               htmlContent: null,
               userReply: textForAnalysis,
-              respondedTo: ''
+              respondedTo: '',
+              rawMessage: '' // Not needed for pattern analysis
             };
           }));
         
@@ -514,7 +515,8 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
             textContent: textForAnalysis,
             htmlContent: null,
             userReply: textForAnalysis,
-            respondedTo: ''
+            respondedTo: '',
+            rawMessage: '' // Not needed for pattern analysis
           };
         }));
       

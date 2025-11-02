@@ -57,7 +57,8 @@ async function testPipeline() {
         textContent: "Hey honey! I'll be home by 7pm. Love you!",
         htmlContent: null,
         userReply: "Hey honey! I'll be home by 7pm. Love you!",
-        respondedTo: ''
+        respondedTo: '',
+        rawMessage: '' // Test mock
       },
       {
         uid: 'test-uid-2',
@@ -72,7 +73,8 @@ async function testPipeline() {
         textContent: "Hi Mike, I've reviewed the proposal and it looks good. Let's schedule a meeting to discuss next steps.",
         htmlContent: null,
         userReply: "Hi Mike, I've reviewed the proposal and it looks good. Let's schedule a meeting to discuss next steps.",
-        respondedTo: ''
+        respondedTo: '',
+        rawMessage: '' // Test mock
       },
       {
         uid: 'test-uid-3',
@@ -87,7 +89,8 @@ async function testPipeline() {
         textContent: "Hey dude! Yeah, I'm totally up for hiking on Saturday. What time works for you?",
         htmlContent: null,
         userReply: "Hey dude! Yeah, I'm totally up for hiking on Saturday. What time works for you?",
-        respondedTo: ''
+        respondedTo: '',
+        rawMessage: '' // Test mock
       }
     ];
 

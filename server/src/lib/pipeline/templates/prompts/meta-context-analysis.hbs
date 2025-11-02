@@ -55,10 +55,4 @@ Analyze email structure:
 - `isGroupEmail`: More than one person in TO field, any CC recipients, addresses group ("Hi team"), or similar multiple recipient indicators
 
 === EMAIL TO ANALYZE ===
-From: {{#each incomingEmailMetadata.from}}{{#if name}}{{name}} <{{address}}>{{else}}{{address}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}
-To: {{#each incomingEmailMetadata.to}}{{#if name}}{{name}} <{{address}}>{{else}}{{address}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}
-{{#if incomingEmailMetadata.cc}}CC: {{#each incomingEmailMetadata.cc}}{{#if name}}{{name}} <{{address}}>{{else}}{{address}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}
-Subject: {{incomingEmailMetadata.subject}}
-Date: {{incomingEmailMetadata.date}}
-
-{{incomingEmail}}
+{{incomingEmailMetadata.rawMessage}}

@@ -20,6 +20,7 @@ export interface PromptFormatterParams {
     cc?: { address: string; name?: string }[];
     subject: string;
     date: Date;
+    rawMessage: string;  // Complete raw email (headers + body)
   };
 }
 

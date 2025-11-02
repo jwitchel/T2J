@@ -138,7 +138,8 @@ async function testPipelineWithMocks() {
       textContent: "Sounds great! Let's meet at noon at our usual spot.",
       htmlContent: null,
       userReply: "Sounds great! Let's meet at noon at our usual spot.",
-      respondedTo: ''
+      respondedTo: '',
+      rawMessage: '' // Test mock
     };
 
     // Process single email
@@ -170,7 +171,8 @@ async function testPipelineWithMocks() {
         textContent: "I'll pick up milk on my way home. Love you!",
         htmlContent: null,
         userReply: "I'll pick up milk on my way home. Love you!",
-        respondedTo: ''
+        respondedTo: '',
+        rawMessage: '' // Test mock
       },
       {
         uid: 'batch-uid-2',
@@ -185,7 +187,8 @@ async function testPipelineWithMocks() {
         textContent: "I've completed the analysis. The report is attached for your review.",
         htmlContent: null,
         userReply: "I've completed the analysis. The report is attached for your review.",
-        respondedTo: ''
+        respondedTo: '',
+        rawMessage: '' // Test mock
       }
     ];
 
