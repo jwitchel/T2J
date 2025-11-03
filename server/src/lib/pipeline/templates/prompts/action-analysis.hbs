@@ -10,7 +10,7 @@ Your name is: {{userNames.name}}. {{#if userNames.nicknames}}Your nicknames/vari
 CRITICAL: You must return a JSON object with this exact structure:
 {
   "meta": {
-    "recommendedAction": "<reply|reply-all|forward|forward-with-comment|silent-fyi-only|silent-large-list|unknown>",
+    "recommendedAction": "<{{availableActions}}>",
     "keyConsiderations": ["<consideration1>", "<consideration2>", ...]
   }
 }

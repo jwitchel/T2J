@@ -1,6 +1,7 @@
 import { SelectedExample } from './example-selector';
 import { TemplateManager, EnhancedRelationshipProfile } from './template-manager';
 import { WritingPatterns } from './writing-pattern-analyzer';
+import { EmailActions } from '../email-actions';
 
 export interface PromptFormatterParams {
   incomingEmail: string;
@@ -138,13 +139,18 @@ export class PromptFormatterV2 {
   // Format action analysis prompt (no tone/style needed)
   async formatActionAnalysis(params: Partial<PromptFormatterParams>): Promise<string> {
     await this.initialize();
+
+    // Generate available actions list from EmailActions constant
+    const availableActions = Object.values(EmailActions).join('|');
+
     const templateData = this.templateManager.prepareTemplateData({
       incomingEmail: params.incomingEmail || '',
       recipientEmail: params.recipientEmail || '',
       relationship: 'unknown', // Not needed for action analysis
       examples: [], // No examples needed for action analysis
       userNames: params.userNames,
-      incomingEmailMetadata: params.incomingEmailMetadata
+      incomingEmailMetadata: params.incomingEmailMetadata,
+      availableActions // Pass to template
     });
     return this.templateManager.renderPrompt('action-analysis', templateData);
   }

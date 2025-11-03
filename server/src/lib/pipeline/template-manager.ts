@@ -38,7 +38,10 @@ export interface PromptTemplateData {
   
   // Writing patterns
   patterns?: WritingPatterns;
-  
+
+  // Template-specific data
+  availableActions?: string;  // For action-analysis template
+
   // Metadata
   meta: {
     exampleCount: number;
@@ -267,6 +270,7 @@ export class TemplateManager {
         subject: string;
         date: Date;
       };
+      availableActions?: string;
     }
   ): PromptTemplateData {
     const exactMatches = params.examples.filter(e => 
@@ -299,15 +303,16 @@ export class TemplateManager {
       incomingEmail: params.incomingEmail,
       userNames: params.userNames,
       incomingEmailMetadata: params.incomingEmailMetadata,
-      exactExamples: exactMatches.length > 0 
-        ? this.formatExamplesForTemplate(exactMatches) 
+      exactExamples: exactMatches.length > 0
+        ? this.formatExamplesForTemplate(exactMatches)
         : undefined,
-      otherExamples: otherMatches.length > 0 
+      otherExamples: otherMatches.length > 0
         ? this.formatExamplesForTemplate(otherMatches)
         : undefined,
       profile: params.relationshipProfile,
       nlpFeatures: params.nlpFeatures,
       patterns: params.writingPatterns ? this.transformPatternsForTemplate(params.writingPatterns) : undefined,
+      availableActions: params.availableActions,
       meta: {
         exampleCount: params.examples.length,
         relationshipMatchCount: exactMatches.length,
