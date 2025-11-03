@@ -12,6 +12,7 @@ import { TypedNameRemover } from '../typed-name-remover';
 import { pool } from '../../server';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
+import { ActionHelpers } from '../email-actions';
 
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
@@ -28,8 +29,6 @@ async function getOrchestrator(providerId: string): Promise<ToneLearningOrchestr
 
   return orchestrator;
 }
-
-const SILENT_ACTIONS = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
 
 export class DraftGenerator {
   /**
@@ -78,7 +77,7 @@ export class DraftGenerator {
       const cleanedBody = await this.removeTypedName(aiResult.body, userId);
 
       // Step 4: Determine if this is a silent action
-      const isSilentAction = aiResult.meta && SILENT_ACTIONS.includes(aiResult.meta.recommendedAction);
+      const isSilentAction = aiResult.meta && ActionHelpers.isSilentAction(aiResult.meta.recommendedAction);
 
       // Step 5: Format complete draft response
       const formattedDraft = isSilentAction
@@ -122,8 +121,6 @@ export class DraftGenerator {
     incomingEmailMetadata: any,
     timeoutMs: number
   ): Promise<{ body: string; meta: LLMMetadata; relationship: { type: string; confidence: number; detectionMethod: string } }> {
-    const SILENT_ACTIONS_FOR_PIPELINE = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
-
     // Validate LLM client is available (should be already checked, but for type safety)
     const llmClient = orchestrator['patternAnalyzer']['llmClient'];
     if (!llmClient) {
@@ -242,7 +239,7 @@ export class DraftGenerator {
       };
 
       // Step 5: Response Generation (Third LLM Call - conditional)
-      const needsResponse = !SILENT_ACTIONS_FOR_PIPELINE.includes(combinedMeta.recommendedAction);
+      const needsResponse = !ActionHelpers.isSilentAction(combinedMeta.recommendedAction);
       let responseMessage = '';
 
       if (needsResponse) {
@@ -269,7 +266,7 @@ export class DraftGenerator {
       }
 
       // Build final relationship
-      const finalRelationship = combinedMeta.recommendedAction === 'silent-spam'
+      const finalRelationship = ActionHelpers.isSpamAction(combinedMeta.recommendedAction)
         ? { type: 'external', confidence: 0.9, detectionMethod: 'spam-override' }
         : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence, detectionMethod: detectedRelationship.method };
 
@@ -379,7 +376,7 @@ export class DraftGenerator {
       ? parsed.subject
       : `Re: ${parsed.subject}`;
 
-    const isReplyAll = meta.recommendedAction === 'reply-all';
+    const isReplyAll = ActionHelpers.isReplyAll(meta.recommendedAction);
     const { to, cc } = isReplyAll
       ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
       : { to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address), cc: '' };

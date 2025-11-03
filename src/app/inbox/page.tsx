@@ -16,6 +16,7 @@ import { apiGet, apiPost } from '@/lib/api';
 import Link from 'next/link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
+import { EmailActions, RecommendedAction } from '../../../server/src/lib/email-actions';
 
 interface EmailAccount {
   id: string;
@@ -71,7 +72,7 @@ interface GeneratedDraft {
   references: string;
   meta?: {
     inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
-    recommendedAction: 'reply' | 'reply-all' | 'forward' | 'forward-with-comment' | 'silent-fyi-only' | 'silent-large-list' | 'silent-unsubscribe' | 'silent-spam';
+    recommendedAction: RecommendedAction;
     inboundMsgIsRequesting: string | string[];
     keyConsiderations: string[];
     urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
@@ -151,10 +152,10 @@ function InboxContent() {
     const rootPath = userFolderPrefs.rootFolder ? `${userFolderPrefs.rootFolder}/` : '';
     
     switch (recommendedAction) {
-      case 'reply':
-      case 'reply-all':
-      case 'forward':
-      case 'forward-with-comment':
+      case EmailActions.REPLY:
+      case EmailActions.REPLY_ALL:
+      case EmailActions.FORWARD:
+      case EmailActions.FORWARD_WITH_COMMENT:
         if (!draftsFolderPath) {
           return {
             folder: '[Draft folder not detected]',
@@ -169,18 +170,18 @@ function InboxContent() {
           buttonLabel: 'Send to Drafts',
           error: false
         };
-      
-      case 'silent-fyi-only':
-      case 'silent-large-list':
-      case 'silent-unsubscribe':
+
+      case EmailActions.SILENT_FYI_ONLY:
+      case EmailActions.SILENT_LARGE_LIST:
+      case EmailActions.SILENT_UNSUBSCRIBE:
         return {
           folder: `${rootPath}${userFolderPrefs.noActionFolder}`,
           displayName: userFolderPrefs.noActionFolder,
           buttonLabel: 'File as No Action',
           error: false
         };
-      
-      case 'silent-spam':
+
+      case EmailActions.SILENT_SPAM:
         return {
           folder: `${rootPath}${userFolderPrefs.spamFolder}`,
           displayName: userFolderPrefs.spamFolder,
@@ -300,7 +301,7 @@ function InboxContent() {
           llmResponse?: {
             meta: {
               inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
-              recommendedAction: 'reply' | 'reply-all' | 'forward' | 'forward-with-comment' | 'silent-fyi-only' | 'silent-large-list' | 'silent-unsubscribe' | 'silent-spam';
+              recommendedAction: RecommendedAction;
               inboundMsgIsRequesting: string | string[];
               keyConsiderations: string[];
               urgencyLevel: 'low' | 'medium' | 'high' | 'critical';

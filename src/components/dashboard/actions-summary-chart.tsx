@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import useSWR from 'swr';
 import ReactECharts from 'echarts-for-react';
+import { EmailActions } from '../../../server/src/lib/email-actions';
 
 // Raw action counts from API (all possible actions)
 interface RawActionCounts {
@@ -47,15 +48,15 @@ function aggregateActions(raw: RawActionCounts): ActionCounts {
 
   Object.entries(raw).forEach(([action, count]) => {
     // Draft actions (reply, forward, etc.)
-    if (action === 'reply' || action === 'reply-all' || action === 'forward' || action === 'forward-with-comment') {
+    if (action === EmailActions.REPLY || action === EmailActions.REPLY_ALL || action === EmailActions.FORWARD || action === EmailActions.FORWARD_WITH_COMMENT) {
       result.drafted += count;
     }
     // Spam
-    else if (action === 'silent-spam') {
+    else if (action === EmailActions.SILENT_SPAM) {
       result.spam += count;
     }
     // Moved (FYI, Large List, Unsubscribe)
-    else if (action === 'silent-fyi-only' || action === 'silent-large-list' || action === 'silent-unsubscribe') {
+    else if (action === EmailActions.SILENT_FYI_ONLY || action === EmailActions.SILENT_LARGE_LIST || action === EmailActions.SILENT_UNSUBSCRIBE) {
       result.moved += count;
     }
     // Legacy draft_created - we can't distinguish these in aggregate, so count as drafted

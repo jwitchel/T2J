@@ -15,6 +15,7 @@ import { pool } from '../../server';
 import { SpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult } from '../pipeline/types';
+import { EmailActions } from '../email-actions';
 
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 // with different providers
@@ -147,7 +148,7 @@ export class EmailProcessingService {
       inReplyTo: processedEmail.messageId || `<${Date.now()}>`,
       references: processedEmail.messageId || `<${Date.now()}>`,
       meta: {
-        recommendedAction: 'silent-spam',
+        recommendedAction: EmailActions.SILENT_SPAM,
         keyConsiderations: ['Spam detected'],
         inboundMsgAddressedTo: 'you',
         inboundMsgIsRequesting: 'none',

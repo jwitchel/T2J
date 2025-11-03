@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import { formatDistanceToNow } from 'date-fns';
 import { useMemo } from 'react';
 import Link from 'next/link';
+import { EmailActions } from '../../../server/src/lib/email-actions';
 
 interface RecentAction {
   id: string;
@@ -44,14 +45,14 @@ function getActionInfo(actionTaken: string, destinationFolder?: string): {
   color: string;
 } {
   // Draft actions (reply, reply-all, forward, forward-with-comment)
-  if (actionTaken === 'reply' || actionTaken === 'reply-all') {
+  if (actionTaken === EmailActions.REPLY || actionTaken === EmailActions.REPLY_ALL) {
     return {
       category: 'Drafted',
       label: 'Drafted',
       color: 'bg-blue-500 hover:bg-blue-600'
     };
   }
-  if (actionTaken === 'forward' || actionTaken === 'forward-with-comment') {
+  if (actionTaken === EmailActions.FORWARD || actionTaken === EmailActions.FORWARD_WITH_COMMENT) {
     return {
       category: 'Drafted',
       label: `Drafted (Forward)`,
@@ -60,7 +61,7 @@ function getActionInfo(actionTaken: string, destinationFolder?: string): {
   }
 
   // Spam
-  if (actionTaken === 'silent-spam') {
+  if (actionTaken === EmailActions.SILENT_SPAM) {
     return {
       category: 'Spam',
       label: 'Moved (Spam)',
@@ -69,21 +70,21 @@ function getActionInfo(actionTaken: string, destinationFolder?: string): {
   }
 
   // Moved actions (FYI, Large List, Unsubscribe)
-  if (actionTaken === 'silent-fyi-only') {
+  if (actionTaken === EmailActions.SILENT_FYI_ONLY) {
     return {
       category: 'Moved',
       label: 'Moved (FYI Only)',
       color: 'bg-green-500 hover:bg-green-600'
     };
   }
-  if (actionTaken === 'silent-large-list') {
+  if (actionTaken === EmailActions.SILENT_LARGE_LIST) {
     return {
       category: 'Moved',
       label: 'Moved (Large List)',
       color: 'bg-green-500 hover:bg-green-600'
     };
   }
-  if (actionTaken === 'silent-unsubscribe') {
+  if (actionTaken === EmailActions.SILENT_UNSUBSCRIBE) {
     return {
       category: 'Moved',
       label: 'Moved (Unsubscribe)',

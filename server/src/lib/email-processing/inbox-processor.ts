@@ -13,9 +13,9 @@ import { emailStorageService } from '../email-storage-service';
 import { emailLockManager } from '../email-lock-manager';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../../server';
+import { ActionHelpers } from '../email-actions';
 
 // Constants
-const SILENT_ACTIONS = ['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'];
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
 const DEFAULT_DESTINATION = 'INBOX';
 
@@ -203,7 +203,7 @@ export class InboxProcessor {
   ): Promise<ImapOperationResult> {
     const recommendedAction = draft.meta.recommendedAction;
 
-    if (SILENT_ACTIONS.includes(recommendedAction)) {
+    if (ActionHelpers.isSilentAction(recommendedAction)) {
       const result = await emailMover.moveEmail({
         emailAccountId: context.accountId,
         userId: context.userId,
@@ -433,7 +433,7 @@ export class InboxProcessor {
       }
 
       const draft = draftResult.draft!;
-      const isSpam = draft.meta.recommendedAction === 'silent-spam';
+      const isSpam = ActionHelpers.isSpamAction(draft.meta.recommendedAction);
 
       // 3. CHECK LOCK AFTER DRAFT GENERATION
       this._checkLockExpired(signal, 'draft generation');

@@ -1,6 +1,7 @@
 import { ImapOperations } from './imap-operations';
 import { LLMMetadata } from './llm-client';
 import { FolderPreferences } from '../types/settings';
+import { EmailActions, ActionHelpers } from './email-actions';
 
 export interface ActionRouteResult {
   folder: string;
@@ -42,10 +43,10 @@ export class EmailActionRouter {
     const rootPath = this.folderPrefs.rootFolder ? `${this.folderPrefs.rootFolder}/` : '';
 
     switch (recommendedAction) {
-      case 'reply':
-      case 'reply-all':
-      case 'forward':
-      case 'forward-with-comment':
+      case EmailActions.REPLY:
+      case EmailActions.REPLY_ALL:
+      case EmailActions.FORWARD:
+      case EmailActions.FORWARD_WITH_COMMENT:
         if (!this.draftsFolderPath) {
           throw new Error('Draft folder path not configured');
         }
@@ -55,16 +56,16 @@ export class EmailActionRouter {
           displayName: this.draftsFolderPath
         };
 
-      case 'silent-fyi-only':
-      case 'silent-large-list':
-      case 'silent-unsubscribe':
+      case EmailActions.SILENT_FYI_ONLY:
+      case EmailActions.SILENT_LARGE_LIST:
+      case EmailActions.SILENT_UNSUBSCRIBE:
         return {
           folder: `${rootPath}${this.folderPrefs.noActionFolder}`,
           flags: [],  // No-action items should not be marked as Seen
           displayName: this.folderPrefs.noActionFolder
         };
 
-      case 'silent-spam':
+      case EmailActions.SILENT_SPAM:
         return {
           folder: `${rootPath}${this.folderPrefs.spamFolder}`,
           flags: ['\\Seen'],  // Spam should be marked as Seen
@@ -154,25 +155,6 @@ export class EmailActionRouter {
    * Get a human-readable description of the action
    */
   getActionDescription(recommendedAction: LLMMetadata['recommendedAction']): string {
-    switch (recommendedAction) {
-      case 'reply':
-        return 'Reply to sender';
-      case 'reply-all':
-        return 'Reply to all recipients';
-      case 'forward':
-        return 'Forward to someone';
-      case 'forward-with-comment':
-        return 'Forward with your comments';
-      case 'silent-fyi-only':
-        return 'FYI only - no action needed';
-      case 'silent-large-list':
-        return 'Large distribution list - silent';
-      case 'silent-unsubscribe':
-        return 'Unsubscribe candidate';
-      case 'silent-spam':
-        return 'Spam - move to spam folder';
-      default:
-        return 'Unknown action';
-    }
+    return ActionHelpers.getDescription(recommendedAction);
   }
 }

@@ -12,6 +12,7 @@ import * as nodemailer from 'nodemailer';
 import { EmailActionRouter } from '../email-action-router';
 import { LLMMetadata } from '../llm-client';
 import { EmailActionTracker } from '../email-action-tracker';
+import { ActionHelpers } from '../email-actions';
 
 // Helper function to create RFC2822 formatted email using nodemailer
 async function createEmailMessage(
@@ -100,7 +101,7 @@ export interface MoveEmailParams {
   messageUid: number;
   messageId?: string;
   sourceFolder: string;
-  recommendedAction: string;
+  recommendedAction: LLMMetadata['recommendedAction'];
 }
 
 export interface MoveEmailResult {
@@ -231,7 +232,7 @@ export class EmailMover {
       // Record the action taken (map recommended action to action type)
       if (messageId) {
         let actionType: 'manually_handled' | 'draft_created' = 'manually_handled';
-        if (['silent-fyi-only', 'silent-large-list', 'silent-unsubscribe', 'silent-spam'].includes(recommendedAction)) {
+        if (ActionHelpers.isSilentAction(recommendedAction)) {
           actionType = 'manually_handled'; // Silent actions mean the email was handled without a draft
         }
         await EmailActionTracker.recordAction(userId, emailAccountId, messageId, actionType);

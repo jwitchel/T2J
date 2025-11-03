@@ -1,4 +1,5 @@
 import { EmailActionRouter } from '../email-action-router';
+import { EmailActions } from '../email-actions';
 
 describe('EmailActionRouter', () => {
   describe('default configuration', () => {
@@ -76,7 +77,7 @@ describe('EmailActionRouter', () => {
     });
 
     it('should route reply actions to system drafts folder', () => {
-      const replyRoute = router.getActionRoute('reply');
+      const replyRoute = router.getActionRoute(EmailActions.REPLY);
       expect(replyRoute.folder).toBe(testDraftsPath);
       expect(replyRoute.displayName).toBe(testDraftsPath);
       expect(replyRoute.flags).toContain('\\Draft');
@@ -84,13 +85,13 @@ describe('EmailActionRouter', () => {
     });
 
     it('should route reply-all actions to system drafts folder', () => {
-      const replyAllRoute = router.getActionRoute('reply-all');
+      const replyAllRoute = router.getActionRoute(EmailActions.REPLY_ALL);
       expect(replyAllRoute.folder).toBe(testDraftsPath);
       expect(replyAllRoute.displayName).toBe(testDraftsPath);
     });
 
     it('should route forward actions to system drafts folder', () => {
-      const forwardRoute = router.getActionRoute('forward');
+      const forwardRoute = router.getActionRoute(EmailActions.FORWARD);
       expect(forwardRoute.folder).toBe(testDraftsPath);
       expect(forwardRoute.displayName).toBe(testDraftsPath);
     });
@@ -102,13 +103,13 @@ describe('EmailActionRouter', () => {
         spamFolder: 'AI-Spam'
       }); // No drafts path provided
 
-      expect(() => routerNoDrafts.getActionRoute('reply')).toThrow('Draft folder path not configured');
-      expect(() => routerNoDrafts.getActionRoute('reply-all')).toThrow('Draft folder path not configured');
-      expect(() => routerNoDrafts.getActionRoute('forward')).toThrow('Draft folder path not configured');
+      expect(() => routerNoDrafts.getActionRoute(EmailActions.REPLY)).toThrow('Draft folder path not configured');
+      expect(() => routerNoDrafts.getActionRoute(EmailActions.REPLY_ALL)).toThrow('Draft folder path not configured');
+      expect(() => routerNoDrafts.getActionRoute(EmailActions.FORWARD)).toThrow('Draft folder path not configured');
     });
 
     it('should route silent-fyi-only to no-action folder', () => {
-      const silentRoute = router.getActionRoute('silent-fyi-only');
+      const silentRoute = router.getActionRoute(EmailActions.SILENT_FYI_ONLY);
       expect(silentRoute.folder).toBe('AI-No-Action');
       expect(silentRoute.displayName).toBe('AI-No-Action');
       expect(silentRoute.flags).not.toContain('\\Seen');  // No-action items should not be marked as Seen
@@ -116,7 +117,7 @@ describe('EmailActionRouter', () => {
     });
 
     it('should route silent-spam to spam folder', () => {
-      const spamRoute = router.getActionRoute('silent-spam');
+      const spamRoute = router.getActionRoute(EmailActions.SILENT_SPAM);
       expect(spamRoute.folder).toBe('AI-Spam');
       expect(spamRoute.displayName).toBe('AI-Spam');
       expect(spamRoute.flags).toContain('\\Seen');

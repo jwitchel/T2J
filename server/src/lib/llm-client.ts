@@ -4,6 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType } from '../types/llm-provider';
+import { RecommendedAction } from './email-actions';
 
 export interface MetaContext {
   inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
@@ -17,7 +18,7 @@ export interface MetaContext {
 }
 
 export interface ActionData {
-  recommendedAction: 'reply' | 'reply-all' | 'forward' | 'forward-with-comment' | 'silent-fyi-only' | 'silent-large-list' | 'silent-unsubscribe' | 'silent-spam' | 'unknown';
+  recommendedAction: RecommendedAction;
   keyConsiderations: string[];
 }
 
