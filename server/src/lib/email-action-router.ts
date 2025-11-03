@@ -14,13 +14,15 @@ export class EmailActionRouter {
   private static readonly DEFAULT_ROOT_FOLDER = process.env.DEFAULT_ROOT_FOLDER || '';
   private static readonly DEFAULT_NO_ACTION_FOLDER = process.env.DEFAULT_NO_ACTION_FOLDER || 't2j-no-action';
   private static readonly DEFAULT_SPAM_FOLDER = process.env.DEFAULT_SPAM_FOLDER || 't2j-spam';
-  
+  private static readonly DEFAULT_TODO_FOLDER = process.env.DEFAULT_TODO_FOLDER || 't2j-todo';
+
   // Public method to get default folder configuration
   static getDefaultFolders(): FolderPreferences {
     return {
       rootFolder: EmailActionRouter.DEFAULT_ROOT_FOLDER,
       noActionFolder: EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
-      spamFolder: EmailActionRouter.DEFAULT_SPAM_FOLDER
+      spamFolder: EmailActionRouter.DEFAULT_SPAM_FOLDER,
+      todoFolder: EmailActionRouter.DEFAULT_TODO_FOLDER
     };
   }
 
@@ -31,7 +33,8 @@ export class EmailActionRouter {
     this.folderPrefs = {
       rootFolder: preferences?.rootFolder !== undefined ? preferences.rootFolder : EmailActionRouter.DEFAULT_ROOT_FOLDER,
       noActionFolder: preferences?.noActionFolder || EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
-      spamFolder: preferences?.spamFolder || EmailActionRouter.DEFAULT_SPAM_FOLDER
+      spamFolder: preferences?.spamFolder || EmailActionRouter.DEFAULT_SPAM_FOLDER,
+      todoFolder: preferences?.todoFolder || EmailActionRouter.DEFAULT_TODO_FOLDER
     };
     this.draftsFolderPath = draftsFolderPath;
   }
@@ -72,6 +75,21 @@ export class EmailActionRouter {
           displayName: this.folderPrefs.spamFolder
         };
 
+      case EmailActions.SILENT_TODO:
+        return {
+          folder: `${rootPath}${this.folderPrefs.todoFolder}`,
+          flags: [],  // Todo items should not be marked as Seen
+          displayName: this.folderPrefs.todoFolder
+        };
+
+      case EmailActions.SILENT_AMBIGUOUS:
+        // Ambiguous emails stay in INBOX for manual review
+        return {
+          folder: 'INBOX',
+          flags: [],  // Keep unread for user attention
+          displayName: 'INBOX'
+        };
+
       default:
         throw new Error(`Unknown action: ${recommendedAction}`);
     }
@@ -87,14 +105,16 @@ export class EmailActionRouter {
     if (rootPath) {
       // Add root folder
       folders.push(rootPath);
-      
+
       // Add subfolders with root path (excluding drafts - it's system managed)
       folders.push(`${rootPath}/${this.folderPrefs.noActionFolder}`);
       folders.push(`${rootPath}/${this.folderPrefs.spamFolder}`);
+      folders.push(`${rootPath}/${this.folderPrefs.todoFolder}`);
     } else {
       // Add folders at root level (excluding drafts - it's system managed)
       folders.push(this.folderPrefs.noActionFolder);
       folders.push(this.folderPrefs.spamFolder);
+      folders.push(this.folderPrefs.todoFolder);
     }
 
     return folders;

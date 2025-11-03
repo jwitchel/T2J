@@ -4,6 +4,7 @@ export interface FolderPreferences {
   rootFolder: string;
   noActionFolder: string;
   spamFolder: string;
+  todoFolder: string;
 }
 
 export interface TypedNamePreferences {

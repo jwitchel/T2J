@@ -17,6 +17,8 @@ export const EmailActions = {
   SILENT_LARGE_LIST: 'silent-large-list',
   SILENT_UNSUBSCRIBE: 'silent-unsubscribe',
   SILENT_SPAM: 'silent-spam',
+  SILENT_TODO: 'silent-todo',
+  SILENT_AMBIGUOUS: 'silent-ambiguous',
   UNKNOWN: 'unknown',
 } as const;
 
@@ -38,12 +40,14 @@ const DRAFT_ACTIONS: readonly RecommendedAction[] = [
 
 /**
  * Actions that are silent (no draft generation)
+ * Note: SILENT_AMBIGUOUS is NOT included here as it stays in inbox
  */
 const SILENT_ACTIONS: readonly RecommendedAction[] = [
   EmailActions.SILENT_FYI_ONLY,
   EmailActions.SILENT_LARGE_LIST,
   EmailActions.SILENT_UNSUBSCRIBE,
   EmailActions.SILENT_SPAM,
+  EmailActions.SILENT_TODO,
 ] as const;
 
 /**
@@ -89,6 +93,20 @@ export const ActionHelpers = {
   },
 
   /**
+   * Check if action is ambiguous (stays in inbox for manual review)
+   */
+  isAmbiguousAction(action: RecommendedAction): boolean {
+    return action === EmailActions.SILENT_AMBIGUOUS;
+  },
+
+  /**
+   * Check if action requires todo folder
+   */
+  isTodoAction(action: RecommendedAction): boolean {
+    return action === EmailActions.SILENT_TODO;
+  },
+
+  /**
    * Get human-readable description of action
    */
   getDescription(action: RecommendedAction): string {
@@ -109,6 +127,10 @@ export const ActionHelpers = {
         return 'Unsubscribe candidate';
       case EmailActions.SILENT_SPAM:
         return 'Spam - move to spam folder';
+      case EmailActions.SILENT_TODO:
+        return 'Requires action - moved to todo folder';
+      case EmailActions.SILENT_AMBIGUOUS:
+        return 'Unclear intent - stays in inbox for manual review';
       case EmailActions.UNKNOWN:
         return 'Unknown action';
       default:
