@@ -3,7 +3,6 @@
  * Single source of truth for spam/unsolicited commercial email detection
  */
 
-import { EmailAttachmentStripper } from '../email-attachment-stripper';
 import { PromptFormatterV2 } from '../pipeline/prompt-formatter-v2';
 import { LLMClient } from '../llm-client';
 import { pool } from '../../server';
@@ -76,12 +75,10 @@ export class SpamDetector {
 
     const { rawMessage, userNames } = params;
 
-    // Strip attachments from email to reduce token count
-    const emailForSpamCheck = await EmailAttachmentStripper.stripAttachments(rawMessage);
-
-    // Format prompt for spam check with stripped email
+    // Format prompt for spam check
+    // Note: LLMClient automatically strips attachments to prevent token limit errors
     const spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
-      rawEmail: emailForSpamCheck,
+      rawEmail: rawMessage,
       userNames
     });
 

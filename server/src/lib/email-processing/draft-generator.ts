@@ -51,6 +51,7 @@ export class DraftGenerator {
       const orchestrator = await getOrchestrator(providerId);
 
       // Initialize constants - pass complete raw email for LLM analysis
+      // Note: LLMClient automatically strips attachments to prevent token limit errors
       const incomingEmailMetadata = {
         from: processedEmail.from,
         to: processedEmail.to,
@@ -280,14 +281,20 @@ export class DraftGenerator {
       };
     })();
 
+    // Create timeout promise with cleanup capability
+    let timeoutId: NodeJS.Timeout;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         console.error(`[DraftGenerator] ⏱️ TIMEOUT: Pipeline exceeded ${timeoutMs}ms - aborting at runAIPipelineWithTimeout() level`);
         reject(new Error(`LLM timeout after ${timeoutMs}ms`));
       }, timeoutMs);
     });
 
-    return Promise.race([pipelinePromise, timeoutPromise]);
+    // Race between pipeline and timeout, then cleanup
+    return Promise.race([pipelinePromise, timeoutPromise]).finally(() => {
+      // Clear timeout to prevent false timeout messages after successful completion
+      clearTimeout(timeoutId);
+    });
   }
 
   /**

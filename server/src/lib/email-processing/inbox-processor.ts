@@ -341,8 +341,11 @@ export class InboxProcessor {
         folderName: DEFAULT_SOURCE_FOLDER,
         llmResponse
       });
+
+      console.log(`[InboxProcessor] ✓ Saved to Qdrant: ${context.message.messageId}`);
     } catch (error) {
-      console.error(`[InboxProcessor] Failed to save to Qdrant:`, error);
+      console.error(`[InboxProcessor] ⚠️ QDRANT SAVE FAILED for ${context.message.messageId}:`, error);
+      console.error(`[InboxProcessor] This email will not be viewable in history!`);
       // Don't throw - Qdrant is best-effort
     }
   }
@@ -419,16 +422,18 @@ export class InboxProcessor {
     const context = await this._buildContext(params);
 
     try {
-      // 2. GENERATE DRAFT (or detect spam) - early returns for special cases
+      // 2. GENERATE DRAFT (includes spam detection)
       const draftResult = await this._generateDraft(context, params.generatedDraft as DraftEmail);
 
       if (draftResult.shouldSkip) {
-        const result = this._buildResult(context); // Returns spam skip result
+        // Should not happen anymore - spam now returns a draft with silent-spam action
+        const result = this._buildResult(context);
         this._logProcessingSummary(context, result, true);
         return result;
       }
 
       const draft = draftResult.draft!;
+      const isSpam = draft.meta.recommendedAction === 'silent-spam';
 
       // 3. CHECK LOCK AFTER DRAFT GENERATION
       this._checkLockExpired(signal, 'draft generation');
@@ -462,7 +467,7 @@ export class InboxProcessor {
         actionDescription: imapResult.actionDescription
       });
 
-      this._logProcessingSummary(context, result, false);
+      this._logProcessingSummary(context, result, isSpam);
       return result;
 
     } catch (error) {
@@ -509,7 +514,6 @@ export class InboxProcessor {
     return await withImapContext(accountId, userId, async () => {
       try {
         const imapOps = await ImapOperations.fromAccountId(accountId, userId);
-        const results: ProcessEmailResult[] = [];
 
         // Fetch messages from inbox with pagination
         const messages = await imapOps.getMessages('INBOX', {
@@ -547,10 +551,13 @@ export class InboxProcessor {
           return force || !tracked || tracked.actionTaken === 'none';
         });
 
-        // Process each email
+        // Process emails in parallel for better throughput
         // Note: processEmail now handles Qdrant storage internally (DRY)
-        for (const msg of toProcess) {
-          const result = await this.processEmail({
+        const processingStartTime = Date.now();
+        console.log(`[InboxProcessor] 🚀 Processing ${toProcess.length} emails in parallel...`);
+
+        const processingPromises = toProcess.map(msg =>
+          this.processEmail({
             message: {
               uid: msg.uid,
               messageId: msg.messageId,
@@ -561,10 +568,14 @@ export class InboxProcessor {
             accountId,
             userId,
             providerId
-          });
+          })
+        );
 
-          results.push(result);
-        }
+        const results = await Promise.all(processingPromises);
+
+        const processingDuration = Date.now() - processingStartTime;
+        const avgTimePerEmail = results.length > 0 ? (processingDuration / results.length).toFixed(0) : 0;
+        console.log(`[InboxProcessor] ✅ Completed ${results.length} emails in parallel (${processingDuration}ms total, ~${avgTimePerEmail}ms per email)`);
 
         // Check if there are more messages to process
         const hasMore = messages.length === batchSize;

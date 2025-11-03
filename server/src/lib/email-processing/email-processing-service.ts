@@ -130,6 +130,49 @@ export class EmailProcessingService {
   }
 
   /**
+   * Create a minimal draft for spam emails
+   * @private
+   */
+  private createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext): any {
+    const { processedEmail } = parsedData;
+
+    return {
+      id: `draft-${Date.now()}`,
+      from: userContext.userEmail,
+      to: processedEmail.from[0].address,
+      cc: '',
+      subject: processedEmail.subject || '',
+      body: '',
+      bodyHtml: undefined,
+      inReplyTo: processedEmail.messageId || `<${Date.now()}>`,
+      references: processedEmail.messageId || `<${Date.now()}>`,
+      meta: {
+        recommendedAction: 'silent-spam',
+        keyConsiderations: ['Spam detected'],
+        inboundMsgAddressedTo: 'you',
+        inboundMsgIsRequesting: 'none',
+        urgencyLevel: 'low',
+        contextFlags: {
+          isThreaded: false,
+          hasAttachments: false,
+          isGroupEmail: false
+        }
+      },
+      relationship: {
+        type: 'external',
+        confidence: 0.9,
+        detectionMethod: 'spam-detection'
+      },
+      draftMetadata: {
+        exampleCount: 0,
+        timestamp: new Date().toISOString(),
+        originalSubject: processedEmail.subject,
+        originalFrom: processedEmail.from[0].address
+      }
+    };
+  }
+
+  /**
    * Load user context exactly once (single query joining account and user data)
    * @private
    */
@@ -201,20 +244,22 @@ export class EmailProcessingService {
       const spamCheckDuration = Date.now() - spamCheckStartTime;
       console.log(`[EmailProcessingService] ✓ Spam check complete: isSpam=${spamCheckResult.isSpam} (${spamCheckDuration}ms)`);
 
-      // If spam detected, skip draft generation and return error
-      if (spamCheckResult.isSpam) {
-        console.log('[EmailProcessingService] Spam detected, skipping draft generation');
-        return {
-          success: false,
-          error: 'Spam detected',
-          errorCode: 'SPAM_DETECTED'
-        };
-      }
-
-      // Step 4: Not spam - generate draft using pre-parsed email and context
+      // Step 4: Generate draft (or create spam draft)
       console.log('[EmailProcessingService] ⏱️ Step 4: Starting draft generation...');
       const draftStartTime = Date.now();
 
+      // If spam detected, create a silent-spam draft instead of full generation
+      if (spamCheckResult.isSpam) {
+        console.log('[EmailProcessingService] Spam detected, creating silent-spam draft');
+        const spamDraft = this.createSpamDraft(parsedData, userContext);
+        console.log(`[EmailProcessingService] ✅ Spam draft created (${Date.now() - draftStartTime}ms)`);
+        return {
+          success: true,
+          draft: spamDraft
+        };
+      }
+
+      // Not spam - generate full draft
       const result = await draftGenerator.generateDraft(userId, providerId, parsedData, userContext);
 
       console.log(`[EmailProcessingService] ✅ Draft generation complete (${Date.now() - draftStartTime}ms)`);

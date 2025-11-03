@@ -113,6 +113,41 @@ export class LLMClient {
   }
 
   /**
+   * Strip large base64-encoded content (attachments) from prompts
+   * Prevents token limit errors when emails have large attachments
+   * @private
+   */
+  private stripAttachmentsFromPrompt(prompt: string): string {
+    // Match base64 content blocks that are typically from email attachments
+    // Look for patterns like: Content-Transfer-Encoding: base64 followed by large base64 strings
+    const base64Pattern = /Content-Transfer-Encoding:\s*base64[\r\n]+([A-Za-z0-9+\/=\r\n]{500,})/gi;
+
+    let strippedPrompt = prompt;
+    let matchCount = 0;
+    let totalBytesRemoved = 0;
+
+    strippedPrompt = strippedPrompt.replace(base64Pattern, (match) => {
+      matchCount++;
+      totalBytesRemoved += match.length;
+      return 'Content-Transfer-Encoding: base64\n[Large attachment content removed to prevent token limit]';
+    });
+
+    // Also strip inline base64 images (data URIs)
+    const dataUriPattern = /data:image\/[^;]+;base64,[A-Za-z0-9+\/=]{500,}/gi;
+    strippedPrompt = strippedPrompt.replace(dataUriPattern, (match) => {
+      matchCount++;
+      totalBytesRemoved += match.length;
+      return '[Inline image removed to prevent token limit]';
+    });
+
+    if (matchCount > 0) {
+      console.log(`[LLMClient] 🗜️ Stripped ${matchCount} attachment(s) from prompt (removed ${totalBytesRemoved.toLocaleString()} bytes)`);
+    }
+
+    return strippedPrompt;
+  }
+
+  /**
    * Generic generation method for direct API calls with built-in retry logic
    */
   async generate(prompt: string, options?: {
@@ -123,6 +158,9 @@ export class LLMClient {
     const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
     const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
     let lastError: any;
+
+    // Strip attachments from prompt to prevent token limit errors
+    const cleanedPrompt = this.stripAttachmentsFromPrompt(prompt);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Create AbortController for this attempt with timeout
@@ -136,9 +174,9 @@ export class LLMClient {
         const messages = options?.systemPrompt
           ? [
               { role: 'system' as const, content: options.systemPrompt },
-              { role: 'user' as const, content: prompt }
+              { role: 'user' as const, content: cleanedPrompt }
             ]
-          : prompt;
+          : cleanedPrompt;
 
         const llmStartTime = Date.now();
         console.log(`[LLMClient] 🔄 Calling ${this.modelName} (attempt ${attempt + 1}/${maxRetries + 1})...`);
