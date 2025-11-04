@@ -55,15 +55,15 @@ function aggregateActions(raw: RawActionCounts): ActionCounts {
     else if (action === EmailActions.SILENT_SPAM) {
       result.spam += count;
     }
-    // Moved (FYI, Large List, Unsubscribe)
-    else if (action === EmailActions.SILENT_FYI_ONLY || action === EmailActions.SILENT_LARGE_LIST || action === EmailActions.SILENT_UNSUBSCRIBE) {
+    // Moved (FYI, Large List, Unsubscribe, Todo)
+    else if (action === EmailActions.SILENT_FYI_ONLY || action === EmailActions.SILENT_LARGE_LIST || action === EmailActions.SILENT_UNSUBSCRIBE || action === EmailActions.SILENT_TODO) {
       result.moved += count;
     }
     // Legacy draft_created - we can't distinguish these in aggregate, so count as drafted
     else if (action === 'draft_created') {
       result.drafted += count;
     }
-    // Everything else is No Action
+    // Everything else is No Action (including SILENT_AMBIGUOUS which stays in inbox)
     else {
       result.noAction += count;
     }

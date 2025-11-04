@@ -126,6 +126,7 @@ export class EmailActionRouter {
   async checkFolders(imapOps: ImapOperations): Promise<{
     existing: string[];
     missing: string[];
+    allFolders: Array<{ name: string; path: string; flags?: string[] }>;
   }> {
     const requiredFolders = this.getRequiredFolders();
     const existingFolders = await imapOps.getFolders();
@@ -142,17 +143,26 @@ export class EmailActionRouter {
       }
     }
 
-    return { existing, missing };
+    return { existing, missing, allFolders: existingFolders };
   }
 
   /**
    * Create missing folders
+   * @param imapOps - IMAP operations instance
+   * @param missingFolders - Optional pre-computed list of missing folders (avoids calling checkFolders again)
    */
-  async createMissingFolders(imapOps: ImapOperations): Promise<{
+  async createMissingFolders(
+    imapOps: ImapOperations,
+    missingFolders?: string[]
+  ): Promise<{
     created: string[];
     failed: Array<{ folder: string; error: string }>;
   }> {
-    const { missing } = await this.checkFolders(imapOps);
+    // Use provided list or check folders to find missing ones
+    const missing = missingFolders !== undefined
+      ? missingFolders
+      : (await this.checkFolders(imapOps)).missing;
+
     const created: string[] = [];
     const failed: Array<{ folder: string; error: string }> = [];
 

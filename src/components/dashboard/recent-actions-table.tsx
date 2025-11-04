@@ -69,7 +69,7 @@ function getActionInfo(actionTaken: string, destinationFolder?: string): {
     };
   }
 
-  // Moved actions (FYI, Large List, Unsubscribe)
+  // Moved actions (FYI, Large List, Unsubscribe, Todo)
   if (actionTaken === EmailActions.SILENT_FYI_ONLY) {
     return {
       category: 'Moved',
@@ -89,6 +89,22 @@ function getActionInfo(actionTaken: string, destinationFolder?: string): {
       category: 'Moved',
       label: 'Moved (Unsubscribe)',
       color: 'bg-green-500 hover:bg-green-600'
+    };
+  }
+  if (actionTaken === EmailActions.SILENT_TODO) {
+    return {
+      category: 'Moved',
+      label: 'Moved (Todo)',
+      color: 'bg-green-500 hover:bg-green-600'
+    };
+  }
+
+  // Ambiguous action (stays in inbox)
+  if (actionTaken === EmailActions.SILENT_AMBIGUOUS) {
+    return {
+      category: 'No Action',
+      label: 'Unclear (Inbox)',
+      color: 'bg-yellow-500 hover:bg-yellow-600'
     };
   }
 

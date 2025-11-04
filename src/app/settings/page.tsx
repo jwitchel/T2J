@@ -23,7 +23,8 @@ export default function SettingsPage() {
   const [folderPreferences, setFolderPreferences] = useState({
     rootFolder: '',
     noActionFolder: '',
-    spamFolder: ''
+    spamFolder: '',
+    todoFolder: ''
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -53,6 +54,7 @@ export default function SettingsPage() {
           rootFolder?: string;
           noActionFolder?: string;
           spamFolder?: string;
+          todoFolder?: string;
         } } }>('/api/settings/profile')
         if (data.preferences) {
           setName(data.preferences.name || user.name || '')
@@ -345,7 +347,21 @@ export default function SettingsPage() {
                     For: emails identified as spam
                   </p>
                 </div>
-                
+
+                <div className="space-y-2">
+                  <Label htmlFor="todoFolder">Todo Folder</Label>
+                  <Input
+                    id="todoFolder"
+                    value={folderPreferences.todoFolder}
+                    placeholder="t2j-todo"
+                    disabled={true}
+                    readOnly
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    For: action items requiring external action (no email response needed)
+                  </p>
+                </div>
+
                 <div className="flex gap-2">
                   <Button 
                     onClick={handleTestFolders}

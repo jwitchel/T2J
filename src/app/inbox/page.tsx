@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import PostalMime from 'postal-mime';
 import { apiGet, apiPost } from '@/lib/api';
 import Link from 'next/link';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
 import { EmailActions, RecommendedAction } from '../../../server/src/lib/email-actions';
 
@@ -113,11 +113,13 @@ function InboxContent() {
     rootFolder?: string;
     noActionFolder?: string;
     spamFolder?: string;
+    todoFolder?: string;
   } | null>(null);
   const [draftsFolderPath, setDraftsFolderPath] = useState<string | null>(null);
   const [jumpToInput, setJumpToInput] = useState('');
   const [needsReauth, setNeedsReauth] = useState(false);
   const [showAllEmails, setShowAllEmails] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   // URL parameter mode: viewing a specific email from Qdrant
   const urlEmailAccountId = searchParams.get('emailAccountId');
@@ -128,45 +130,16 @@ function InboxContent() {
   
   // Helper function to get destination folder based on recommended action
   const getDestinationFolder = (recommendedAction?: string) => {
-    // Folder preferences must be loaded from the user's saved settings
-    if (!userFolderPrefs) {
-      // Return error state to be displayed in UI
-      return {
-        folder: '[Configure folders in Settings]',
-        displayName: '[Not configured]',
-        buttonLabel: 'Configure Folders First',
-        error: true
-      };
-    }
-    
-    // Ensure all required folder names are present
-    if (!userFolderPrefs.noActionFolder || !userFolderPrefs.spamFolder) {
-      return {
-        folder: '[Incomplete configuration]',
-        displayName: '[Not configured]',
-        buttonLabel: 'Complete Folder Setup',
-        error: true
-      };
-    }
-    
-    const rootPath = userFolderPrefs.rootFolder ? `${userFolderPrefs.rootFolder}/` : '';
-    
+    const rootPath = userFolderPrefs?.rootFolder ? `${userFolderPrefs.rootFolder}/` : '';
+
     switch (recommendedAction) {
       case EmailActions.REPLY:
       case EmailActions.REPLY_ALL:
       case EmailActions.FORWARD:
       case EmailActions.FORWARD_WITH_COMMENT:
-        if (!draftsFolderPath) {
-          return {
-            folder: '[Draft folder not detected]',
-            displayName: '[Not detected]',
-            buttonLabel: 'Draft Folder Not Found',
-            error: true
-          };
-        }
         return {
-          folder: draftsFolderPath,
-          displayName: draftsFolderPath,
+          folder: draftsFolderPath!,
+          displayName: draftsFolderPath!,
           buttonLabel: 'Send to Drafts',
           error: false
         };
@@ -175,20 +148,37 @@ function InboxContent() {
       case EmailActions.SILENT_LARGE_LIST:
       case EmailActions.SILENT_UNSUBSCRIBE:
         return {
-          folder: `${rootPath}${userFolderPrefs.noActionFolder}`,
-          displayName: userFolderPrefs.noActionFolder,
+          folder: `${rootPath}${userFolderPrefs!.noActionFolder}`,
+          displayName: userFolderPrefs!.noActionFolder!,
           buttonLabel: 'File as No Action',
           error: false
         };
 
       case EmailActions.SILENT_SPAM:
         return {
-          folder: `${rootPath}${userFolderPrefs.spamFolder}`,
-          displayName: userFolderPrefs.spamFolder,
+          folder: `${rootPath}${userFolderPrefs!.spamFolder}`,
+          displayName: userFolderPrefs!.spamFolder!,
           buttonLabel: 'Move to Spam',
           error: false
         };
-      
+
+      case EmailActions.SILENT_TODO:
+        return {
+          folder: `${rootPath}${userFolderPrefs!.todoFolder}`,
+          displayName: userFolderPrefs!.todoFolder!,
+          buttonLabel: 'Move to Todo',
+          error: false
+        };
+
+      case EmailActions.SILENT_AMBIGUOUS:
+        return {
+          folder: 'INBOX',
+          displayName: 'INBOX (Requires Manual Review)',
+          buttonLabel: 'Mark as Reviewed',
+          error: false,
+          isAmbiguous: true
+        };
+
       default:
         return {
           folder: '[Unknown action]',
@@ -452,15 +442,30 @@ function InboxContent() {
         rootFolder?: string;
         noActionFolder?: string;
         spamFolder?: string;
+        todoFolder?: string;
         draftsFolderPath?: string;
       } } }>('/api/settings/profile');
+
       if (data.preferences?.folderPreferences) {
         const { draftsFolderPath, ...otherPrefs } = data.preferences.folderPreferences;
+
+        // Only validation needed: check if drafts folder has been auto-detected
+        // All other folders are guaranteed by backend (defaults merged with saved prefs)
+        if (!draftsFolderPath) {
+          setConfigError('Drafts folder not detected. Please run "Test Folders" in Settings to auto-detect your email provider\'s drafts folder.');
+        } else {
+          setConfigError(null);
+        }
+
         setUserFolderPrefs(otherPrefs);
         setDraftsFolderPath(draftsFolderPath || null);
+      } else {
+        // Should never happen - backend always returns defaults
+        setConfigError('Folder preferences not configured. Please refresh the page.');
       }
     } catch (err) {
       console.error('Failed to load folder preferences:', err);
+      setConfigError('Failed to load folder configuration. Please refresh the page.');
     }
   };
   
@@ -600,6 +605,18 @@ function InboxContent() {
             </AlertDescription>
           </Alert>
         </div>
+      )}
+      {configError && (
+        <Alert variant="destructive" className="mb-4 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
+          <AlertCircle />
+          <AlertTitle>Configuration Required</AlertTitle>
+          <AlertDescription>
+            {configError}
+            <Link href="/settings">
+              <Button size="sm" variant="outline" className="mt-2">Go to Settings</Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
       )}
       <div className="mb-6">
         <h1 className="text-2xl font-bold mb-4">
@@ -949,7 +966,14 @@ function InboxContent() {
                   </div>
                 ) : (
                   <div className="bg-muted p-4 rounded-md text-center text-muted-foreground">
-                    <p className="text-sm">No response needed - this email will be filed to {getDestinationFolder(generatedDraft.meta?.recommendedAction).folder}</p>
+                    {getDestinationFolder(generatedDraft.meta?.recommendedAction).isAmbiguous ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-yellow-600 dark:text-yellow-500">⚠️ Ambiguous Intent Detected</p>
+                        <p className="text-sm">This email&apos;s intent is unclear. It will remain in your inbox for manual review. Please read carefully and decide on the appropriate action.</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm">No response needed - this email will be filed to {getDestinationFolder(generatedDraft.meta?.recommendedAction).folder}</p>
+                    )}
                   </div>
                 )}
                 
@@ -979,10 +1003,19 @@ function InboxContent() {
                         
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Recommended Action</div>
-                          <Badge variant={
-                            generatedDraft.meta.recommendedAction.startsWith('silent') ? 'secondary' :
-                            generatedDraft.meta.recommendedAction.includes('forward') ? 'outline' : 'default'
-                          }>
+                          <Badge
+                            variant={
+                              generatedDraft.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS ? 'destructive' :
+                              generatedDraft.meta.recommendedAction.startsWith('silent') ? 'secondary' :
+                              generatedDraft.meta.recommendedAction.includes('forward') ? 'outline' : 'default'
+                            }
+                            className={
+                              generatedDraft.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS
+                                ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                : ''
+                            }
+                          >
+                            {generatedDraft.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS && '⚠️ '}
                             {generatedDraft.meta.recommendedAction}
                           </Badge>
                         </div>
@@ -1022,9 +1055,16 @@ function InboxContent() {
                         
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Destination Folder</div>
-                          <Badge variant="default">
+                          <Badge
+                            variant="default"
+                            className={
+                              getDestinationFolder(generatedDraft.meta.recommendedAction).isAmbiguous
+                                ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                : ''
+                            }
+                          >
                             <FolderOpen className="mr-1 h-3 w-3" />
-                            {getDestinationFolder(generatedDraft.meta.recommendedAction).folder}
+                            {getDestinationFolder(generatedDraft.meta.recommendedAction).displayName}
                           </Badge>
                         </div>
                         

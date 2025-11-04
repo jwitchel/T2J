@@ -863,8 +863,14 @@ export class ImapOperations {
     );
   }
 
-  async findDraftFolder(preserveConnection: boolean = false): Promise<string> {
-    const folders = await this.getFolders(preserveConnection);
+  async findDraftFolder(
+    preserveConnection: boolean = false,
+    cachedFolders?: Array<{ name: string; path: string; flags?: string[] }>
+  ): Promise<string> {
+    // Use cached folders if provided to avoid duplicate getFolders call
+    const folders = cachedFolders !== undefined
+      ? cachedFolders
+      : await this.getFolders(preserveConnection);
     
     // Log all folders for debugging
     console.log('Available folders:', folders.map(f => ({
