@@ -147,7 +147,52 @@ Check if email needs forwarding:
 **If needs forwarding → return `responseAction: "forward"`**
 **If needs forward with comment → return `responseAction: "forward-with-comment"`**
 
-### STEP 7 - RESPONSE TYPE DETERMINATION
+### STEP 7 - EXTERNAL ACTION ONLY (NO EMAIL RESPONSE)
+Check if email requires ONLY external action with explicitly NO email response needed:
+7.1. **Self-service verification actions** (no confirmation needed):
+   7.1.1. "Click this link to verify your email" or similar one-click verification with no response expected
+   7.1.2. "Click to confirm your subscription" or similar opt-in confirmations
+   7.1.3. "Click to reset your password" or similar account recovery links
+   7.1.4. Email contains only a button/link with no discussion or questions
+7.2. **Explicit no-reply-needed statements**:
+   7.2.1. "No reply needed" or "No response required" explicitly stated
+   7.2.2. "This is for your action only" with no request for confirmation
+   7.2.3. "Simply click the link below" with no other asks
+
+**CRITICAL EXCLUSIONS** (these need email responses, do NOT classify as silent-todo):
+- "Please review and approve" → needs confirmation email (use default reply-all)
+- "RSVP by [date]" → typically done via email reply (use default reply-all)
+- "Review the document and share your thoughts" → needs written feedback (use default reply-all)
+- "Complete this form" → may need email confirmation when done (use default reply-all)
+- "Please respond by [date]" → explicitly asks for response (use default reply-all)
+- Any request with questions or discussion → needs email reply (use default reply-all)
+
+**If matches → return `responseAction: "silent-todo"`**
+
+### STEP 8 - GENUINELY AMBIGUOUS (RARE - USE SPARINGLY)
+**IMPORTANT**: This step should only match in rare, truly unclear cases. Default to reply-all when uncertain.
+
+Check ONLY if email meets ALL of these criteria:
+8.1. **Completely unclear intent AND no clear ask**:
+   8.1.1. Forwarded email with NO explanation of why you're included AND no clear question
+   8.1.2. Email body is just "Thoughts?" or "FYI?" with no context AND unclear if response expected
+   8.1.3. Email thread missing so much context you cannot determine what's being discussed
+   8.1.4. Subject line completely contradicts body making it impossible to understand intent
+
+**CRITICAL EXCLUSIONS** (these need responses, do NOT classify as ambiguous):
+- "Complex questions requiring thought" → needs reply with thoughtful answer (use default reply-all)
+- "Email from important sender but unclear what they need" → MUST reply to important people (use default reply-all)
+- "Could be informational OR could require response" → default to reply (use default reply-all)
+- "Let me know what you think" → clear ask for opinion (use default reply-all)
+- "We should discuss this" → needs response to schedule discussion (use default reply-all)
+- "Multiple requests" → prioritize and address all (use default reply-all)
+- Group emails where your role is unclear → safer to reply (use default reply-all)
+
+**Decision rule**: If you have ANY doubt whether this is ambiguous, choose reply-all instead. Only use silent-ambiguous for emails so unclear that keeping in inbox for manual review is the safest option.
+
+**If matches ALL criteria above → return `responseAction: "silent-ambiguous"`**
+
+### STEP 9 - RESPONSE TYPE DETERMINATION
 If no response type is specified, the default response type is "reply-all".
 
 ## Response Requirements

@@ -25,16 +25,19 @@ router.get('/profile', requireAuth, async (req, res) => {
     
     const user = result.rows[0];
     const preferences = user.preferences || {};
-    
-    // Get defaults from EmailActionRouter
+
+    // Get defaults from EmailActionRouter and merge with saved preferences
     const defaultFolders = EmailActionRouter.getDefaultFolders();
-    
+    const folderPreferences = preferences.folderPreferences
+      ? { ...defaultFolders, ...preferences.folderPreferences }
+      : defaultFolders;
+
     return res.json({
       preferences: {
         name: preferences.name || user.name || '',
         nicknames: preferences.nicknames || '',
         signatureBlock: preferences.signatureBlock || '',
-        folderPreferences: preferences.folderPreferences || defaultFolders
+        folderPreferences
       }
     });
   } catch (error) {
@@ -194,8 +197,9 @@ router.post('/test-folders', requireAuth, async (req, res): Promise<void> => {
           const folderStatus = await router.checkFolders(imapOps);
 
           // Detect the provider's actual Drafts folder path and persist it
+          // Reuse the folder list from checkFolders to avoid duplicate getFolders call
           try {
-            const draftsPath = await imapOps.findDraftFolder(true);
+            const draftsPath = await imapOps.findDraftFolder(true, folderStatus.allFolders);
             await pool.query(
               `UPDATE "user"
                SET preferences = jsonb_set(
