@@ -1,5 +1,14 @@
 === INSTRUCTIONS ===
-Is this email spam?
+Is this email **unsolicited bulk email or gray mail**?
+
+**Definition**: Unsolicited bulk email or gray mail includes:
+- Unwanted marketing emails, business solitications, and other unsolicited emails
+- Cold outreach from unknown senders (sales pitches, recruitment, etc.)
+- Emails that have a bold claim or teaser followed by a teaser or call to action (often including a footer or closing line for unsubscribe or opt-out however informal or casual)
+- Emails that come from suspicious domains, foreign domains, or domains that are not related to the user's business or industry
+- Emails with x-headers that are missing or have a suspicious value
+- Emails that appear to a thread or reply but are the same sender repeating the same message
+**Note**: Personal emails, business correspondence with known contacts, transactional emails from services the user actively uses, and emails the user has opted into are NOT considered unsolicited bulk email.
 
 IMPORTANT: You must respond with a valid JSON object only. Do not include any text before or after the JSON.
 
@@ -13,8 +22,8 @@ Return a JSON object with this exact structure:
 }
 
 **CRITICAL**: The `spamIndicators` field must ALWAYS contain specific, actionable reasons:
-- If `isSpam` is **true**: List specific spam indicators (e.g., "Suspicious .top domain", "Unsolicited M&A pitch", "Generic cold outreach")
-- If `isSpam` is **false**: List specific legitimacy indicators (e.g., "Not spam - legitimate .com domain", "Not spam - known business contact", "Not spam - professional context")
+- If `isSpam` is **true**: List specific indicators (e.g., "Unsolicited cold outreach from unknown sender", "Generic marketing email with unsubscribe link", "Mass-distributed newsletter", "Suspicious .top domain", "Urgent action request from unknown source")
+- If `isSpam` is **false**: List specific legitimacy indicators (e.g., "Not unsolicited - legitimate .com domain from known service", "Not bulk mail - personalized business correspondence", "Not unsolicited - transactional email from active service", "Not bulk mail - direct personal communication")
 
 **DO NOT** use generic responses like ["Not spam"] or ["Spam"]. Always provide specific reasoning.
 
