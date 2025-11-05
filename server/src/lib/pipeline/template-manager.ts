@@ -4,6 +4,7 @@ import path from 'path';
 import { SelectedExample } from './example-selector';
 import { RelationshipProfile } from './types';
 import { WritingPatterns } from './writing-pattern-analyzer';
+import { SpamCheckResult } from '../email-processing/spam-detector';
 
 export interface PromptTemplateData {
   // Core data
@@ -24,6 +25,8 @@ export interface PromptTemplateData {
     cc?: { address: string; name?: string }[];
     subject: string;
     date: Date;
+    rawMessage?: string;  // Complete raw email (headers + body)
+    spamCheckResult?: SpamCheckResult;  // Spam screening analysis
   };
   
   // Examples formatted for templates

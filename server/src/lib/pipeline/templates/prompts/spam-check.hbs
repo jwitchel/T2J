@@ -8,11 +8,15 @@ Return a JSON object with this exact structure:
 {
   "meta": {
     "isSpam": <true|false>,
-    "spamIndicators": ["<brief reason 1>", "<brief reason 2>", ...]
+    "spamIndicators": ["<specific reason 1>", "<specific reason 2>", ...]
   }
 }
 
-If `isSpam` is false set: `"spamIndicators": ["Not spam"]`
+**CRITICAL**: The `spamIndicators` field must ALWAYS contain specific, actionable reasons:
+- If `isSpam` is **true**: List specific spam indicators (e.g., "Suspicious .top domain", "Unsolicited M&A pitch", "Generic cold outreach")
+- If `isSpam` is **false**: List specific legitimacy indicators (e.g., "Not spam - legitimate .com domain", "Not spam - known business contact", "Not spam - professional context")
+
+**DO NOT** use generic responses like ["Not spam"] or ["Spam"]. Always provide specific reasoning.
 
 === EMAIL TO ANALYZE ===
 {{rawEmail}}

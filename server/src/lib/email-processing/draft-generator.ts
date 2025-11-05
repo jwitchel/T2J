@@ -13,6 +13,7 @@ import { pool } from '../../server';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
 import { ActionHelpers } from '../email-actions';
+import { SpamCheckResult } from './spam-detector';
 
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
@@ -39,7 +40,8 @@ export class DraftGenerator {
     userId: string,
     providerId: string,
     parsedData: ParsedEmailData,
-    userContext: UserContext
+    userContext: UserContext,
+    spamCheckResult: SpamCheckResult
   ): Promise<EmailProcessingResult> {
     const { parsed, processedEmail } = parsedData;
     const recipientEmail = processedEmail.from[0].address;
@@ -70,6 +72,7 @@ export class DraftGenerator {
         userContext,
         maxExamples,
         incomingEmailMetadata,
+        spamCheckResult,
         llmTimeout
       );
 
@@ -119,6 +122,7 @@ export class DraftGenerator {
     userContext: UserContext,
     maxExamples: number,
     incomingEmailMetadata: any,
+    spamCheckResult: SpamCheckResult,
     timeoutMs: number
   ): Promise<{ body: string; meta: LLMMetadata; relationship: { type: string; confidence: number; detectionMethod: string } }> {
     // Validate LLM client is available (should be already checked, but for type safety)
@@ -224,7 +228,8 @@ export class DraftGenerator {
         incomingEmail: processedEmail.userReply,
         recipientEmail,
         userNames: userContext.userNames,
-        incomingEmailMetadata
+        incomingEmailMetadata,
+        spamCheckResult
       });
       const actionFormatDuration = Date.now() - actionFormatStartTime;
       console.log(`[DraftGenerator]   └─ Prompt formatted in ${actionFormatDuration}ms`);

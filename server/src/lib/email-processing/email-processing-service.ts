@@ -12,7 +12,7 @@
 
 import PostalMime from 'postal-mime';
 import { pool } from '../../server';
-import { SpamDetector } from './spam-detector';
+import { SpamDetector, SpamCheckResult } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
@@ -134,7 +134,7 @@ export class EmailProcessingService {
    * Create a minimal draft for spam emails
    * @private
    */
-  private createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext): any {
+  private createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext, spamCheckResult: SpamCheckResult): any {
     const { processedEmail } = parsedData;
 
     return {
@@ -149,7 +149,7 @@ export class EmailProcessingService {
       references: processedEmail.messageId || `<${Date.now()}>`,
       meta: {
         recommendedAction: EmailActions.SILENT_SPAM,
-        keyConsiderations: ['Spam detected'],
+        keyConsiderations: spamCheckResult.indicators,
         inboundMsgAddressedTo: 'you',
         inboundMsgIsRequesting: 'none',
         urgencyLevel: 'low',
@@ -252,7 +252,7 @@ export class EmailProcessingService {
       // If spam detected, create a silent-spam draft instead of full generation
       if (spamCheckResult.isSpam) {
         console.log('[EmailProcessingService] Spam detected, creating silent-spam draft');
-        const spamDraft = this.createSpamDraft(parsedData, userContext);
+        const spamDraft = this.createSpamDraft(parsedData, userContext, spamCheckResult);
         console.log(`[EmailProcessingService] ✅ Spam draft created (${Date.now() - draftStartTime}ms)`);
         return {
           success: true,
@@ -260,8 +260,8 @@ export class EmailProcessingService {
         };
       }
 
-      // Not spam - generate full draft
-      const result = await draftGenerator.generateDraft(userId, providerId, parsedData, userContext);
+      // Not spam - generate full draft (pass spam check results for transparency)
+      const result = await draftGenerator.generateDraft(userId, providerId, parsedData, userContext, spamCheckResult);
 
       console.log(`[EmailProcessingService] ✅ Draft generation complete (${Date.now() - draftStartTime}ms)`);
       return result;

@@ -19,7 +19,7 @@ export interface MetaContext {
 
 export interface ActionData {
   recommendedAction: RecommendedAction;
-  keyConsiderations: string[];
+  keyConsiderations: string[]; // Includes spam screening reasons for transparency (e.g., "Not spam - legitimate domain")
 }
 
 export interface LLMMetadata extends MetaContext, ActionData {}

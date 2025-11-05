@@ -2,6 +2,7 @@ import { SelectedExample } from './example-selector';
 import { TemplateManager, EnhancedRelationshipProfile } from './template-manager';
 import { WritingPatterns } from './writing-pattern-analyzer';
 import { EmailActions } from '../email-actions';
+import { SpamCheckResult } from '../email-processing/spam-detector';
 
 export interface PromptFormatterParams {
   incomingEmail: string;
@@ -137,21 +138,30 @@ export class PromptFormatterV2 {
   }
 
   // Format action analysis prompt (no tone/style needed)
-  async formatActionAnalysis(params: Partial<PromptFormatterParams>): Promise<string> {
+  async formatActionAnalysis(params: Partial<PromptFormatterParams> & { spamCheckResult: SpamCheckResult }): Promise<string> {
     await this.initialize();
 
     // Generate available actions list from EmailActions constant
     const availableActions = Object.values(EmailActions).join('|');
 
-    const templateData = this.templateManager.prepareTemplateData({
+    // Build minimal template data for action-analysis (no examples/patterns needed)
+    const templateData = {
       incomingEmail: params.incomingEmail || '',
       recipientEmail: params.recipientEmail || '',
-      relationship: 'unknown', // Not needed for action analysis
-      examples: [], // No examples needed for action analysis
+      relationship: 'unknown', // Not used in action-analysis
       userNames: params.userNames,
-      incomingEmailMetadata: params.incomingEmailMetadata,
-      availableActions // Pass to template
-    });
+      incomingEmailMetadata: params.incomingEmailMetadata ? {
+        ...params.incomingEmailMetadata,
+        spamCheckResult: params.spamCheckResult
+      } : undefined,
+      availableActions,
+      meta: {
+        exampleCount: 0,
+        relationshipMatchCount: 0,
+        avgWordCount: 0,
+        formalityLevel: 'unknown'
+      }
+    };
     return this.templateManager.renderPrompt('action-analysis', templateData);
   }
 
