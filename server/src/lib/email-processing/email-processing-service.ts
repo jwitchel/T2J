@@ -11,6 +11,11 @@
  */
 
 import PostalMime from 'postal-mime';
+
+// Helper to format milliseconds as seconds (e.g., 8234ms → 8.2s)
+function formatDuration(ms: number): string {
+  return (ms / 1000).toFixed(1) + 's';
+}
 import { pool } from '../../server';
 import { SpamDetector, SpamCheckResult } from './spam-detector';
 import { draftGenerator } from './draft-generator';
@@ -213,47 +218,38 @@ export class EmailProcessingService {
    */
   async processEmail(params: ProcessEmailParams): Promise<EmailProcessingResult> {
     const { rawMessage, emailAccountId, providerId, userId } = params;
+    const totalStartTime = Date.now();
 
     try {
       // Step 1: Parse email
-      const parseStartTime = Date.now();
-      console.log('[EmailProcessingService] ⏱️ Step 1: Parsing email...');
-
       const parsedData = await this.parseEmail(rawMessage, emailAccountId);
 
-      console.log(`[EmailProcessingService] ✓ Email parsed (${Date.now() - parseStartTime}ms)`);
-
       // Step 2: Load user context
-      const contextStartTime = Date.now();
-      console.log('[EmailProcessingService] ⏱️ Step 2: Loading user context...');
-
       const userContext = await this.loadUserContext(userId, emailAccountId);
-
-      console.log(`[EmailProcessingService] ✓ User context loaded (${Date.now() - contextStartTime}ms)`);
 
       // Step 3: Check for spam
       const spamCheckStartTime = Date.now();
-      console.log('[EmailProcessingService] ⏱️ Step 3: Starting spam check...');
-
       const spamDetector = await getSpamDetector(providerId);
-
       const spamCheckResult = await spamDetector.checkSpam({
         rawMessage,
         userNames: userContext.userNames
       });
-
       const spamCheckDuration = Date.now() - spamCheckStartTime;
-      console.log(`[EmailProcessingService] ✓ Spam check complete: isSpam=${spamCheckResult.isSpam} (${spamCheckDuration}ms)`);
 
       // Step 4: Generate draft (or create spam draft)
-      console.log('[EmailProcessingService] ⏱️ Step 4: Starting draft generation...');
       const draftStartTime = Date.now();
+      let draftDuration = 0;
+      let llmCalls = 1; // Spam check is always 1 LLM call
 
       // If spam detected, create a silent-spam draft instead of full generation
       if (spamCheckResult.isSpam) {
-        console.log('[EmailProcessingService] Spam detected, creating silent-spam draft');
         const spamDraft = this.createSpamDraft(parsedData, userContext, spamCheckResult);
-        console.log(`[EmailProcessingService] ✅ Spam draft created (${Date.now() - draftStartTime}ms)`);
+        draftDuration = Date.now() - draftStartTime;
+
+        // Log concise summary
+        const totalDuration = Date.now() - totalStartTime;
+        console.log(`[EmailProcessingService] ⏱️ Processed in ${formatDuration(totalDuration)} (spam check: ${formatDuration(spamCheckDuration)}, LLM calls: ${llmCalls})`);
+
         return {
           success: true,
           draft: spamDraft
@@ -262,8 +258,15 @@ export class EmailProcessingService {
 
       // Not spam - generate full draft (pass spam check results for transparency)
       const result = await draftGenerator.generateDraft(userId, providerId, parsedData, userContext, spamCheckResult);
+      draftDuration = Date.now() - draftStartTime;
 
-      console.log(`[EmailProcessingService] ✅ Draft generation complete (${Date.now() - draftStartTime}ms)`);
+      // Draft generation includes 2-3 LLM calls (meta-context, action, optional response)
+      llmCalls += result.draft?.meta.recommendedAction.startsWith('silent') ? 2 : 3;
+
+      // Log concise summary
+      const totalDuration = Date.now() - totalStartTime;
+      console.log(`[EmailProcessingService] ⏱️ Processed in ${formatDuration(totalDuration)} (spam: ${formatDuration(spamCheckDuration)}, draft: ${formatDuration(draftDuration)}, LLM calls: ${llmCalls})`);
+
       return result;
 
     } catch (error) {

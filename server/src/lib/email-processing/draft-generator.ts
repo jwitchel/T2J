@@ -132,46 +132,34 @@ export class DraftGenerator {
     }
 
     const pipelinePromise = (async () => {
-      const startTime = Date.now();
-      console.log(`[DraftGenerator] 🚀 Starting pipeline for ${recipientEmail}`);
-
       // Step 1: Select relevant examples
-      console.log(`[DraftGenerator] ⏱️ Step 1: Selecting examples...`);
       const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
         userId,
         incomingEmail: processedEmail.userReply,
         recipientEmail,
         desiredCount: maxExamples
       });
-      console.log(`[DraftGenerator] ✓ Examples selected: ${exampleSelection.examples.length} examples (${Date.now() - startTime}ms)`);
 
       // Get the detected relationship
-      console.log(`[DraftGenerator] ⏱️ Step 1b: Detecting relationship...`);
       const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
         userId,
         recipientEmail
       });
-      console.log(`[DraftGenerator] ✓ Relationship detected: ${detectedRelationship.relationship} (${Date.now() - startTime}ms)`);
 
       // Get enhanced profile with aggregated style
-      console.log(`[DraftGenerator] ⏱️ Step 1c: Getting enhanced profile...`);
       const enhancedProfile = await orchestrator['relationshipService'].getEnhancedProfile(
         userId,
         recipientEmail
       );
-      console.log(`[DraftGenerator] ✓ Enhanced profile retrieved (${Date.now() - startTime}ms)`);
 
       // Step 2: Analyze writing patterns
-      console.log(`[DraftGenerator] ⏱️ Step 2: Loading writing patterns...`);
       let writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
         userId,
         exampleSelection.relationship
       );
-      console.log(`[DraftGenerator] ✓ Patterns ${writingPatterns ? 'loaded' : 'not found'} (${Date.now() - startTime}ms)`);
 
       // If no patterns exist, analyze from available examples
       if (!writingPatterns && exampleSelection.examples.length > 0) {
-        console.log(`[DraftGenerator] ⏱️ Step 2b: Analyzing writing patterns from ${exampleSelection.examples.length} examples...`);
         const emailsForAnalysis: ProcessedEmail[] = exampleSelection.examples.map(ex => ({
           uid: ex.id,
           messageId: ex.id,
@@ -194,36 +182,26 @@ export class DraftGenerator {
           emailsForAnalysis,
           exampleSelection.relationship
         );
-        console.log(`[DraftGenerator] ✓ Writing patterns analyzed (${Date.now() - startTime}ms)`);
 
-        console.log(`[DraftGenerator] ⏱️ Step 2c: Saving writing patterns...`);
         await orchestrator['patternAnalyzer'].savePatterns(
           userId,
           writingPatterns,
           exampleSelection.relationship,
           emailsForAnalysis.length
         );
-        console.log(`[DraftGenerator] ✓ Writing patterns saved (${Date.now() - startTime}ms)`);
       }
 
       // Step 3: Meta-Context Analysis (First LLM Call)
-      console.log(`[DraftGenerator] ⏱️ Step 3: Meta-context analysis (LLM Call #1)...`);
-      const formatStartTime = Date.now();
       const metaContextPrompt = await orchestrator['promptFormatter'].formatMetaContextAnalysis({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
         userNames: userContext.userNames,
         incomingEmailMetadata
       });
-      const formatDuration = Date.now() - formatStartTime;
-      console.log(`[DraftGenerator]   └─ Prompt formatted in ${formatDuration}ms`);
 
       const metaContextAnalysis = await llmClient.generateMetaContextAnalysis(metaContextPrompt);
-      console.log(`[DraftGenerator] ✓ Meta-context analysis complete (${Date.now() - startTime}ms)`);
 
       // Step 4: Action Analysis (Second LLM Call)
-      console.log(`[DraftGenerator] ⏱️ Step 4: Action analysis (LLM Call #2)...`);
-      const actionFormatStartTime = Date.now();
       const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
@@ -231,11 +209,8 @@ export class DraftGenerator {
         incomingEmailMetadata,
         spamCheckResult
       });
-      const actionFormatDuration = Date.now() - actionFormatStartTime;
-      console.log(`[DraftGenerator]   └─ Prompt formatted in ${actionFormatDuration}ms`);
 
       const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
-      console.log(`[DraftGenerator] ✓ Action analysis complete (${Date.now() - startTime}ms)`);
 
       // Combine meta-context and action into full metadata
       const combinedMeta: LLMMetadata = {
@@ -248,8 +223,6 @@ export class DraftGenerator {
       let responseMessage = '';
 
       if (needsResponse) {
-        console.log(`[DraftGenerator] ⏱️ Step 5: Response generation (LLM Call #3)...`);
-        const responseFormatStartTime = Date.now();
         const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
           incomingEmail: processedEmail.userReply,
           recipientEmail,
@@ -261,13 +234,8 @@ export class DraftGenerator {
           incomingEmailMetadata,
           actionMeta: combinedMeta
         });
-        const responseFormatDuration = Date.now() - responseFormatStartTime;
-        console.log(`[DraftGenerator]   └─ Prompt formatted in ${responseFormatDuration}ms`);
 
         responseMessage = await llmClient.generateResponseMessage(responsePrompt);
-        console.log(`[DraftGenerator] ✓ Response generated (${Date.now() - startTime}ms)`);
-      } else {
-        console.log(`[DraftGenerator] ⏭️ Skipping response generation - silent action: ${combinedMeta.recommendedAction}`);
       }
 
       // Build final relationship
@@ -275,7 +243,6 @@ export class DraftGenerator {
         ? { type: 'external', confidence: 0.9, detectionMethod: 'spam-override' }
         : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence, detectionMethod: detectedRelationship.method };
 
-      console.log(`[DraftGenerator] ✅ Pipeline complete - total time: ${Date.now() - startTime}ms`);
       return {
         body: responseMessage,
         meta: combinedMeta,

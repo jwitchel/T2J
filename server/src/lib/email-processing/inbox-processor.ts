@@ -341,8 +341,6 @@ export class InboxProcessor {
         folderName: DEFAULT_SOURCE_FOLDER,
         llmResponse
       });
-
-      console.log(`[InboxProcessor] ✓ Saved to Qdrant: ${context.message.messageId}`);
     } catch (error) {
       console.error(`[InboxProcessor] ⚠️ QDRANT SAVE FAILED for ${context.message.messageId}:`, error);
       console.error(`[InboxProcessor] This email will not be viewable in history!`);
@@ -553,9 +551,6 @@ export class InboxProcessor {
 
         // Process emails in parallel for better throughput
         // Note: processEmail now handles Qdrant storage internally (DRY)
-        const processingStartTime = Date.now();
-        console.log(`[InboxProcessor] 🚀 Processing ${toProcess.length} emails in parallel...`);
-
         const processingPromises = toProcess.map(msg =>
           this.processEmail({
             message: {
@@ -572,10 +567,6 @@ export class InboxProcessor {
         );
 
         const results = await Promise.all(processingPromises);
-
-        const processingDuration = Date.now() - processingStartTime;
-        const avgTimePerEmail = results.length > 0 ? (processingDuration / results.length).toFixed(0) : 0;
-        console.log(`[InboxProcessor] ✅ Completed ${results.length} emails in parallel (${processingDuration}ms total, ~${avgTimePerEmail}ms per email)`);
 
         // Check if there are more messages to process
         const hasMore = messages.length === batchSize;

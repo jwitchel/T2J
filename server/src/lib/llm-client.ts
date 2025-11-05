@@ -141,9 +141,7 @@ export class LLMClient {
       return '[Inline image removed to prevent token limit]';
     });
 
-    if (matchCount > 0) {
-      console.log(`[LLMClient] 🗜️ Stripped ${matchCount} attachment(s) from prompt (removed ${totalBytesRemoved.toLocaleString()} bytes)`);
-    }
+    // Attachment stripping is silent - only log errors
 
     return strippedPrompt;
   }
@@ -179,9 +177,6 @@ export class LLMClient {
             ]
           : cleanedPrompt;
 
-        const llmStartTime = Date.now();
-        console.log(`[LLMClient] 🔄 Calling ${this.modelName} (attempt ${attempt + 1}/${maxRetries + 1})...`);
-
         const { text } = await generateText({
           model: this.model,
           messages: typeof messages === 'string' ? undefined : messages,
@@ -190,9 +185,6 @@ export class LLMClient {
           maxTokens: options?.maxTokens ?? 1000,
           abortSignal: controller.signal,
         });
-
-        const llmDuration = Date.now() - llmStartTime;
-        console.log(`[LLMClient] ✅ ${this.modelName} returned successfully (${llmDuration}ms)`);
 
         clearTimeout(timeoutId);
         return text;
@@ -210,7 +202,6 @@ export class LLMClient {
                            isAborted;
 
         if (shouldRetry && attempt < maxRetries) {
-          console.log(`[LLMClient] Request failed${isAborted ? ' (timeout)' : ''}, retrying (attempt ${attempt + 2}/${maxRetries + 1})...`);
           continue;
         }
 
@@ -259,19 +250,13 @@ export class LLMClient {
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<MetaContextAnalysisResponse> {
-    const methodStartTime = Date.now();
     try {
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 500,
       });
-      const generateDuration = Date.now() - methodStartTime;
 
-      const parseStartTime = Date.now();
       const parsed = this.extractJSON(text, 'meta-context analysis');
-      const parseDuration = Date.now() - parseStartTime;
-
-      console.log(`[LLMClient] 📊 generateMetaContextAnalysis: generate=${generateDuration}ms, parse=${parseDuration}ms, total=${Date.now() - methodStartTime}ms`);
 
       this.validateJSON(
         parsed,
@@ -294,19 +279,13 @@ export class LLMClient {
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<ActionAnalysisResponse> {
-    const methodStartTime = Date.now();
     try {
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 1000,
       });
-      const generateDuration = Date.now() - methodStartTime;
 
-      const parseStartTime = Date.now();
       const parsed = this.extractJSON(text, 'action analysis');
-      const parseDuration = Date.now() - parseStartTime;
-
-      console.log(`[LLMClient] 📊 generateActionAnalysis: generate=${generateDuration}ms, parse=${parseDuration}ms, total=${Date.now() - methodStartTime}ms`);
 
       this.validateJSON(
         parsed,
@@ -329,19 +308,13 @@ export class LLMClient {
     maxTokens?: number;
     systemPrompt?: string;
   }): Promise<string> {
-    const methodStartTime = Date.now();
     try {
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 2000,
       });
-      const generateDuration = Date.now() - methodStartTime;
 
-      const parseStartTime = Date.now();
       const parsed = this.extractJSON(text, 'response generation');
-      const parseDuration = Date.now() - parseStartTime;
-
-      console.log(`[LLMClient] 📊 generateResponseMessage: generate=${generateDuration}ms, parse=${parseDuration}ms, total=${Date.now() - methodStartTime}ms`);
 
       this.validateJSON(
         parsed,
