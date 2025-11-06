@@ -30,13 +30,13 @@ Return a JSON object with this exact structure:
 {{#if responseHistory}}
 === USER RESPONSE HISTORY ===
 {{#if responseHistory.hasRespondedBefore}}
-The user has previously replied to this sender **{{responseHistory.legitimateResponseCount}} time(s)**.
+The user has previously replied to this sender **{{responseHistory.responseCount}} time(s)**.
 
-**IMPORTANT**: Previous replies are a STRONG signal that this is NOT unsolicited bulk email. The user has engaged with this sender before. Consider this heavily in your classification - users typically only reply to emails they want to receive.
+**IMPORTANT**: Previous replies are a STRONG signal that this is NOT unsolicited bulk email. Consider this heavily in your classification - users typically reply to emails they want to receive.
 {{else}}
 The user has NEVER replied to this sender before.
 
-**IMPORTANT**: Lack of response history suggests this may be unsolicited. First-time senders require closer scrutiny for spam indicators.
+**IMPORTANT**: Lack of response history suggests this may be unsolicited.
 {{/if}}
 
 {{/if}}

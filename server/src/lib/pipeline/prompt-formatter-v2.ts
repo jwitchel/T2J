@@ -114,7 +114,6 @@ export class PromptFormatterV2 {
     };
     responseHistory?: {
       responseCount: number;
-      legitimateResponseCount: number;
       hasRespondedBefore: boolean;
     };
   }): Promise<string> {
