@@ -112,6 +112,11 @@ export class PromptFormatterV2 {
       name: string;
       nicknames?: string;
     };
+    responseHistory?: {
+      responseCount: number;
+      legitimateResponseCount: number;
+      hasRespondedBefore: boolean;
+    };
   }): Promise<string> {
     await this.initialize();
     // For spam check, we need to bypass prepareTemplateData since it expects different fields
@@ -119,7 +124,8 @@ export class PromptFormatterV2 {
     const template = await this.templateManager['loadTemplate']('spam-check', 'prompt');
     return template({
       rawEmail: params.rawEmail,
-      userNames: params.userNames || { name: 'User' }
+      userNames: params.userNames || { name: 'User' },
+      responseHistory: params.responseHistory
     });
   }
 
