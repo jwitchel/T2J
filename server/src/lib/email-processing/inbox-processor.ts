@@ -14,6 +14,7 @@ import { emailLockManager } from '../email-lock-manager';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../../server';
 import { ActionHelpers } from '../email-actions';
+import { getSpamDetector } from './spam-detector';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -299,6 +300,35 @@ export class InboxProcessor {
   }
 
   /**
+   * Update sender response statistics if this was a draft action (user engagement)
+   * @private
+   */
+  private async _updateSenderResponseStats(
+    context: ProcessingContext,
+    draft: DraftEmail
+  ): Promise<void> {
+    // Only track draft actions (reply, reply-all, forward, forward-with-comment)
+    if (!ActionHelpers.isDraftAction(draft.meta.recommendedAction)) {
+      return;
+    }
+
+    try {
+      const senderEmail = draft.draftMetadata.originalFrom!.toLowerCase();
+
+      // Get SpamDetector instance and update stats
+      const spamDetector = await getSpamDetector(context.providerId);
+      await spamDetector.updateResponseStats({
+        userId: context.userId,
+        emailAccountId: context.accountId,
+        senderEmail
+      });
+    } catch (error) {
+      // Log but don't throw - this is best-effort tracking
+      console.error('[InboxProcessor] Failed to update sender response stats:', error);
+    }
+  }
+
+  /**
    * Save email to Qdrant (best effort - doesn't throw on error)
    * @private
    */
@@ -453,6 +483,9 @@ export class InboxProcessor {
 
       // 7. UPDATE ACTION TRACKING WITH FINAL DESTINATION
       await this._updateTracking(context, draft, imapResult.destination);
+
+      // 7b. UPDATE SENDER RESPONSE STATS (if reply action)
+      await this._updateSenderResponseStats(context, draft);
 
       // 8. SAVE TO QDRANT (best effort - doesn't fail on error)
       await this._saveToQdrant(context, draft);

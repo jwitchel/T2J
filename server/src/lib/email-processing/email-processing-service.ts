@@ -17,26 +17,10 @@ function formatDuration(ms: number): string {
   return (ms / 1000).toFixed(1) + 's';
 }
 import { pool } from '../../server';
-import { SpamDetector, SpamCheckResult } from './spam-detector';
+import { SpamCheckResult, getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
-
-// Provider-keyed cache to avoid race conditions when processing emails concurrently
-// with different providers
-const spamDetectorCache = new Map<string, SpamDetector>();
-
-async function getSpamDetector(providerId: string): Promise<SpamDetector> {
-  let detector = spamDetectorCache.get(providerId);
-
-  if (!detector) {
-    detector = new SpamDetector();
-    await detector.initialize(providerId);
-    spamDetectorCache.set(providerId, detector);
-  }
-
-  return detector;
-}
 
 /**
  * User context needed for email processing
@@ -229,10 +213,13 @@ export class EmailProcessingService {
 
       // Step 3: Check for spam
       const spamCheckStartTime = Date.now();
+      const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase() || '';
       const spamDetector = await getSpamDetector(providerId);
       const spamCheckResult = await spamDetector.checkSpam({
+        senderEmail,
         rawMessage,
-        userNames: userContext.userNames
+        userNames: userContext.userNames,
+        userId
       });
       const spamCheckDuration = Date.now() - spamCheckStartTime;
 
