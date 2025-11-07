@@ -17,9 +17,9 @@ function formatDuration(ms: number): string {
   return (ms / 1000).toFixed(1) + 's';
 }
 import { pool } from '../../server';
-import { SpamCheckResult, getSpamDetector } from './spam-detector';
+import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
-import { ProcessedEmail, EmailProcessingResult } from '../pipeline/types';
+import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
 
 /**
@@ -157,7 +157,12 @@ export class EmailProcessingService {
         exampleCount: 0,
         timestamp: new Date().toISOString(),
         originalSubject: processedEmail.subject,
-        originalFrom: processedEmail.from[0].address
+        originalFrom: processedEmail.from[0].address,
+        spamAnalysis: {
+          isSpam: spamCheckResult.isSpam,
+          indicators: spamCheckResult.indicators,
+          senderResponseCount: spamCheckResult.senderResponseCount
+        }
       }
     };
   }

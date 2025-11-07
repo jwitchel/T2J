@@ -3,6 +3,23 @@
 import { LLMMetadata } from '../llm-client';
 
 /**
+ * Spam check result from spam detector
+ *
+ * Purpose: Standard structure for spam detection results across the system.
+ * Used by: SpamDetector, DraftEmail metadata, frontend display.
+ *
+ * Fields:
+ * - isSpam: Boolean indicating if email is spam/unsolicited bulk email
+ * - indicators: Array of reasons for spam classification (or legitimacy indicators)
+ * - senderResponseCount: Number of times user has replied to this sender
+ */
+export interface SpamCheckResult {
+  isSpam: boolean;
+  indicators: string[];
+  senderResponseCount: number;
+}
+
+/**
  * Parsed incoming email (structured representation)
  *
  * Purpose: Represents an email that has been received and parsed from raw MIME format.
@@ -105,6 +122,7 @@ export interface DraftEmail {
     exampleCount: number;
     directCorrespondence?: number;
     timestamp: string;
+    spamAnalysis: SpamCheckResult;
   };
 }
 

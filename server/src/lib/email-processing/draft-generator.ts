@@ -5,7 +5,7 @@
  */
 
 import { ToneLearningOrchestrator } from '../pipeline/tone-learning-orchestrator';
-import { ProcessedEmail, EmailProcessingResult, DraftEmail } from '../pipeline/types';
+import { ProcessedEmail, EmailProcessingResult, DraftEmail, SpamCheckResult } from '../pipeline/types';
 import { LLMMetadata } from '../llm-client';
 import { realTimeLogger } from '../real-time-logger';
 import { TypedNameRemover } from '../typed-name-remover';
@@ -13,7 +13,6 @@ import { pool } from '../../server';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
 import { ActionHelpers } from '../email-actions';
-import { SpamCheckResult } from './spam-detector';
 
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
@@ -84,8 +83,8 @@ export class DraftGenerator {
 
       // Step 5: Format complete draft response
       const formattedDraft = isSilentAction
-        ? this.buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext)
-        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext);
+        ? this.buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
+        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
 
       // Step 6: Log completion
       this.logDraftCompletion(userId, aiResult);
@@ -284,7 +283,8 @@ export class DraftGenerator {
     parsed: any,
     meta: LLMMetadata,
     relationship: { type: string; confidence: number; detectionMethod: string },
-    userContext: UserContext
+    userContext: UserContext,
+    spamCheckResult: SpamCheckResult
   ): Omit<DraftEmail, 'to' | 'cc' | 'subject' | 'body' | 'bodyHtml'> {
     return {
       id: `draft-${Date.now()}`,
@@ -297,7 +297,12 @@ export class DraftGenerator {
         exampleCount: 0, // Will be overridden if needed
         timestamp: new Date().toISOString(),
         originalSubject: parsed.subject,
-        originalFrom: parsed.from?.address
+        originalFrom: parsed.from?.address,
+        spamAnalysis: {
+          isSpam: spamCheckResult.isSpam,
+          indicators: spamCheckResult.indicators,
+          senderResponseCount: spamCheckResult.senderResponseCount
+        }
       }
     };
   }
@@ -310,10 +315,11 @@ export class DraftGenerator {
     parsed: any,
     meta: LLMMetadata,
     relationship: { type: string; confidence: number; detectionMethod: string },
-    userContext: UserContext
+    userContext: UserContext,
+    spamCheckResult: SpamCheckResult
   ): DraftEmail {
     return {
-      ...this.buildBaseDraft(parsed, meta, relationship, userContext),
+      ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
       to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address),
       cc: '',
       subject: parsed.subject || '',
@@ -331,7 +337,8 @@ export class DraftGenerator {
     cleanedBody: string,
     meta: LLMMetadata,
     relationship: { type: string; confidence: number; detectionMethod: string },
-    userContext: UserContext
+    userContext: UserContext,
+    spamCheckResult: SpamCheckResult
   ): DraftEmail {
     const formattedReply = this.formatReplyEmail(
       parsed.from?.name || parsed.from?.address,
@@ -354,7 +361,7 @@ export class DraftGenerator {
       : { to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address), cc: '' };
 
     return {
-      ...this.buildBaseDraft(parsed, meta, relationship, userContext),
+      ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
       to,
       cc,
       subject: replySubject,

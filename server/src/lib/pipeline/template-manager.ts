@@ -4,7 +4,7 @@ import path from 'path';
 import { SelectedExample } from './example-selector';
 import { RelationshipProfile } from './types';
 import { WritingPatterns } from './writing-pattern-analyzer';
-import { SpamCheckResult } from '../email-processing/spam-detector';
+import { SpamCheckResult } from './types';
 
 export interface PromptTemplateData {
   // Core data

@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
 import { EmailActions, RecommendedAction } from '../../../server/src/lib/email-actions';
+import type { SpamCheckResult } from '../../../server/src/lib/pipeline/types';
 
 interface EmailAccount {
   id: string;
@@ -86,9 +87,12 @@ interface GeneratedDraft {
     type: string;
     confidence: number;
   };
-  metadata: {
+  draftMetadata: {
     originalSubject: string;
     originalFrom: string;
+    spamAnalysis: SpamCheckResult;
+    exampleCount: number;
+    timestamp: string;
   };
 }
 
@@ -309,6 +313,7 @@ function InboxContent() {
               type: string;
               confidence: number;
             };
+            spamAnalysis: SpamCheckResult;
           };
           relationship: {
             type: string;
@@ -349,9 +354,12 @@ function InboxContent() {
             references: data.email.messageId,
             meta: data.email.llmResponse.meta,
             relationship: data.email.llmResponse.relationship || data.email.relationship,
-            metadata: {
+            draftMetadata: {
               originalSubject: data.email.subject,
-              originalFrom: data.email.from
+              originalFrom: data.email.from,
+              spamAnalysis: data.email.llmResponse.spamAnalysis,
+              exampleCount: 0, // Not stored in llmResponse
+              timestamp: data.email.llmResponse.generatedAt
             }
           };
 
@@ -1000,7 +1008,40 @@ function InboxContent() {
                             {generatedDraft.meta.inboundMsgAddressedTo}
                           </Badge>
                         </div>
-                        
+
+                        <div>
+                          <div className="text-sm font-medium text-muted-foreground mb-1">Spam Analysis</div>
+                          {
+                            generatedDraft.draftMetadata.spamAnalysis.isSpam ? (
+                              <Badge
+                                variant="destructive"
+                                className="cursor-help"
+                                title={generatedDraft.draftMetadata.spamAnalysis.indicators.join('\n')}
+                              >
+                                ⚠️ Spam
+                                {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount > 0 && (
+                                  <span className="ml-1">
+                                    (replied {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount}x)
+                                  </span>
+                                )}
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="default"
+                                className="cursor-help"
+                                title={generatedDraft.draftMetadata.spamAnalysis.indicators.join('\n')}
+                              >
+                                ✓ Not Spam
+                                {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount > 0 && (
+                                  <span className="ml-1">
+                                    (replied {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount}x)
+                                  </span>
+                                )}
+                              </Badge>
+                            )
+                          }
+                        </div>
+
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Recommended Action</div>
                           <Badge

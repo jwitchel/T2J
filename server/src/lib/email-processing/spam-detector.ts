@@ -6,6 +6,7 @@
 import { PromptFormatterV2 } from '../pipeline/prompt-formatter-v2';
 import { LLMClient } from '../llm-client';
 import { pool } from '../../server';
+import { SpamCheckResult } from '../pipeline/types';
 
 export interface SpamCheckParams {
   senderEmail: string;
@@ -17,10 +18,7 @@ export interface SpamCheckParams {
   userId: string;
 }
 
-export interface SpamCheckResult {
-  isSpam: boolean;
-  indicators: string[];
-}
+export type { SpamCheckResult };
 
 interface UpdateResponseStatsParams {
   userId: string;
@@ -130,13 +128,14 @@ export class SpamDetector {
 
     // Step 2: Auto-whitelist if user has replied 2+ times
     if (responseCount >= 2) {
-      return {
+      const result: SpamCheckResult = {
         isSpam: false,
         indicators: [
-          `Not unsolicited - user has replied ${responseCount} times to this sender`,
-          'Established communication history with sender'
-        ]
+          `Not unsolicited - user has replied ${responseCount} times to this sender`
+        ],
+        senderResponseCount: responseCount
       };
+      return result;
     }
 
     // Step 3: Prepare response history context for LLM
@@ -159,10 +158,12 @@ export class SpamDetector {
     const isSpam = spamCheckResult.meta.isSpam;
     const indicators = spamCheckResult.meta.spamIndicators || [];
 
-    return {
+    const result: SpamCheckResult = {
       isSpam,
-      indicators
+      indicators,
+      senderResponseCount: responseCount
     };
+    return result;
   }
 }
 

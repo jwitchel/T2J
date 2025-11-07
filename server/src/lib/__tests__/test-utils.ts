@@ -160,7 +160,8 @@ export class TestDataManager {
       textContent: body,
       htmlContent: null,
       userReply: body,
-      respondedTo: ''
+      respondedTo: '',
+      rawMessage: `From: test@sender.com\r\nTo: ${recipient}\r\nSubject: ${subject}\r\n\r\n${body}`
     };
   }
 }
@@ -254,14 +255,15 @@ export class MockDataGenerator {
       professional: 'client@business.com'
     };
     
+    const recipientAddr = recipientMap[relationship] || 'contact@example.com';
     return {
       uid: `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       messageId: `<${Date.now()}@mock.local>`,
       inReplyTo: null,
       date: new Date(),
       from: [{ address: 'john@example.com', name: 'John' }],
-      to: [{ 
-        address: recipientMap[relationship] || 'contact@example.com',
+      to: [{
+        address: recipientAddr,
         name: relationship.charAt(0).toUpperCase() + relationship.slice(1)
       }],
       cc: [],
@@ -270,7 +272,8 @@ export class MockDataGenerator {
       textContent: body,
       htmlContent: null,
       userReply: body,
-      respondedTo: ''
+      respondedTo: '',
+      rawMessage: `From: john@example.com\r\nTo: ${recipientAddr}\r\nSubject: ${subject}\r\n\r\n${body}`
     };
   }
   

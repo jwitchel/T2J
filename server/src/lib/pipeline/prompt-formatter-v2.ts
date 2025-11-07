@@ -2,7 +2,7 @@ import { SelectedExample } from './example-selector';
 import { TemplateManager, EnhancedRelationshipProfile } from './template-manager';
 import { WritingPatterns } from './writing-pattern-analyzer';
 import { EmailActions } from '../email-actions';
-import { SpamCheckResult } from '../email-processing/spam-detector';
+import { SpamCheckResult } from './types';
 
 export interface PromptFormatterParams {
   incomingEmail: string;

@@ -360,7 +360,8 @@ export class InboxProcessor {
           type: 'professional',
           confidence: 0.5,
           detectionMethod: 'default'
-        }
+        },
+        spamAnalysis: draft.draftMetadata.spamAnalysis
       };
 
       await emailStorageService.saveEmail({
