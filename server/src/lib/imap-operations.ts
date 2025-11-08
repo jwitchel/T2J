@@ -6,6 +6,7 @@ import { simpleParser } from 'mailparser';
 import { OAuthTokenService } from './oauth-token-service';
 import { getActiveContext, hasActiveContextFor, setContextConnection } from './imap-context';
 import { sharedConnection as redis } from './redis-connection';
+import { LLMClient } from './llm-client';
 
 export interface EmailAccountConfig {
   id: string;
@@ -156,7 +157,8 @@ export class ImapOperations {
           
           try {
             const refreshToken = decrypt(this.account.oauthRefreshToken);
-            const newTokens = await OAuthTokenService.refreshTokens(
+            // Use LLMClient's auto-refresh method which handles retries and errors gracefully
+            const newTokens = await LLMClient.autoRefreshOAuthToken(
               refreshToken,
               this.account.oauthProvider,
               this.account.id

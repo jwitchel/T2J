@@ -30,6 +30,7 @@
     "db:migrate": "node db/migrate.js",
     "seed": "cd server && npx tsx src/scripts/seed-demo.ts",
     "vector:test": "cd server && npx tsx src/scripts/tests/vector-comprehensive-test.ts",
+    "vector:migrate-sparse": "cd server && npx tsx src/scripts/migrate-add-sparse-vectors.ts",
     "qdrant:up": "docker compose up -d qdrant",
     "qdrant:down": "docker compose stop qdrant && docker compose rm -f qdrant",
     "qdrant:reset": "npm run qdrant:down && rm -rf qdrant_storage && npm run qdrant:up",

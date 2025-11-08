@@ -312,6 +312,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     
     // Get ALL sent emails for the user across ALL accounts and relationships
     // (Pattern analysis uses sent emails to learn the user's writing style)
+    // IMPORTANT: Only fetch fields we need to avoid hitting string length limits
     const scrollResult = await vectorStore['client'].scroll(SENT_COLLECTION, {
       filter: {
         must: [
@@ -319,7 +320,16 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         ]
       },
       limit: 10000,
-      with_payload: true,
+      with_payload: [
+        'userId',
+        'emailAccountId',
+        'userReply',
+        'sentDate',
+        'relationship',
+        'recipientEmail',
+        'subject',
+        'emailId'
+      ],
       with_vector: false
     });
     

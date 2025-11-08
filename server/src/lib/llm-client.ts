@@ -5,6 +5,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType } from '../types/llm-provider';
 import { RecommendedAction } from './email-actions';
+import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
 
 export interface MetaContext {
   inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
@@ -441,6 +442,63 @@ export class LLMClient {
         'UNKNOWN'
       );
     }
+  }
+
+  /**
+   * Auto-refresh OAuth token with retry logic
+   * Handles token refresh failures gracefully with automatic retry
+   * Retries on transient errors, but immediately fails on REFRESH_TOKEN_INVALID
+   * This method should be used when OAuth token refresh fails to automatically retry
+   */
+  static async autoRefreshOAuthToken(
+    refreshToken: string,
+    provider: string,
+    emailAccountId: string,
+    maxRetries: number = 2
+  ): Promise<OAuthTokens> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const tokens = await OAuthTokenService.refreshTokens(
+          refreshToken,
+          provider,
+          emailAccountId
+        );
+        
+        // Success - return the refreshed tokens
+        return tokens;
+      } catch (error: any) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Check if this is a REFRESH_TOKEN_INVALID error
+        const errorMessage = lastError.message || '';
+        if (errorMessage.includes('REFRESH_TOKEN_INVALID')) {
+          // Refresh token is invalid or expired - cannot retry
+          // Log and re-throw immediately
+          console.error(`[LLMClient] OAuth refresh token invalid for account ${emailAccountId}. Re-authentication required.`);
+          throw lastError;
+        }
+
+        // For other errors, retry with exponential backoff
+        if (attempt < maxRetries) {
+          const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
+          console.warn(
+            `[LLMClient] OAuth token refresh failed (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${backoffMs}ms...`,
+            errorMessage
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+
+        // Final attempt failed
+        break;
+      }
+    }
+
+    // All retries exhausted
+    console.error(`[LLMClient] OAuth token refresh failed after ${maxRetries + 1} attempts for account ${emailAccountId}`);
+    throw lastError || new Error('OAuth token refresh failed');
   }
 
   /**

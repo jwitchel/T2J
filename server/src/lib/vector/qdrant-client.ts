@@ -1,5 +1,15 @@
 import { QdrantClient } from '@qdrant/js-client-rest';
 import dotenv from 'dotenv';
+import {
+  VectorSearchResult,
+  VectorStoreError,
+  TemporalWeightConfig,
+  HybridSearchParams,
+  RRFConfig,
+  RRFScoredResult,
+  DenseSearchParams,
+  SparseSearchParams
+} from './types';
 
 dotenv.config();
 
@@ -91,6 +101,10 @@ export class VectorStore {
   private client: QdrantClient;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private temporalWeights: TemporalWeightConfig;
+  private hybridWeights: { dense: number; sparse: number };
+  private rrfConfig: Required<RRFConfig>;
+  private readonly scoreThreshold: number;
 
   constructor() {
     const url = process.env.QDRANT_URL!;
@@ -100,6 +114,30 @@ export class VectorStore {
       url,
       apiKey: apiKey || undefined,
     });
+
+    // Load temporal weighting config from environment
+    this.temporalWeights = {
+      recent: parseFloat(process.env.TEMPORAL_WEIGHT_0_3M || '1.0'),
+      medium: parseFloat(process.env.TEMPORAL_WEIGHT_3_6M || '0.85'),
+      old: parseFloat(process.env.TEMPORAL_WEIGHT_6_12M || '0.7'),
+      veryOld: parseFloat(process.env.TEMPORAL_WEIGHT_12M_PLUS || '0.5')
+    };
+
+    // Load hybrid search weights from environment
+    this.hybridWeights = {
+      dense: parseFloat(process.env.HYBRID_DENSE_WEIGHT || '0.7'),
+      sparse: parseFloat(process.env.HYBRID_SPARSE_WEIGHT || '0.3')
+    };
+
+    // Load RRF config from environment
+    this.rrfConfig = {
+      k: parseInt(process.env.RRF_K || '60'),
+      denseWeight: parseFloat(process.env.HYBRID_DENSE_WEIGHT || '0.7'),
+      sparseWeight: parseFloat(process.env.HYBRID_SPARSE_WEIGHT || '0.3')
+    };
+
+    // Load score threshold from environment
+    this.scoreThreshold = parseFloat(process.env.VECTOR_SCORE_THRESHOLD || '0.5');
   }
 
   async initialize(): Promise<void> {
@@ -243,12 +281,191 @@ export class VectorStore {
     }
   }
 
+  /**
+   * Hybrid search using both dense (semantic) and sparse (keyword) vectors
+   *
+   * Purpose: Combines semantic similarity with keyword matching for improved relevance.
+   * Uses Reciprocal Rank Fusion to merge results from both search methods.
+   *
+   * @param params - Hybrid search parameters including dense and sparse vectors
+   * @returns Array of search results sorted by RRF score, with temporal weighting applied
+   */
+  async hybridSearch(params: HybridSearchParams): Promise<EmailVector[]> {
+    await this.initialize();
+
+    try {
+      const denseWeight = params.denseWeight ?? this.hybridWeights.dense;
+      const sparseWeight = params.sparseWeight ?? this.hybridWeights.sparse;
+      const limit = params.limit || parseInt(process.env.VECTOR_SEARCH_LIMIT || '50');
+
+      // Execute dense and sparse searches in parallel
+      const [denseResults, sparseResults] = await Promise.all([
+        this.searchDense({
+          userId: params.userId,
+          queryVector: params.denseVector,
+          filters: params.filters,
+          limit,
+          scoreThreshold: params.scoreThreshold,
+          collectionName: params.collectionName
+        }),
+        this.searchSparse({
+          userId: params.userId,
+          sparseVector: params.sparseVector,
+          filters: params.filters,
+          limit,
+          scoreThreshold: params.scoreThreshold,
+          collectionName: params.collectionName
+        })
+      ]);
+
+      // Merge results using RRF
+      const merged = this.mergeResults(denseResults, sparseResults, denseWeight, sparseWeight);
+
+      // Apply temporal weighting
+      const weighted = this.applyTemporalWeighting(merged);
+
+      // Take top results and convert to EmailVector format
+      return weighted.slice(0, limit).map(result => ({
+        id: result.id,
+        vector: [],
+        metadata: result.metadata,
+        score: result.score
+      }));
+
+    } catch (error: any) {
+      throw this.handleError(error, 'hybrid search');
+    }
+  }
+
+  /**
+   * Search using dense (semantic) vectors only
+   * @private (used by hybridSearch, but can be public if needed)
+   */
+  private async searchDense(params: DenseSearchParams): Promise<VectorSearchResult[]> {
+    await this.initialize();
+
+    const collection = params.collectionName || SENT_COLLECTION;
+    const limit = params.limit || 50;
+    const scoreThreshold = params.scoreThreshold ?? 0; // No threshold for intermediate results
+
+    // Build filter conditions
+    const must = this.buildFilterConditions(params.userId, params.filters);
+
+    try {
+      const searchParams: any = {
+        vector: params.queryVector,
+        limit,
+        score_threshold: scoreThreshold,
+        with_payload: true,
+        with_vector: false
+      };
+
+      if (must.length > 0) {
+        searchParams.filter = { must };
+      }
+
+      const results = await this.client.search(collection, searchParams);
+      return results.map(this.convertToVectorSearchResult.bind(this));
+
+    } catch (error: any) {
+      throw this.handleError(error, 'dense search');
+    }
+  }
+
+  /**
+   * Search using sparse (keyword) vectors only
+   * @private (used by hybridSearch, but can be public if needed)
+   */
+  private async searchSparse(_params: SparseSearchParams): Promise<VectorSearchResult[]> {
+    await this.initialize();
+
+    // NOTE: Sparse vector search requires collection to have sparse vector field configured
+    // For now, return empty results if sparse vectors not configured
+    // This will be updated after migration script adds sparse vector support
+
+    // TODO: Implement sparse vector search once collection schema supports it
+    // Uncomment the code below once sparse vectors are migrated:
+    //
+    // const collection = params.collectionName || SENT_COLLECTION;
+    // const limit = params.limit || 50;
+    // const scoreThreshold = params.scoreThreshold ?? 0;
+    // const must = this.buildFilterConditions(params.userId, params.filters);
+    //
+    // const searchParams: any = {
+    //   vector: {
+    //     name: 'sparse',
+    //     vector: params.sparseVector
+    //   },
+    //   limit,
+    //   score_threshold: scoreThreshold,
+    //   with_payload: true,
+    //   with_vector: false,
+    //   filter: must.length > 0 ? { must } : undefined
+    // };
+    //
+    // const results = await this.client.search(collection, searchParams);
+    // return results.map(this.convertToVectorSearchResult.bind(this));
+
+    // For now, return empty array (will be filled in after migration)
+    return [];
+  }
+
+  /**
+   * Build filter conditions for search queries
+   * @private
+   */
+  private buildFilterConditions(userId: string, filters?: {
+    relationship?: string;
+    recipientEmail?: string;
+    dateRange?: { start: Date; end: Date };
+    excludeIds?: string[];
+  }): any[] {
+    const must: any[] = [
+      { key: 'userId', match: { value: userId } }
+    ];
+
+    if (filters?.relationship) {
+      must.push({
+        key: 'relationship.type',
+        match: { value: filters.relationship }
+      });
+    }
+
+    if (filters?.recipientEmail) {
+      must.push({
+        key: 'recipientEmail',
+        match: { value: filters.recipientEmail }
+      });
+    }
+
+    if (filters?.excludeIds && filters.excludeIds.length > 0) {
+      must.push({
+        key: 'emailId',
+        match: {
+          except: filters.excludeIds
+        }
+      });
+    }
+
+    if (filters?.dateRange) {
+      must.push({
+        key: 'sentDate',
+        range: {
+          gte: filters.dateRange.start.toISOString(),
+          lte: filters.dateRange.end.toISOString()
+        }
+      });
+    }
+
+    return must;
+  }
+
   async searchSimilar(params: VectorSearchParams): Promise<EmailVector[]> {
     await this.initialize();
 
     const collection = params.collectionName || SENT_COLLECTION;
     const limit = params.limit || parseInt(process.env.VECTOR_SEARCH_LIMIT || '50');
-    const scoreThreshold = params.scoreThreshold || parseFloat(process.env.VECTOR_SCORE_THRESHOLD || '0.3');
+    const scoreThreshold = params.scoreThreshold ?? this.scoreThreshold;
 
     // Build filter conditions
     const must: any[] = [
@@ -305,14 +522,21 @@ export class VectorStore {
 
       const results = await this.client.search(collection, searchParams);
 
-      return results.map(result => ({
-        id: (result.payload as any).originalId || String(result.id),
+      // Convert to VectorSearchResult format
+      const vectorResults: VectorSearchResult[] = results.map(this.convertToVectorSearchResult.bind(this));
+
+      // Apply temporal weighting
+      const weighted = this.applyTemporalWeighting(vectorResults);
+
+      // Convert back to EmailVector format for backward compatibility
+      return weighted.map(result => ({
+        id: result.id,
         vector: [], // Not returning vectors to save memory
-        metadata: result.payload as unknown as EmailMetadata,
+        metadata: result.metadata,
         score: result.score
       }));
-    } catch (error) {
-      throw new Error(`Vector search failed: ${error}`);
+    } catch (error: any) {
+      throw this.handleError(error, 'search');
     }
   }
 
@@ -588,6 +812,197 @@ export class VectorStore {
       // If retrieval fails, assume point doesn't exist
       return false;
     }
+  }
+
+  // ============================================================================
+  // Private Helper Methods
+  // ============================================================================
+
+  /**
+   * Apply temporal decay weighting to search results
+   *
+   * Purpose: Prioritize recent emails over older ones to reflect current writing style.
+   * Multiplies search scores by age-based weight and re-sorts by adjusted score.
+   *
+   * @private
+   */
+  private applyTemporalWeighting(results: VectorSearchResult[]): VectorSearchResult[] {
+    const now = new Date();
+
+    return results
+      .map(result => {
+        const ageWeight = this.calculateAgeWeight(result.metadata.sentDate, now);
+        return {
+          ...result,
+          score: result.score * ageWeight
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  /**
+   * Calculate age weight for an email based on sent date
+   *
+   * Purpose: Returns weight multiplier based on email age in months.
+   * Uses exponential decay defined in temporalWeights config.
+   *
+   * @private
+   */
+  private calculateAgeWeight(sentDate: string, now: Date): number {
+    const emailDate = new Date(sentDate);
+    const ageMonths = (now.getTime() - emailDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
+
+    if (ageMonths <= 3) return this.temporalWeights.recent;
+    if (ageMonths <= 6) return this.temporalWeights.medium;
+    if (ageMonths <= 12) return this.temporalWeights.old;
+    return this.temporalWeights.veryOld;
+  }
+
+  /**
+   * Filter results by score threshold
+   *
+   * Purpose: Remove low-quality results that don't meet minimum similarity score.
+   * Quality gate to ensure only relevant examples are used.
+   *
+   * Note: Currently using Qdrant's built-in score_threshold. This method is kept
+   * for future use if post-search filtering is needed.
+   *
+   * @private
+   */
+  // @ts-ignore - Kept for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private filterByThreshold(
+    results: VectorSearchResult[],
+    threshold: number
+  ): VectorSearchResult[] {
+    return results.filter(result => result.score >= threshold);
+  }
+
+  /**
+   * Merge dense and sparse search results using Reciprocal Rank Fusion (RRF)
+   *
+   * Purpose: Combines results from semantic (dense) and keyword (sparse) search.
+   * RRF formula: score = sum(weight / (k + rank))
+   *
+   * @private
+   */
+  private mergeResults(
+    denseResults: VectorSearchResult[],
+    sparseResults: VectorSearchResult[],
+    denseWeight: number,
+    sparseWeight: number
+  ): VectorSearchResult[] {
+    // Create maps for quick lookup by ID
+    const denseMap = new Map<string, { rank: number; score: number }>();
+    const sparseMap = new Map<string, { rank: number; score: number }>();
+    const allIds = new Set<string>();
+
+    // Index dense results
+    denseResults.forEach((result, rank) => {
+      denseMap.set(result.id, { rank, score: result.score });
+      allIds.add(result.id);
+    });
+
+    // Index sparse results
+    sparseResults.forEach((result, rank) => {
+      sparseMap.set(result.id, { rank, score: result.score });
+      allIds.add(result.id);
+    });
+
+    // Calculate RRF scores for all unique IDs
+    const rrfResults: RRFScoredResult[] = [];
+
+    allIds.forEach(id => {
+      const dense = denseMap.get(id);
+      const sparse = sparseMap.get(id);
+
+      // Calculate RRF score
+      const denseRRF = dense
+        ? this.calculateRRFScore(dense.rank, denseWeight, this.rrfConfig.k)
+        : 0;
+      const sparseRRF = sparse
+        ? this.calculateRRFScore(sparse.rank, sparseWeight, this.rrfConfig.k)
+        : 0;
+
+      const rrfScore = denseRRF + sparseRRF;
+
+      // Get metadata from whichever result exists (prefer dense)
+      const sourceResult = dense
+        ? denseResults.find(r => r.id === id)!
+        : sparseResults.find(r => r.id === id)!;
+
+      rrfResults.push({
+        ...sourceResult,
+        denseScore: dense?.score,
+        sparseScore: sparse?.score,
+        rrfScore,
+        score: rrfScore // Use RRF score as final score
+      });
+    });
+
+    // Sort by RRF score descending
+    return rrfResults.sort((a, b) => b.rrfScore - a.rrfScore);
+  }
+
+  /**
+   * Calculate RRF score for a single result at given rank
+   *
+   * Purpose: Implements RRF formula: weight / (k + rank)
+   * where k is a smoothing parameter (default: 60)
+   *
+   * @private
+   */
+  private calculateRRFScore(rank: number, weight: number, k: number = 60): number {
+    return weight / (k + rank);
+  }
+
+  /**
+   * Convert Qdrant search result to VectorSearchResult format
+   *
+   * Purpose: Standardizes result format across all search methods
+   *
+   * @private
+   */
+  private convertToVectorSearchResult(qdrantResult: any): VectorSearchResult {
+    return {
+      id: (qdrantResult.payload as any).originalId || String(qdrantResult.id),
+      score: qdrantResult.score,
+      metadata: qdrantResult.payload as unknown as EmailMetadata,
+      vector: qdrantResult.vector || undefined
+    };
+  }
+
+  /**
+   * Handle errors from Qdrant client consistently
+   *
+   * Purpose: Provides specific error codes and consistent error messages
+   *
+   * @private
+   */
+  private handleError(error: any, context: string): never {
+    const message = error.message || String(error);
+
+    // Determine error code based on context and message
+    let code: VectorStoreError['code'] = 'UNKNOWN';
+
+    if (message.includes('connection') || message.includes('ECONNREFUSED')) {
+      code = 'CONNECTION_FAILED';
+    } else if (message.includes('collection') && message.includes('not found')) {
+      code = 'COLLECTION_NOT_FOUND';
+    } else if (message.includes('vector') && message.includes('invalid')) {
+      code = 'INVALID_VECTOR';
+    } else if (context.includes('search')) {
+      code = 'SEARCH_FAILED';
+    } else if (context.includes('upsert')) {
+      code = 'UPSERT_FAILED';
+    } else if (context.includes('initialize')) {
+      code = 'INITIALIZATION_FAILED';
+    }
+
+    throw new VectorStoreError(
+      `Vector store ${context} failed: ${message}`,
+      code
+    );
   }
 
   /**
