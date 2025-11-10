@@ -48,7 +48,7 @@ IMPORTANT: Favor any convention you identify in the thread you're replying to, b
 Examples from {{relationship}} relationships ({{exactExamples.length}} found):
 {{#each exactExamples}}
 
-+++ Example {{inc @index}} (Similarity Score: {{round this.score 2}})+++ 
++++ Example {{inc @index}} (Combined: {{round this.combinedScore 2}} | Topic: {{round this.semanticScore 2}}, Tone: {{round this.styleScore 2}})+++
 Subject: {{this.subject}}
 Body: {{truncate this.text 1000}}
 {{/each}}
@@ -60,7 +60,7 @@ No examples found for {{relationship}} relationship.
 Additional examples from other relationships:
 {{#each otherExamples}}
 
-Example {{inc @index}} ({{this.relationship}}, Similarity Score: {{round this.score 2}}):
+Example {{inc @index}} ({{this.relationship}}, Combined: {{round this.combinedScore 2}} | Topic: {{round this.semanticScore 2}}, Tone: {{round this.styleScore 2}}):
 "{{truncate this.text 1000}}"
 {{/each}}
 {{/if}}
@@ -72,4 +72,4 @@ Relationship Type: {{relationship}}
 {{/if}}
 
 === EMAIL TO RESPOND TO ===
-{{incomingEmailMetadata.rawMessage}}
+{{incomingEmailMetadata.fullMessage}}
