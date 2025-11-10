@@ -5,12 +5,12 @@
 
 import { PromptFormatterV2 } from '../pipeline/prompt-formatter-v2';
 import { LLMClient } from '../llm-client';
-import { pool } from '../../server';
+import { pool } from '../db';
 import { SpamCheckResult } from '../pipeline/types';
 
 export interface SpamCheckParams {
   senderEmail: string;
-  rawMessage: string;
+  fullMessage: string;
   userNames: {
     name: string;
     nicknames?: string;
@@ -121,7 +121,7 @@ export class SpamDetector {
       throw new Error('SpamDetector not initialized. Call initialize() first.');
     }
 
-    const { senderEmail, rawMessage, userNames, userId } = params;
+    const { senderEmail, fullMessage, userNames, userId } = params;
 
     // Step 1: Get response count across ALL user's accounts
     const responseCount = await this.getResponseCount(userId, senderEmail);
@@ -147,7 +147,7 @@ export class SpamDetector {
     // Step 4: Format prompt for spam check with response history
     // Note: LLMClient automatically strips attachments to prevent token limit errors
     const spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
-      rawEmail: rawMessage,
+      rawEmail: fullMessage,
       userNames,
       responseHistory
     });

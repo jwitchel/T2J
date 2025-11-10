@@ -1,6 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import { encrypt } from '../lib/crypto';
 import crypto from 'crypto';
 

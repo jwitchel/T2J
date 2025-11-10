@@ -1,6 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import { EmailActionRouter } from '../lib/email-action-router';
 import { ImapOperations } from '../lib/imap-operations';
 import { withImapContext } from '../lib/imap-context';

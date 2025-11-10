@@ -1,15 +1,7 @@
 import { Pool } from 'pg';
-import dotenv from 'dotenv';
-import path from 'path';
+import { pool } from '../db';
 import { personService, PersonServiceError, PersonWithDetails } from './person-service';
 import { RelationshipDetector } from './relationship-detector';
-
-// Load environment variables
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL!,
-});
 
 export interface UserRelationship {
   id: string;

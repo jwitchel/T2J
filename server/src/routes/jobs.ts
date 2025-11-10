@@ -8,7 +8,7 @@ import {
   addInboxJob,
   addTrainingJob
 } from '../lib/queue';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 
 const router = express.Router();
 

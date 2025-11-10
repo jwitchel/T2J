@@ -86,7 +86,7 @@ export class EmailAttachmentStripper {
       // Combine headers with stripped body
       return headers + '\r\n\r\n' + reconstructedBody;
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error stripping attachments from email:', error);
       
       // Fallback: Try simple regex-based removal for common attachment patterns

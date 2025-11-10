@@ -114,7 +114,6 @@ async function testPipelineWithMocks() {
     // Test 1: Email Processing
     console.log('2️⃣ Testing individual email processing...');
     const ingestPipeline = new EmailIngestPipeline(
-      mockVectorStore,
       mockEmbeddingService,
       mockRelationshipDetector,
       mockStyleAggregationService,
@@ -124,6 +123,8 @@ async function testPipelineWithMocks() {
         errorThreshold: 0.5
       }
     );
+
+    const testEmailAccountId = 'test-account-id';
 
     const testEmail: ProcessedEmail = {
       uid: 'test-uid-1',
@@ -139,11 +140,11 @@ async function testPipelineWithMocks() {
       htmlContent: null,
       userReply: "Sounds great! Let's meet at noon at our usual spot.",
       respondedTo: '',
-      rawMessage: '' // Test mock
+      fullMessage: '' // Test mock
     };
 
     // Process single email
-    const result = await ingestPipeline.processEmail('test-user', testEmail);
+    const result = await ingestPipeline.processEmail('test-user', testEmailAccountId, testEmail);
     console.log('✅ Email processed:', result);
 
     // Test feature extraction
@@ -172,7 +173,7 @@ async function testPipelineWithMocks() {
         htmlContent: null,
         userReply: "I'll pick up milk on my way home. Love you!",
         respondedTo: '',
-        rawMessage: '' // Test mock
+        fullMessage: '' // Test mock
       },
       {
         uid: 'batch-uid-2',
@@ -188,7 +189,7 @@ async function testPipelineWithMocks() {
         htmlContent: null,
         userReply: "I've completed the analysis. The report is attached for your review.",
         respondedTo: '',
-        rawMessage: '' // Test mock
+        fullMessage: '' // Test mock
       }
     ];
 
@@ -198,12 +199,8 @@ async function testPipelineWithMocks() {
 
     // Test 3: Example Selection
     console.log('4️⃣ Testing example selection...');
-    const exampleSelector = new ExampleSelector(
-      mockVectorStore,
-      mockEmbeddingService,
-      mockRelationshipService,
-      mockRelationshipDetector
-    );
+    // ExampleSelector now uses VectorSearchService internally
+    const exampleSelector = new ExampleSelector(mockRelationshipDetector);
 
     const selectionResult = await exampleSelector.selectExamples({
       userId: 'test-user',

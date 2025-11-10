@@ -1,4 +1,4 @@
-import { pool } from '../server';
+import { pool } from './db';
 import { EmailActionType } from '../types/email-action-tracking';
 
 /**
@@ -36,7 +36,7 @@ export class EmailActionTracker {
          DO UPDATE SET action_taken = $4, subject = $5, destination_folder = $6, uid = $7, sender_email = $8, updated_at = NOW()`,
         [userId, emailAccountId, messageId, actionTaken, subject, destinationFolder, uid, senderEmail]
       );
-    } catch (error) {
+    } catch (error: unknown) {
       // Log error but don't fail the request
       console.error('Failed to record email action tracking:', error);
       // Re-throw if it's a critical database error (not a constraint violation)

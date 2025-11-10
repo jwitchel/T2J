@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
 import { toNodeHandler } from 'better-auth/node';
+import { pool } from './lib/db';
 import { auth } from './lib/auth';
 import { createServer } from 'http';
 import { createUnifiedWebSocketServer } from './websocket/unified-websocket';
@@ -23,11 +23,6 @@ if (!process.env.ENCRYPTION_KEY) {
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 // Test database connection and initialize schedulers
 async function initializeDatabase() {

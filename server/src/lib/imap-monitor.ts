@@ -7,7 +7,7 @@
 import { EventEmitter } from 'events';
 import { ImapOperations } from './imap-operations';
 import { addInboxJob, JobPriority } from './queue';
-import { pool } from '../server';
+import { pool } from './db';
 import { realTimeLogger } from './real-time-logger';
 
 // Monitoring configuration
@@ -226,7 +226,7 @@ class MonitorInstance {
 
       console.log(`IMAP monitoring started for account ${this.accountId}`);
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Failed to connect IMAP for account ${this.accountId}:`, error);
       
       this.status.status = 'error';
@@ -284,7 +284,7 @@ class MonitorInstance {
       // Reset IDLE timer on any activity
       this.resetIdleTimer();
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Error handling IMAP event for account ${this.accountId}:`, error);
       this.parent.emit('error', this.accountId, error as Error);
     }
@@ -329,7 +329,7 @@ class MonitorInstance {
         [this.accountId]
       );
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Error queueing emails for account ${this.accountId}:`, error);
       throw error;
     }
@@ -352,7 +352,7 @@ class MonitorInstance {
         if (!alive) {
           throw new Error('Connection test failed');
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`Heartbeat failed for account ${this.accountId}:`, error);
         await this.handleConnectionLoss(error as Error);
       }

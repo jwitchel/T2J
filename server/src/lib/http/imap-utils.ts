@@ -46,7 +46,7 @@ export async function withImapJson<T>(
   try {
     const data = await withImapContext(accountId, userId, async () => task());
     return res.json(data as any);
-  } catch (error) {
+  } catch (error: unknown) {
     return mapImapError(res, error, fallbackMessage);
   }
 }

@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { RegexSignatureDetector } from '../lib/regex-signature-detector';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 
 const router = express.Router();
 const regexSignatureDetector = new RegexSignatureDetector(pool);

@@ -35,7 +35,7 @@ export class EmbeddingService {
       this.pipeline = await pipeline('feature-extraction', this.modelName);
       
       this.isInitialized = true;
-    } catch (error) {
+    } catch (error: unknown) {
       this.initPromise = null;
       throw new Error(`Failed to initialize embedding model: ${error}`);
     }
@@ -69,7 +69,7 @@ export class EmbeddingService {
         model: this.modelName,
         dimensions: this.dimensions
       };
-    } catch (error) {
+    } catch (error: unknown) {
       throw new Error(`Embedding generation failed: ${error}`);
     }
   }
@@ -96,7 +96,7 @@ export class EmbeddingService {
         try {
           const result = await this.embedText(text);
           return { index: globalIndex, result };
-        } catch (error) {
+        } catch (error: unknown) {
           errors.push({ 
             index: globalIndex, 
             error: error instanceof Error ? error.message : String(error) 

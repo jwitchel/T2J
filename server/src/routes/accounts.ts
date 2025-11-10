@@ -1,5 +1,5 @@
 import { Router, Request } from 'express';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import { requireAuth } from '../middleware/auth';
 
 // Extend Express Request to include user

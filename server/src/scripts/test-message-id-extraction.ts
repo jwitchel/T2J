@@ -67,7 +67,7 @@ async function testMessageIdExtraction() {
       console.log(`  Date: ${msg.date ? msg.date.toISOString() : 'UNDEFINED'}`);
       console.log(`  Flags: ${msg.flags ? msg.flags.join(', ') : 'UNDEFINED'}`);
       console.log(`  Size: ${msg.size || 'UNDEFINED'}`);
-      console.log(`  Has rawMessage: ${!!msg.rawMessage ? 'YES ✅' : 'NO ❌'}`);
+      console.log(`  Has fullMessage: ${!!msg.fullMessage ? 'YES ✅' : 'NO ❌'}`);
       console.log(`  Has bodystructure: ${!!msg.bodystructure ? 'YES ✅' : 'NO ❌'}`);
     }
 

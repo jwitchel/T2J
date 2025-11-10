@@ -62,9 +62,10 @@ export class EmailLockManager {
         result
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // ExecutionError or ResourceLockedError means lock is already held by another process
-      if (error.name === 'ExecutionError' || error.name === 'ResourceLockedError') {
+      const errorName = error instanceof Error ? error.name : '';
+      if (errorName === 'ExecutionError' || errorName === 'ResourceLockedError') {
         return {
           acquired: false,
           reason: 'Lock already held by another process'

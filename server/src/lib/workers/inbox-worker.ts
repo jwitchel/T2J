@@ -7,7 +7,7 @@ import { Worker, Job } from 'bullmq';
 import { JobType, ProcessInboxJobData } from '../queue';
 import { realTimeLogger } from '../real-time-logger';
 import { inboxProcessor } from '../email-processing/inbox-processor';
-import { pool } from '../../server';
+import { pool } from '../db';
 import { sharedConnection as connection } from '../redis-connection';
 
 async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
@@ -51,7 +51,7 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
         accountsProcessed: result.rows.length,
         childJobs
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[InboxWorker] Fan-out job ${job.id} failed:`, error);
       throw error;
     }
@@ -142,7 +142,7 @@ const inboxWorker = new Worker(
 
       return await processInboxJob(job as Job<ProcessInboxJobData>);
 
-    } catch (error) {
+    } catch (error: unknown) {
       // Check if this is a permanent failure (account not found, user deleted account, etc.)
       // Permanent failures should not retry - they're configuration issues
       const isPermanent = error instanceof Error && (error as any).permanent === true;

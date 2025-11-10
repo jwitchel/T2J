@@ -28,7 +28,7 @@ export interface EmailMessageWithAction {
   flags: string[];
   size?: number;
   preview?: string;
-  rawMessage?: string;
+  fullMessage?: string;
   // Action tracking fields
   actionTaken?: EmailActionType;
   updatedAt?: Date;  // When the action was taken

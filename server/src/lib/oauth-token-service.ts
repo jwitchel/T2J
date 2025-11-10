@@ -1,4 +1,4 @@
-import { pool } from '../server';
+import { pool } from './db';
 import { encrypt, decrypt } from './crypto';
 
 export interface OAuthTokens {
@@ -157,7 +157,7 @@ export class OAuthTokenService {
       await this.storeTokens(emailAccountId, newTokens, '');
       
       return newTokens;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[OAuthTokenService] Error refreshing tokens:', error);
       throw error;
     }

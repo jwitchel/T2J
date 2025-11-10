@@ -1,4 +1,4 @@
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import dotenv from 'dotenv';
 import path from 'path';
 import chalk from 'chalk';

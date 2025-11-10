@@ -21,7 +21,7 @@ export async function withRetry<T>(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await operation();
-    } catch (error) {
+    } catch (error: unknown) {
       lastError = error as Error;
       
       if (attempt === maxAttempts) {
