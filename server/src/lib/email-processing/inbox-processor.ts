@@ -12,7 +12,7 @@ import { withImapContext } from '../imap-context';
 import { emailStorageService } from '../email-storage-service';
 import { emailLockManager } from '../email-lock-manager';
 import { DraftEmail } from '../pipeline/types';
-import { pool } from '../../server';
+import { pool } from '../db';
 import { ActionHelpers } from '../email-actions';
 import { getSpamDetector } from './spam-detector';
 
@@ -55,7 +55,7 @@ export interface ProcessEmailParams {
     messageId?: string;
     subject?: string;
     from?: string;
-    rawMessage: string;
+    fullMessage: string;
   };
   accountId: string;
   userId: string;
@@ -134,7 +134,7 @@ export class InboxProcessor {
         [accountId]
       );
       accountEmail = result.rows[0]?.email_address;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[InboxProcessor] Failed to fetch account email:', error);
     }
 
@@ -161,7 +161,7 @@ export class InboxProcessor {
     }
 
     const processingResult = await emailProcessingService.processEmail({
-      rawMessage: context.message.rawMessage,
+      fullMessage: context.message.fullMessage,
       emailAccountId: context.accountId,
       providerId: context.providerId,
       userId: context.userId
@@ -294,7 +294,7 @@ export class InboxProcessor {
   private async _rollbackTracking(context: ProcessingContext): Promise<void> {
     try {
       await EmailActionTracker.resetAction(context.accountId, context.messageKey);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[InboxProcessor] Rollback failed:', error);
     }
   }
@@ -322,7 +322,7 @@ export class InboxProcessor {
         emailAccountId: context.accountId,
         senderEmail
       });
-    } catch (error) {
+    } catch (error: unknown) {
       // Log but don't throw - this is best-effort tracking
       console.error('[InboxProcessor] Failed to update sender response stats:', error);
     }
@@ -342,12 +342,12 @@ export class InboxProcessor {
         messageId: context.message.messageId,
         subject: context.message.subject,
         from: context.message.from,
-        rawMessage: context.message.rawMessage,
+        fullMessage: context.message.fullMessage,
         to: [],
         cc: [],
         date: new Date(),
         flags: [],
-        size: context.message.rawMessage.length
+        size: context.message.fullMessage.length
       };
 
       const llmResponse = {
@@ -372,7 +372,7 @@ export class InboxProcessor {
         folderName: DEFAULT_SOURCE_FOLDER,
         llmResponse
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[InboxProcessor] ⚠️ QDRANT SAVE FAILED for ${context.message.messageId}:`, error);
       console.error(`[InboxProcessor] This email will not be viewable in history!`);
       // Don't throw - Qdrant is best-effort
@@ -502,7 +502,7 @@ export class InboxProcessor {
       this._logProcessingSummary(context, result, isSpam);
       return result;
 
-    } catch (error) {
+    } catch (error: unknown) {
       const result = this._buildResult(context, undefined, error as Error);
       this._logProcessingSummary(context, result, false);
       return result;
@@ -592,7 +592,7 @@ export class InboxProcessor {
               messageId: msg.messageId,
               subject: msg.subject,
               from: msg.from,
-              rawMessage: msg.rawMessage
+              fullMessage: msg.fullMessage
             },
             accountId,
             userId,
@@ -615,7 +615,7 @@ export class InboxProcessor {
           elapsed: Date.now() - startTime
         };
 
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[InboxProcessor] Batch processing error:', error);
         throw error;
       }

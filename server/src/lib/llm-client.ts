@@ -189,17 +189,19 @@ export class LLMClient {
 
         clearTimeout(timeoutId);
         return text;
-      } catch (error: any) {
+      } catch (error: unknown) {
         clearTimeout(timeoutId);
         lastError = error;
 
         // Check if this was an abort (timeout)
-        const isAborted = error.name === 'AbortError' || error.message?.includes('aborted');
+        const errorName = error instanceof Error ? error.name : '';
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isAborted = errorName === 'AbortError' || errorMessage.includes('aborted');
 
         // Only retry on JSON parsing errors, temporary failures, or timeouts
-        const shouldRetry = error.message?.includes('JSON') ||
-                           error.message?.includes('rate limit') ||
-                           error.message?.includes('timeout') ||
+        const shouldRetry = errorMessage.includes('JSON') ||
+                           errorMessage.includes('rate limit') ||
+                           errorMessage.includes('timeout') ||
                            isAborted;
 
         if (shouldRetry && attempt < maxRetries) {
@@ -238,7 +240,7 @@ export class LLMClient {
       );
 
       return { meta: parsed.meta };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleJSONError(error, 'Spam check');
     }
   }
@@ -267,7 +269,7 @@ export class LLMClient {
       );
 
       return { meta: parsed.meta };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleJSONError(error, 'Meta-context analysis');
     }
   }
@@ -296,7 +298,7 @@ export class LLMClient {
       );
 
       return { meta: parsed.meta };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleJSONError(error, 'Action analysis');
     }
   }
@@ -325,7 +327,7 @@ export class LLMClient {
       );
 
       return parsed.message;
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleJSONError(error, 'Response generation');
     }
   }
@@ -337,7 +339,7 @@ export class LLMClient {
     try {
       await this.generate('Say "test"', { maxTokens: 5 });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Connection test failed:', error);
       return false;
     }
@@ -468,7 +470,7 @@ export class LLMClient {
         
         // Success - return the refreshed tokens
         return tokens;
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error instanceof Error ? error : new Error(String(error));
         
         // Check if this is a REFRESH_TOKEN_INVALID error

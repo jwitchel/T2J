@@ -16,7 +16,7 @@ import PostalMime from 'postal-mime';
 function formatDuration(ms: number): string {
   return (ms / 1000).toFixed(1) + 's';
 }
-import { pool } from '../../server';
+import { pool } from '../db';
 import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
@@ -45,7 +45,7 @@ export interface ParsedEmailData {
 }
 
 export interface ProcessEmailParams {
-  rawMessage: string;
+  fullMessage: string;
   emailAccountId: string;
   providerId: string;
   userId: string;
@@ -83,9 +83,9 @@ export class EmailProcessingService {
    * Parse email exactly once
    * @private
    */
-  private async parseEmail(rawMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
+  private async parseEmail(fullMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
     const parser = new PostalMime();
-    const parsed = await parser.parse(rawMessage);
+    const parsed = await parser.parse(fullMessage);
 
     const fromAddress = parsed.from?.address || '';
     const fromName = parsed.from?.name || parsed.from?.address || '';
@@ -113,7 +113,7 @@ export class EmailProcessingService {
       htmlContent: parsed.html || null,
       userReply: emailBody,
       respondedTo: '', // Set by reply extractor when content is split into user text vs quoted text
-      rawMessage: rawMessage
+      fullMessage: fullMessage
     };
 
     return { parsed, processedEmail, emailBody };
@@ -206,12 +206,12 @@ export class EmailProcessingService {
    * This is the single entry point for processing an email
    */
   async processEmail(params: ProcessEmailParams): Promise<EmailProcessingResult> {
-    const { rawMessage, emailAccountId, providerId, userId } = params;
+    const { fullMessage, emailAccountId, providerId, userId } = params;
     const totalStartTime = Date.now();
 
     try {
       // Step 1: Parse email
-      const parsedData = await this.parseEmail(rawMessage, emailAccountId);
+      const parsedData = await this.parseEmail(fullMessage, emailAccountId);
 
       // Step 2: Load user context
       const userContext = await this.loadUserContext(userId, emailAccountId);
@@ -222,7 +222,7 @@ export class EmailProcessingService {
       const spamDetector = await getSpamDetector(providerId);
       const spamCheckResult = await spamDetector.checkSpam({
         senderEmail,
-        rawMessage,
+        fullMessage,
         userNames: userContext.userNames,
         userId
       });
@@ -261,7 +261,7 @@ export class EmailProcessingService {
 
       return result;
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[EmailProcessingService] Error processing email:', error);
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error processing email';

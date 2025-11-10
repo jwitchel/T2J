@@ -1,7 +1,7 @@
 import { ImapConnection, ImapConnectionError } from './imap-connection';
 import { imapPool } from './imap-pool';
 import { decryptPassword, decrypt, encrypt } from './crypto';
-import { pool } from '../server';
+import { pool } from './db';
 import { simpleParser } from 'mailparser';
 import { OAuthTokenService } from './oauth-token-service';
 import { getActiveContext, hasActiveContextFor, setContextConnection } from './imap-context';
@@ -45,7 +45,7 @@ export interface EmailMessage {
 }
 
 export interface EmailMessageWithRaw extends EmailMessage {
-  rawMessage: string;
+  fullMessage: string;
 }
 
 export interface SearchCriteria {
@@ -170,7 +170,7 @@ export class ImapOperations {
             // Update the account object with new token info
             this.account.oauthAccessToken = encrypt(newTokens.accessToken);
             this.account.oauthTokenExpiresAt = newTokens.expiresAt;
-          } catch (error) {
+          } catch (error: unknown) {
             console.error('Failed to refresh OAuth token:', error);
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new ImapConnectionError(
@@ -222,7 +222,7 @@ export class ImapOperations {
       await conn.listFolders();
       
       success = true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('IMAP connection test failed:', error);
       success = false;
     } finally {
@@ -540,7 +540,7 @@ export class ImapOperations {
     }
   }
 
-  async getMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessage & { body?: string; parsed?: any; rawMessage?: string }> {
+  async getMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessage & { body?: string; parsed?: any; fullMessage?: string }> {
     const conn = await this.getConnection();
     
     try {
@@ -590,7 +590,7 @@ export class ImapOperations {
         size: msg.size,
         body: bodyString,
         parsed,
-        rawMessage: bodyString  // This is the complete RFC 5322 message with headers and body
+        fullMessage: bodyString  // This is the complete RFC 5322 message with headers and body
       };
     } finally {
       if (!preserveConnection) {
@@ -662,7 +662,7 @@ export class ImapOperations {
             date: parsedEmail.date || msg.date || new Date(),
             flags: msg.flags,
             size: msg.size,
-            rawMessage: bodyString
+            fullMessage: bodyString
           };
           return result;
         } catch (err) {
@@ -739,7 +739,7 @@ export class ImapOperations {
         date: msg.date,
         flags: msg.flags,
         size: msg.size,
-        rawMessage: bodyString  // This is the complete RFC 5322 message with headers and body
+        fullMessage: bodyString  // This is the complete RFC 5322 message with headers and body
       };
     } finally {
       if (!preserveConnection) {
@@ -831,7 +831,7 @@ export class ImapOperations {
       });
 
       await conn.idle();
-    } catch (error) {
+    } catch (error: unknown) {
       // On error, release the connection
       this.release();
       throw error;
@@ -970,7 +970,7 @@ export class ImapOperations {
         mailbox: folderName,
         flags: flags || ['\\Draft']
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error appending message:', error);
       throw new ImapConnectionError(
         `Failed to append message: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -1089,7 +1089,7 @@ export class ImapOperations {
           // Ignore verification failures
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error moving message:', error);
       throw new ImapConnectionError(
         `Failed to move message: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -1119,7 +1119,7 @@ export class ImapOperations {
         // Return the first matching UID
         result = uids[0];
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error finding message by ID:', error);
       result = null;
     } finally {
