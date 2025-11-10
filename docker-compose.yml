@@ -27,18 +27,9 @@ services:
       timeout: 5s
       retries: 5
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - ./qdrant_storage:/qdrant/storage
-    environment:
-      - QDRANT__LOG_LEVEL=INFO
-    # Health check disabled - container doesn't have curl/wget
-    # API is accessible at http://localhost:6333/
+  # REMOVED: Qdrant vector database
+  # Now using PostgreSQL + Vectra for vector storage and search
+  # See: server/src/lib/vector/vector-search-service.ts
 
   adminer:
     image: adminer:latest
