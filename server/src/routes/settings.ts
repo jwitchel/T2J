@@ -11,19 +11,20 @@ const router = express.Router();
 router.get('/profile', requireAuth, async (req, res) => {
   try {
     const userId = (req as any).user.id;
-    
-    const result = await pool.query(
+
+    // Query both user prefs and email accounts to get drafts folder
+    const userResult = await pool.query(
       `SELECT name, preferences
        FROM "user"
        WHERE id = $1`,
       [userId]
     );
-    
-    if (result.rows.length === 0) {
+
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
-    const user = result.rows[0];
+
+    const user = userResult.rows[0];
     const preferences = user.preferences || {};
 
     // Get defaults from EmailActionRouter and merge with saved preferences
@@ -32,12 +33,21 @@ router.get('/profile', requireAuth, async (req, res) => {
       ? { ...defaultFolders, ...preferences.folderPreferences }
       : defaultFolders;
 
+    // Get drafts folder path from user preferences, with fallback to default
+    const draftsFolderPath = preferences.folderPreferences?.draftsFolderPath || '[Gmail]/Drafts';
+
+    // Add draftsFolderPath to folderPreferences
+    const completeFolderPreferences = {
+      ...folderPreferences,
+      draftsFolderPath
+    };
+
     return res.json({
       preferences: {
         name: preferences.name || user.name || '',
         nicknames: preferences.nicknames || '',
         signatureBlock: preferences.signatureBlock || '',
-        folderPreferences
+        folderPreferences: completeFolderPreferences
       }
     });
   } catch (error) {
