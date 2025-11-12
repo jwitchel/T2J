@@ -335,10 +335,6 @@ export class InboxProcessor {
         generatedContent: draft.body
       };
 
-      console.log('[InboxProcessor] draft.body length before saving:', draft.body?.length || 0);
-      console.log('[InboxProcessor] draft.body (first 200 chars):', draft.body?.substring(0, 200) || '(empty)');
-      console.log('[InboxProcessor] llmResponse.generatedContent length:', llmResponse.generatedContent?.length || 0);
-
       await emailStorageService.saveEmail({
         userId: context.userId,
         emailAccountId: context.accountId,
@@ -347,8 +343,6 @@ export class InboxProcessor {
         folderName: DEFAULT_SOURCE_FOLDER,
         llmResponse
       });
-
-      console.log('[InboxProcessor] Email saved to database with draft_tracking entry');
     } catch (error: unknown) {
       console.error(`[InboxProcessor] ⚠️ DATABASE SAVE FAILED for ${context.message.messageId}:`, error);
       console.error(`[InboxProcessor] This email will not be viewable in history!`);

@@ -267,7 +267,6 @@ export class EmailStorageService {
                   relationship: params.llmResponse.relationship
                 })
               ]);
-              console.log('[EmailStorage] Saved draft tracking for:', emailData.messageId);
             } catch (draftError) {
               // Log but don't fail - draft tracking is supplementary data
               console.error('[EmailStorage] Failed to save draft tracking:', draftError);

@@ -135,25 +135,15 @@ export class DraftGenerator {
       );
 
       // Step 3: Clean any typed name that the LLM may have added
-      console.log('[DraftGenerator] aiResult.body length:', aiResult.body?.length || 0);
-      console.log('[DraftGenerator] aiResult.body (first 200 chars):', aiResult.body?.substring(0, 200) || '(empty)');
-
       const cleanedBody = await this.removeTypedName(aiResult.body, userId);
-      console.log('[DraftGenerator] cleanedBody length after removeTypedName:', cleanedBody?.length || 0);
-      console.log('[DraftGenerator] cleanedBody (first 200 chars):', cleanedBody?.substring(0, 200) || '(empty)');
 
       // Step 4: Determine if this is a silent action
       const isSilentAction = aiResult.meta && ActionHelpers.isSilentAction(aiResult.meta.recommendedAction);
-      console.log('[DraftGenerator] isSilentAction:', isSilentAction);
-      console.log('[DraftGenerator] recommendedAction:', aiResult.meta?.recommendedAction);
 
       // Step 5: Format complete draft response
       const formattedDraft = isSilentAction
         ? this.buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
         : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
-
-      console.log('[DraftGenerator] formattedDraft.body length:', formattedDraft.body?.length || 0);
-      console.log('[DraftGenerator] formattedDraft.body (first 200 chars):', formattedDraft.body?.substring(0, 200) || '(empty)');
 
       // Step 6: Log completion
       this.logDraftCompletion(userId, aiResult);
@@ -287,15 +277,10 @@ export class DraftGenerator {
 
       // Step 5: Response Generation (Third LLM Call - conditional)
       const needsResponse = !ActionHelpers.isSilentAction(combinedMeta.recommendedAction);
-      console.log('[DraftGenerator] needsResponse:', needsResponse);
-      console.log('[DraftGenerator] recommendedAction:', combinedMeta.recommendedAction);
       let responseMessage = '';
 
       if (needsResponse) {
-        console.log('[DraftGenerator] Preparing response generation prompt...');
-        console.log('[DraftGenerator] examples count:', exampleSelection.examples?.length || 0);
-        console.log('[DraftGenerator] relationship:', exampleSelection.relationship);
-        console.log('[DraftGenerator] writingPatterns available:', !!writingPatterns);
+        console.log(`[DraftGenerator] Generating response: action=${combinedMeta.recommendedAction}, examples=${exampleSelection.examples?.length || 0}, relationship=${exampleSelection.relationship}, patterns=${!!writingPatterns}`);
 
         const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
           incomingEmail: processedEmail.userReply,
@@ -309,10 +294,7 @@ export class DraftGenerator {
           actionMeta: combinedMeta
         });
 
-        console.log('[DraftGenerator] Calling LLM for response generation...');
         responseMessage = await llmClient.generateResponseMessage(responsePrompt);
-        console.log('[DraftGenerator] responseMessage length:', responseMessage?.length || 0);
-        console.log('[DraftGenerator] responseMessage (first 200 chars):', responseMessage?.substring(0, 200) || '(empty)');
       } else {
         console.log('[DraftGenerator] Skipping response generation for silent action');
       }
