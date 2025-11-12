@@ -1,11 +1,35 @@
 /**
  * Type definitions for vector storage and retrieval
  *
- * This file contains shared type definitions for the vector storage system,
- * including search parameters, results, and configuration types.
+ * This file contains shared type definitions for the new vector search system
+ * using PostgreSQL storage + Vectra in-memory search with dual embeddings (semantic + style).
+ *
+ * Following patterns from EmailMover and SpamDetector:
+ * - Well-defined parameter and result types
+ * - No anonymous return objects
+ * - Custom error hierarchy
+ * - Structured configuration types
  */
 
-import { EmailMetadata } from './qdrant-client';
+// ============================================================================
+// Core Metadata Types
+// ============================================================================
+
+/**
+ * Email metadata stored with vectors
+ *
+ * Purpose: Standard structure for email metadata across the system
+ */
+export interface EmailMetadata {
+  userId: string;
+  emailAccountId: string;
+  recipientEmail?: string;
+  relationship?: string;
+  subject?: string;
+  sentDate: Date;
+  wordCount?: number;
+  [key: string]: any;  // Allow additional metadata
+}
 
 // ============================================================================
 // Search Parameter Types
@@ -17,7 +41,7 @@ import { EmailMetadata } from './qdrant-client';
  * Purpose: Narrow search scope using metadata filters before vector search
  */
 export interface VectorSearchFilters {
-  /** Relationship type filter (e.g., 'colleague', 'friend', 'spouse') */
+  /** Relationship type filter (e.g., 'colleagues', 'friends', 'family') */
   relationship?: string;
 
   /** Filter by specific recipient email for direct correspondence */
@@ -34,45 +58,34 @@ export interface VectorSearchFilters {
 }
 
 /**
- * Parameters for dense (semantic) vector search
- */
-export interface DenseSearchParams {
-  userId: string;
-  queryVector: number[];
-  filters?: VectorSearchFilters;
-  limit?: number;
-  scoreThreshold?: number;
-  collectionName?: string;
-}
-
-/**
- * Parameters for sparse (keyword) vector search
- */
-export interface SparseSearchParams {
-  userId: string;
-  sparseVector: SparseVector;
-  filters?: VectorSearchFilters;
-  limit?: number;
-  scoreThreshold?: number;
-  collectionName?: string;
-}
-
-/**
- * Parameters for hybrid search (dense + sparse)
+ * Parameters for basic vector search using text query
  *
- * Purpose: Combine semantic similarity (dense) with keyword matching (sparse)
- * for improved relevance.
+ * Purpose: High-level search interface that generates vectors internally
+ * Following pattern: Structured params with no optional complexity
  */
-export interface HybridSearchParams {
+export interface VectorSearchParams {
   userId: string;
-  denseVector: number[];
-  sparseVector: SparseVector;
+  queryText: string;
   filters?: VectorSearchFilters;
   limit?: number;
   scoreThreshold?: number;
-  collectionName?: string;
-  denseWeight?: number;   // Weight for dense vector results (default: 0.7)
-  sparseWeight?: number;  // Weight for sparse vector results (default: 0.3)
+}
+
+/**
+ * Parameters for dual vector search (semantic + style)
+ *
+ * Purpose: Low-level search interface with pre-computed vectors
+ * Used internally by VectorSearchService
+ */
+export interface DualVectorSearchParams {
+  userId: string;
+  semanticVector: number[];
+  styleVector: number[];
+  filters?: VectorSearchFilters;
+  limit?: number;
+  scoreThreshold?: number;
+  semanticWeight?: number;  // Default: 0.4
+  styleWeight?: number;     // Default: 0.6
 }
 
 // ============================================================================
@@ -80,42 +93,167 @@ export interface HybridSearchParams {
 // ============================================================================
 
 /**
- * Result from vector search
+ * Individual search match result
  *
- * Purpose: Standard structure for search results across all search methods
+ * Purpose: Standard structure for a single search result
+ * Following pattern: Well-defined result object with all metadata
+ */
+export interface SearchMatch {
+  id: string;
+  emailId: string;
+  text: string;
+  metadata: EmailMetadata;
+  scores: {
+    semantic: number;     // Semantic similarity score (0-1)
+    style: number;        // Style similarity score (0-1)
+    combined: number;     // Weighted combination of semantic + style
+    temporal: number;     // After temporal weighting applied
+  };
+}
+
+/**
+ * Complete vector search result
+ *
+ * Purpose: Comprehensive search result with documents and statistics
+ * Following pattern: success/error structure with detailed stats
  */
 export interface VectorSearchResult {
-  id: string;
-  score: number;
-  metadata: EmailMetadata;
-  vector?: number[];  // Optional, usually omitted to save memory
+  success: boolean;
+  documents: SearchMatch[];
+  stats: {
+    totalCandidates: number;
+    filteredCount: number;
+    avgSemanticScore: number;
+    avgStyleScore: number;
+    avgCombinedScore: number;
+    searchTimeMs: number;
+  };
+  error?: string;
 }
 
 // ============================================================================
-// Sparse Vector Types
+// Index/Storage Parameter Types
 // ============================================================================
 
 /**
- * Sparse vector representation for BM25 keyword matching
+ * Parameters for indexing a single document
  *
- * Purpose: Efficient storage of keyword-based vectors where most values are zero.
- * Only non-zero indices and values are stored.
- *
- * Example:
- * Dense: [0, 0, 0.5, 0, 0, 2.3, 0, ...]
- * Sparse: { indices: [2, 5], values: [0.5, 2.3] }
+ * Purpose: Structure for adding/updating email vectors in PostgreSQL
+ * Following pattern: Explicit params for each operation
  */
-export interface SparseVector {
-  /** Array of indices where values are non-zero */
-  indices: number[];
+export interface IndexDocumentParams {
+  userId: string;
+  emailId: string;
+  text: string;
+  metadata: EmailMetadata;
+  emailType: 'sent' | 'received';
+}
 
-  /** Array of non-zero values corresponding to indices */
-  values: number[];
+/**
+ * Result from indexing a single document
+ *
+ * Purpose: Confirmation of successful indexing with vector dimensions
+ * Following pattern: success + metadata result structure
+ */
+export interface IndexDocumentResult {
+  success: boolean;
+  documentId: string;
+  semanticVectorDim: number;
+  styleVectorDim: number;
+  error?: string;
+}
+
+/**
+ * Parameters for batch indexing
+ *
+ * Purpose: Efficiently index multiple documents at once
+ */
+export interface BatchIndexParams {
+  documents: IndexDocumentParams[];
+  batchSize?: number;  // Default: 100
+}
+
+/**
+ * Result from batch indexing operation
+ *
+ * Purpose: Summary of batch operation with error details
+ * Following pattern: Success/failure counts with error list
+ */
+export interface BatchIndexResult {
+  success: boolean;
+  indexed: number;
+  failed: number;
+  errors: Array<{
+    documentId: string;
+    error: string;
+  }>;
+  totalTimeMs: number;
 }
 
 // ============================================================================
-// Temporal Weighting Types
+// Style Cluster Types
 // ============================================================================
+
+/**
+ * Parameters for style clustering
+ *
+ * Purpose: Group emails by writing style for pattern analysis
+ */
+export interface StyleClusterParams {
+  userId: string;
+  relationship: string;
+  emails: Array<{
+    id: string;
+    styleVector: number[];
+    metadata: EmailMetadata;
+  }>;
+  clusterCount?: number;  // Default: 3 (formal, neutral, casual)
+}
+
+/**
+ * Individual style cluster
+ *
+ * Purpose: Represents a group of emails with similar style
+ */
+export interface StyleCluster {
+  id: string;
+  name: string;              // e.g., 'formal', 'neutral', 'casual'
+  centroid: number[];        // Style vector centroid for cluster
+  emailIds: string[];        // Email IDs in this cluster
+  avgScore: number;          // Average similarity to centroid
+}
+
+/**
+ * Result from style clustering operation
+ *
+ * Purpose: Complete clustering result with all clusters
+ * Following pattern: success/error with data
+ */
+export interface StyleClusterResult {
+  success: boolean;
+  clusters: StyleCluster[];
+  error?: string;
+}
+
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+/**
+ * Configuration for vector search service
+ *
+ * Purpose: Centralized configuration with defaults from environment
+ * Following pattern: Config object with sensible defaults
+ */
+export interface VectorSearchConfig {
+  semanticDimension: number;        // Semantic embedding size (default: 384)
+  styleDimension: number;           // Style embedding size (default: 768)
+  defaultLimit: number;             // Default search limit (default: 50)
+  scoreThreshold: number;           // Minimum similarity score (default: 0.5)
+  semanticWeight: number;           // Weight for semantic score (default: 0.4)
+  styleWeight: number;              // Weight for style score (default: 0.6)
+  temporalWeights: TemporalWeightConfig;
+}
 
 /**
  * Configuration for temporal decay weighting
@@ -138,77 +276,43 @@ export interface TemporalWeightConfig {
 }
 
 // ============================================================================
-// BM25 Encoder Types
+// Embedding Service Types
 // ============================================================================
 
 /**
- * Configuration for BM25 algorithm
+ * Result from semantic embedding generation
  *
- * Purpose: Controls BM25 term weighting behavior
- *
- * Fields:
- * - k1: Controls term frequency saturation (default: 1.5, range: 1.2-2.0)
- * - b: Controls document length normalization (default: 0.75, range: 0-1)
- * - avgDocLength: Average document length in corpus (calculated during fit)
+ * Purpose: Standard structure for embedding service results
  */
-export interface BM25Config {
-  k1?: number;
-  b?: number;
-  avgDocLength?: number;
+export interface SemanticEmbeddingResult {
+  vector: number[];
+  dimension: number;
+  processingTime: number;
 }
 
 /**
- * Internal state of BM25 encoder
+ * Result from style embedding generation
  *
- * Purpose: Stores fitted BM25 model parameters
- * Used by: BM25Encoder for encoding text to sparse vectors
+ * Purpose: Standard structure for style embedding results
  */
-export interface BM25EncoderState {
-  /** Mapping of terms to vocabulary indices */
-  vocabulary: Map<string, number>;
-
-  /** Inverse document frequency for each term */
-  idf: Map<string, number>;
-
-  /** Total number of documents in corpus */
-  docCount: number;
-
-  /** Average document length across corpus */
-  avgDocLength: number;
-}
-
-// ============================================================================
-// RRF (Reciprocal Rank Fusion) Types
-// ============================================================================
-
-/**
- * Configuration for Reciprocal Rank Fusion
- *
- * Purpose: Controls how dense and sparse search results are merged
- *
- * RRF formula: score = sum(weight / (k + rank))
- * where rank is the result's position in the ranked list
- */
-export interface RRFConfig {
-  /** K parameter for rank smoothing (default: 60) */
-  k?: number;
-
-  /** Weight for dense vector results (default: 0.7) */
-  denseWeight?: number;
-
-  /** Weight for sparse vector results (default: 0.3) */
-  sparseWeight?: number;
+export interface StyleEmbeddingResult {
+  vector: number[];
+  dimension: number;
+  processingTime: number;
 }
 
 /**
- * Intermediate result with RRF scores
+ * Batch embedding result
  *
- * Purpose: Tracks both dense and sparse scores during merge process
+ * Purpose: Results from batch embedding operation
  */
-export interface RRFScoredResult extends VectorSearchResult {
-  denseScore?: number;
-  sparseScore?: number;
-  rrfScore: number;
+export interface BatchEmbeddingResult {
+  embeddings: SemanticEmbeddingResult[];
+  errors: Array<{
+    index: number;
+    error: string;
+  }>;
+  totalTimeMs: number;
 }
 
 // ============================================================================
@@ -216,89 +320,221 @@ export interface RRFScoredResult extends VectorSearchResult {
 // ============================================================================
 
 /**
- * Custom error class for vector store operations
+ * Base error class for vector search operations
  *
  * Purpose: Provides specific error codes for different failure scenarios
- * Follows pattern from LLMProviderError
+ * Following pattern: Custom error hierarchy from PersonService
+ */
+export class VectorSearchError extends Error {
+  constructor(message: string, public code?: string) {
+    super(message);
+    this.name = 'VectorSearchError';
+  }
+}
+
+/**
+ * Error for invalid vector dimensions or format
+ */
+export class InvalidVectorError extends VectorSearchError {
+  constructor(message: string = 'Invalid vector dimensions or format') {
+    super(message, 'INVALID_VECTOR');
+    this.name = 'InvalidVectorError';
+  }
+}
+
+/**
+ * Error for search query failures
+ */
+export class SearchQueryError extends VectorSearchError {
+  constructor(message: string) {
+    super(message, 'QUERY_ERROR');
+    this.name = 'SearchQueryError';
+  }
+}
+
+/**
+ * Error for indexing failures
+ */
+export class IndexError extends VectorSearchError {
+  constructor(message: string) {
+    super(message, 'INDEX_ERROR');
+    this.name = 'IndexError';
+  }
+}
+
+/**
+ * Error for embedding generation failures
+ */
+export class EmbeddingError extends VectorSearchError {
+  constructor(message: string) {
+    super(message, 'EMBEDDING_ERROR');
+    this.name = 'EmbeddingError';
+  }
+}
+
+/**
+ * Error for style clustering failures
+ */
+export class ClusteringError extends VectorSearchError {
+  constructor(message: string) {
+    super(message, 'CLUSTERING_ERROR');
+    this.name = 'ClusteringError';
+  }
+}
+
+// ============================================================================
+// Legacy Types (Deprecated - For Backwards Compatibility During Migration)
+// ============================================================================
+
+/**
+ * @deprecated Use DualVectorSearchParams instead
+ * Kept for backwards compatibility during migration
+ */
+export interface HybridSearchParams {
+  userId: string;
+  denseVector: number[];
+  sparseVector: { indices: number[]; values: number[] };
+  filters?: VectorSearchFilters;
+  limit?: number;
+  scoreThreshold?: number;
+  collectionName?: string;
+  denseWeight?: number;
+  sparseWeight?: number;
+}
+
+/**
+ * @deprecated No longer used with Vectra in-memory search
+ * Kept for backwards compatibility during migration
+ */
+export interface SparseVector {
+  indices: number[];
+  values: number[];
+}
+
+/**
+ * @deprecated Legacy EmailMetadata for Qdrant-based system
+ * Use EmailMetadata for new code
+ */
+export interface LegacyEmailMetadata {
+  emailId: string;
+  userId: string;
+  emailAccountId?: string;
+  rawText?: string;
+  userReply?: string;
+  respondedTo?: string;
+  redactedNames?: string[];
+  redactedEmails?: string[];
+  recipientEmail: string;
+  subject: string;
+  sentDate: string;
+  features: any;
+  relationship: {
+    type: string;
+    confidence: number;
+    detectionMethod: string;
+  };
+  frequencyScore?: number;
+  wordCount?: number;
+  responseTimeMinutes?: number;
+  eml_file?: string;
+  emailType?: 'incoming' | 'sent';
+  senderEmail?: string;
+  senderName?: string;
+  uid?: number;
+  bodystructure?: any;
+  flags?: string[];
+  size?: number;
+  folderName?: string;
+  from?: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  llmResponse?: {
+    meta: any;
+    generatedAt: string;
+    providerId: string;
+    modelName: string;
+    draftId: string;
+    relationship: {
+      type: string;
+      confidence: number;
+      detectionMethod: string;
+    };
+  };
+}
+
+/**
+ * @deprecated Use VectorSearchResult instead
+ * Kept for backwards compatibility during migration
+ */
+export interface LegacyVectorSearchResult {
+  id: string;
+  score: number;
+  metadata: LegacyEmailMetadata;
+  vector?: number[];
+}
+// ============================================================================
+// Legacy Types for Qdrant Client (Deprecated)
+// ============================================================================
+// These types are kept for backward compatibility with qdrant-client.ts
+// which is deprecated but still used by some services during migration
+
+/**
+ * @deprecated Legacy error type for VectorStore operations
  */
 export class VectorStoreError extends Error {
-  constructor(
-    message: string,
-    public code:
-      | 'CONNECTION_FAILED'
-      | 'COLLECTION_NOT_FOUND'
-      | 'INVALID_VECTOR'
-      | 'SEARCH_FAILED'
-      | 'INITIALIZATION_FAILED'
-      | 'UPSERT_FAILED'
-      | 'UNKNOWN'
-  ) {
+  constructor(message: string, public code?: string) {
     super(message);
     this.name = 'VectorStoreError';
   }
 }
 
 /**
- * Custom error class for BM25 encoder operations
+ * @deprecated RRF (Reciprocal Rank Fusion) configuration
+ * Used by hybrid search in qdrant-client.ts
  */
-export class BM25EncoderError extends Error {
-  constructor(
-    message: string,
-    public code:
-      | 'NOT_INITIALIZED'
-      | 'INVALID_INPUT'
-      | 'TOKENIZATION_FAILED'
-      | 'ENCODING_FAILED'
-      | 'UNKNOWN'
-  ) {
-    super(message);
-    this.name = 'BM25EncoderError';
-  }
+export interface RRFConfig {
+  k: number;  // Smoothing parameter (default: 60)
+  denseWeight?: number;  // Weight for dense search
+  sparseWeight?: number;  // Weight for sparse search
 }
 
-// ============================================================================
-// Collection Configuration Types
-// ============================================================================
-
 /**
- * Configuration for Qdrant collection with sparse vector support
+ * @deprecated RRF scored result
+ * Used by hybrid search result merging
  */
-export interface CollectionConfigWithSparse {
-  vectors: {
-    size: number;
-    distance: 'Cosine' | 'Dot' | 'Euclid';
-  };
-  sparse_vectors?: {
-    [key: string]: {
-      // No size specified - inferred from data
-    };
-  };
-  optimizers_config?: {
-    indexing_threshold?: number;
-  };
-}
-
-// ============================================================================
-// Upsert Types
-// ============================================================================
-
-/**
- * Email data for upserting to vector store
- *
- * Purpose: Standard structure for adding emails to Qdrant
- */
-export interface EmailUpsertData {
+export interface RRFScoredResult {
   id: string;
+  score: number;
+  rrfScore?: number;  // Computed RRF score
+  denseScore?: number;  // Original dense search score
+  sparseScore?: number;  // Original sparse search score
+  metadata: any;
+}
+
+/**
+ * @deprecated Dense (semantic) search parameters for Qdrant
+ */
+export interface DenseSearchParams {
   userId: string;
-  vector: number[];
-  sparseVector?: SparseVector;
-  metadata: EmailMetadata;
+  queryVector: number[];
+  relationship?: string;
+  filters?: any;  // Legacy filter format
+  limit?: number;
+  scoreThreshold?: number;
   collectionName?: string;
 }
 
-// ============================================================================
-// Export Re-exports for Convenience
-// ============================================================================
-
-// Re-export EmailMetadata from qdrant-client for convenience
-export type { EmailMetadata };
+/**
+ * @deprecated Sparse (BM25) search parameters for Qdrant
+ */
+export interface SparseSearchParams {
+  userId: string;
+  querySparseVector: { indices: number[]; values: number[] };
+  sparseVector?: { indices: number[]; values: number[] };  // Legacy alias
+  relationship?: string;
+  filters?: any;  // Legacy filter format
+  limit?: number;
+  scoreThreshold?: number;
+  collectionName?: string;
+}

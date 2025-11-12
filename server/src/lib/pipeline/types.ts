@@ -3,6 +3,21 @@
 import { LLMMetadata } from '../llm-client';
 
 /**
+ * Simplified email metadata for LLM prompts
+ *
+ * Purpose: Lightweight email representation for passing to AI pipeline.
+ * Used by: Prompt formatters, template manager when constructing LLM requests.
+ */
+export interface SimplifiedEmailMetadata {
+  from: { address: string; name?: string }[];
+  to: { address: string; name?: string }[];
+  cc?: { address: string; name?: string }[];
+  subject: string;
+  date: Date;
+  fullMessage: string;
+}
+
+/**
  * Spam check result from spam detector
  *
  * Purpose: Standard structure for spam detection results across the system.
