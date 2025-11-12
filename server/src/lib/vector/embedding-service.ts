@@ -136,7 +136,11 @@ export class EmbeddingService {
     return this.cosineSimilarity(embedding1.vector, embedding2.vector);
   }
 
-  private cosineSimilarity(vec1: number[], vec2: number[]): number {
+  /**
+   * Calculate cosine similarity between two vectors
+   * @returns similarity score between -1 and 1 (1 = identical, 0 = orthogonal, -1 = opposite)
+   */
+  cosineSimilarity(vec1: number[], vec2: number[]): number {
     if (vec1.length !== vec2.length) {
       throw new Error('Vectors must have the same dimensions');
     }
