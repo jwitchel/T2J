@@ -43,7 +43,7 @@ describe('TemplateManager', () => {
       recipientEmail: 'test@example.com',
       relationship: 'friend',
       incomingEmail: 'How are you doing?',
-      exactExamples: [
+      directExamples: [
         {
           text: 'Hey! I am doing great, thanks for asking!',
           relationship: 'friend',
@@ -95,7 +95,7 @@ describe('TemplateManager', () => {
       const longText = 'a'.repeat(1100); // Create text longer than 1000 chars
       const data = {
         ...mockData,
-        exactExamples: [{
+        directExamples: [{
           text: longText,
           relationship: 'friend'
         }]
@@ -170,7 +170,7 @@ describe('TemplateManager', () => {
   });
 
   describe('prepareTemplateData', () => {
-    it('should prepare data with exact and other matches', () => {
+    it('should prepare data with direct and category matches', () => {
       const examples: SelectedExample[] = [
         {
           id: '1',
@@ -181,7 +181,8 @@ describe('TemplateManager', () => {
             features: {
               stats: { formalityScore: 0.2, wordCount: 2 }
             },
-            wordCount: 2
+            wordCount: 2,
+            isDirectCorrespondence: true
           }
         },
         {
@@ -193,7 +194,8 @@ describe('TemplateManager', () => {
             features: {
               stats: { formalityScore: 0.7, wordCount: 2 }
             },
-            wordCount: 2
+            wordCount: 2,
+            isDirectCorrespondence: false
           }
         }
       ];
@@ -212,8 +214,8 @@ describe('TemplateManager', () => {
         }
       });
       
-      expect(data.exactExamples).toHaveLength(1);
-      expect(data.otherExamples).toHaveLength(1);
+      expect(data.directExamples).toHaveLength(1);
+      expect(data.categoryExamples).toHaveLength(1);
       expect(data.meta.relationshipMatchCount).toBe(1);
       expect(data.meta.avgWordCount).toBe(2);
       expect(data.profile).toBeDefined();
@@ -225,7 +227,7 @@ const mockData = {
   recipientEmail: 'test@example.com',
   relationship: 'friend',
   incomingEmail: 'How are you doing?',
-  exactExamples: [
+  directExamples: [
     {
       text: 'Hey! I am doing great, thanks for asking!',
       relationship: 'friend',
