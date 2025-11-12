@@ -20,12 +20,6 @@ export interface SpamCheckParams {
 
 export type { SpamCheckResult };
 
-interface UpdateResponseStatsParams {
-  userId: string;
-  emailAccountId: string;
-  senderEmail: string;
-}
-
 export class SpamDetector {
   private promptFormatter: PromptFormatterV2;
   private llmClient: LLMClient | null = null;
@@ -75,40 +69,13 @@ export class SpamDetector {
    */
   private async getResponseCount(userId: string, senderEmail: string): Promise<number> {
     const result = await pool.query(
-      `SELECT COALESCE(SUM(response_count), 0)::int as total
-       FROM sender_response_stats
-       WHERE user_id = $1 AND sender_email = $2`,
+      `SELECT COUNT(*)::int as total
+       FROM email_sent
+       WHERE user_id = $1 AND recipient_email = $2`,
       [userId, senderEmail.toLowerCase()]
     );
 
     return result.rows[0]?.total || 0;
-  }
-
-  /**
-   * Update response statistics after user replies to sender
-   * @param params - User, account, and sender
-   */
-  async updateResponseStats(params: UpdateResponseStatsParams): Promise<void> {
-    const { userId, emailAccountId, senderEmail } = params;
-
-    await pool.query(
-      `INSERT INTO sender_response_stats (
-        user_id,
-        email_account_id,
-        sender_email,
-        response_count,
-        first_response_at,
-        last_response_at,
-        last_updated_at
-      )
-      VALUES ($1, $2, $3, 1, NOW(), NOW(), NOW())
-      ON CONFLICT (user_id, email_account_id, sender_email)
-      DO UPDATE SET
-        response_count = sender_response_stats.response_count + 1,
-        last_response_at = NOW(),
-        last_updated_at = NOW()`,
-      [userId, emailAccountId, senderEmail.toLowerCase()]
-    );
   }
 
   /**

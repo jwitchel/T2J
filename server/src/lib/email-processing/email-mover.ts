@@ -156,7 +156,8 @@ export class EmailMover {
       const folderPrefs = preferences.folderPreferences;
 
       // Determine saved Drafts folder path from user preferences
-      const draftsFolderPath = (folderPrefs as any).draftsFolderPath as string;
+      // Default to [Gmail]/Drafts for Gmail accounts if not configured
+      const draftsFolderPath = ((folderPrefs as any)?.draftsFolderPath as string) || '[Gmail]/Drafts';
 
       await withImapContext(emailAccountId, userId, async () => {
         // Create IMAP operations instance (connection managed by context)

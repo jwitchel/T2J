@@ -3,6 +3,7 @@ import { TemplateManager, EnhancedRelationshipProfile } from './template-manager
 import { WritingPatterns } from './writing-pattern-analyzer';
 import { EmailActions } from '../email-actions';
 import { SpamCheckResult } from './types';
+import { SimplifiedEmailMetadata } from './types';
 
 export interface PromptFormatterParams {
   incomingEmail: string;
@@ -10,20 +11,12 @@ export interface PromptFormatterParams {
   relationship: string;
   examples: SelectedExample[];
   relationshipProfile?: EnhancedRelationshipProfile | null;
-  nlpFeatures?: any; // NLP features from the incoming email
   writingPatterns?: WritingPatterns | null;
   userNames?: {
     name: string;
     nicknames?: string;
   };
-  incomingEmailMetadata?: {
-    from: { address: string; name?: string }[];
-    to: { address: string; name?: string }[];
-    cc?: { address: string; name?: string }[];
-    subject: string;
-    date: Date;
-    rawMessage: string;  // Complete raw email (headers + body)
-  };
+  incomingEmailMetadata?: SimplifiedEmailMetadata;
 }
 
 export interface FormattedPrompt {

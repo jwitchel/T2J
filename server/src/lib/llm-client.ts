@@ -312,12 +312,19 @@ export class LLMClient {
     systemPrompt?: string;
   }): Promise<string> {
     try {
+      console.log('[LLMClient] Generating response message...');
+      console.log('[LLMClient] Prompt (first 500 chars):', prompt.substring(0, 500));
+
       const text = await this.generate(prompt, {
         ...options,
         maxTokens: options?.maxTokens ?? 2000,
       });
 
+      console.log('[LLMClient] Raw response (first 500 chars):', text.substring(0, 500));
+      console.log('[LLMClient] Raw response length:', text.length);
+
       const parsed = this.extractJSON(text, 'response generation');
+      console.log('[LLMClient] Parsed JSON:', JSON.stringify(parsed).substring(0, 500));
 
       this.validateJSON(
         parsed,
@@ -326,8 +333,12 @@ export class LLMClient {
         'response generation'
       );
 
+      console.log('[LLMClient] Message field length:', parsed.message?.length || 0);
+      console.log('[LLMClient] Message field (first 200 chars):', parsed.message?.substring(0, 200) || '(empty)');
+
       return parsed.message;
     } catch (error: unknown) {
+      console.error('[LLMClient] Error in generateResponseMessage:', error);
       this.handleJSONError(error, 'Response generation');
     }
   }

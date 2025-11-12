@@ -14,7 +14,6 @@ import { emailLockManager } from '../email-lock-manager';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../db';
 import { ActionHelpers } from '../email-actions';
-import { getSpamDetector } from './spam-detector';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -300,39 +299,10 @@ export class InboxProcessor {
   }
 
   /**
-   * Update sender response statistics if this was a draft action (user engagement)
+   * Save email to database (best effort - doesn't throw on error)
    * @private
    */
-  private async _updateSenderResponseStats(
-    context: ProcessingContext,
-    draft: DraftEmail
-  ): Promise<void> {
-    // Only track draft actions (reply, reply-all, forward, forward-with-comment)
-    if (!ActionHelpers.isDraftAction(draft.meta.recommendedAction)) {
-      return;
-    }
-
-    try {
-      const senderEmail = draft.draftMetadata.originalFrom!.toLowerCase();
-
-      // Get SpamDetector instance and update stats
-      const spamDetector = await getSpamDetector(context.providerId);
-      await spamDetector.updateResponseStats({
-        userId: context.userId,
-        emailAccountId: context.accountId,
-        senderEmail
-      });
-    } catch (error: unknown) {
-      // Log but don't throw - this is best-effort tracking
-      console.error('[InboxProcessor] Failed to update sender response stats:', error);
-    }
-  }
-
-  /**
-   * Save email to Qdrant (best effort - doesn't throw on error)
-   * @private
-   */
-  private async _saveToQdrant(
+  private async _saveToDatabase(
     context: ProcessingContext,
     draft: DraftEmail
   ): Promise<void> {
@@ -361,8 +331,13 @@ export class InboxProcessor {
           confidence: 0.5,
           detectionMethod: 'default'
         },
-        spamAnalysis: draft.draftMetadata.spamAnalysis
+        spamAnalysis: draft.draftMetadata.spamAnalysis,
+        generatedContent: draft.body
       };
+
+      console.log('[InboxProcessor] draft.body length before saving:', draft.body?.length || 0);
+      console.log('[InboxProcessor] draft.body (first 200 chars):', draft.body?.substring(0, 200) || '(empty)');
+      console.log('[InboxProcessor] llmResponse.generatedContent length:', llmResponse.generatedContent?.length || 0);
 
       await emailStorageService.saveEmail({
         userId: context.userId,
@@ -372,10 +347,12 @@ export class InboxProcessor {
         folderName: DEFAULT_SOURCE_FOLDER,
         llmResponse
       });
+
+      console.log('[InboxProcessor] Email saved to database with draft_tracking entry');
     } catch (error: unknown) {
-      console.error(`[InboxProcessor] ⚠️ QDRANT SAVE FAILED for ${context.message.messageId}:`, error);
+      console.error(`[InboxProcessor] ⚠️ DATABASE SAVE FAILED for ${context.message.messageId}:`, error);
       console.error(`[InboxProcessor] This email will not be viewable in history!`);
-      // Don't throw - Qdrant is best-effort
+      // Don't throw - database save is best-effort
     }
   }
 
@@ -485,11 +462,8 @@ export class InboxProcessor {
       // 7. UPDATE ACTION TRACKING WITH FINAL DESTINATION
       await this._updateTracking(context, draft, imapResult.destination);
 
-      // 7b. UPDATE SENDER RESPONSE STATS (if reply action)
-      await this._updateSenderResponseStats(context, draft);
-
-      // 8. SAVE TO QDRANT (best effort - doesn't fail on error)
-      await this._saveToQdrant(context, draft);
+      // 8. SAVE TO DATABASE (best effort - doesn't fail on error)
+      await this._saveToDatabase(context, draft);
 
       // 9. BUILD SUCCESS RESULT AND LOG SUMMARY
       const result = this._buildResult(context, {
@@ -584,7 +558,7 @@ export class InboxProcessor {
         });
 
         // Process emails in parallel for better throughput
-        // Note: processEmail now handles Qdrant storage internally (DRY)
+        // Note: processEmail now handles database storage internally (DRY)
         const processingPromises = toProcess.map(msg =>
           this.processEmail({
             message: {

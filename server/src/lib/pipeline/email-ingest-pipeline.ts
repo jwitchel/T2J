@@ -1,10 +1,12 @@
 import { extractEmailFeatures, ProcessedEmail } from './types';
-import { VectorStore } from '../vector/qdrant-client';
 import { EmbeddingService } from '../vector/embedding-service';
 import { RelationshipDetector } from '../relationships/relationship-detector';
 import { withRetry } from './retry-utils';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import { nameRedactor } from '../name-redactor';
+import { pool } from '../db';
+import { EmailRepository } from '../repositories/email-repository';
+import { validateRawMessage } from '../email-storage-service';
 
 export interface BatchResult {
   success: number;
@@ -13,8 +15,9 @@ export interface BatchResult {
 }
 
 export class EmailIngestPipeline {
+  private emailRepository: EmailRepository;
+
   constructor(
-    private vectorStore: VectorStore,
     private embeddingService: EmbeddingService,
     private relationshipDetector: RelationshipDetector,
     private styleAggregation: StyleAggregationService,
@@ -23,14 +26,16 @@ export class EmailIngestPipeline {
       parallelism: number;
       errorThreshold: number;
     }
-  ) {}
+  ) {
+    this.emailRepository = new EmailRepository(pool);
+  }
   
-  async processHistoricalEmails(userId: string, _emailAccountId: string, emails?: ProcessedEmail[]) {
+  async processHistoricalEmails(userId: string, emailAccountId: string, emails?: ProcessedEmail[]) {
     const startTime = Date.now();
     let processed = 0;
     let errors = 0;
     const relationshipStats: Record<string, number> = {};
-    
+
     try {
       // For now, we'll process emails passed in directly
       // In the future, this will stream from IMAP
@@ -43,9 +48,9 @@ export class EmailIngestPipeline {
           relationshipDistribution: {}
         };
       }
-      
+
       for await (const batch of this.batchStream(this.asyncIterableFromArray(emails), this.config.batchSize)) {
-        const results = await this.processBatch(userId, batch);
+        const results = await this.processBatch(userId, emailAccountId, batch);
         
         processed += results.success;
         errors += results.errors;
@@ -74,10 +79,8 @@ export class EmailIngestPipeline {
             const aggregated = await this.styleAggregation.aggregateStyleForUser(userId, relationshipType);
             await this.styleAggregation.updateStylePreferences(userId, relationshipType, aggregated);
             console.log(`Updated style for ${userId} -> ${relationshipType}: ${aggregated.emailCount} emails`);
-          } catch (error: any) {
-            if (error.code !== '23503') { // PostgreSQL foreign key violation
-              console.error(`Style aggregation failed for ${relationshipType}:`, error);
-            }
+          } catch (error: unknown) {
+            console.error(`Style aggregation failed for ${relationshipType}:`, error);
           }
         }
       }
@@ -89,7 +92,7 @@ export class EmailIngestPipeline {
         relationshipDistribution: relationshipStats
       };
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Pipeline failed:', error);
       throw error;
     }
@@ -101,8 +104,8 @@ export class EmailIngestPipeline {
     }
   }
   
-  private async processBatch(userId: string, emails: ProcessedEmail[]): Promise<BatchResult> {
-    const tasks = emails.map(email => this.processEmail(userId, email));
+  private async processBatch(userId: string, emailAccountId: string, emails: ProcessedEmail[]): Promise<BatchResult> {
+    const tasks = emails.map(email => this.processEmail(userId, emailAccountId, email));
     const results = await Promise.allSettled(tasks);
     
     const successful = results.filter(r => r.status === 'fulfilled');
@@ -117,42 +120,40 @@ export class EmailIngestPipeline {
     };
   }
   
-  async processEmail(userId: string, email: ProcessedEmail) {
+  async processEmail(userId: string, emailAccountId: string, email: ProcessedEmail) {
     // Validate that we have the raw message
-    if (!email.rawMessage || email.rawMessage.trim() === '') {
-      throw new Error(`[Email Ingestion] Missing raw RFC 5322 message for email ${email.messageId}. This is required for proper email storage.`);
-    }
-    
+    validateRawMessage(email.fullMessage, `Email Ingestion - ${email.messageId}`);
+
     // Handle emails without userReply - set placeholder for forwarded emails
     let userReplyToProcess = email.userReply;
     if (!userReplyToProcess) {
       userReplyToProcess = '[ForwardedWithoutComment]';
     }
-    
+
     // Redact names from the user's reply text only
     const redactionResult = nameRedactor.redactNames(userReplyToProcess);
     const redactedUserReply = redactionResult.text;
-    
+
     // Get all unique recipients (TO, CC, and BCC)
     const allRecipients = [
       ...(email.to || []),
       ...(email.cc || []),
       ...(email.bcc || [])
     ];
-    
+
     // Remove duplicates based on email address
     const uniqueRecipients = Array.from(
       new Map(allRecipients.map(r => [r.address.toLowerCase(), r])).values()
     );
-    
+
     if (uniqueRecipients.length === 0) {
       throw new Error(`[Email Ingestion] No recipients found for email ${email.messageId}`);
     }
-    
+
     // Process the email for each unique recipient
     const results = await Promise.allSettled(
-      uniqueRecipients.map(recipient => 
-        this.processEmailForRecipient(userId, email, recipient, redactedUserReply, redactionResult)
+      uniqueRecipients.map(recipient =>
+        this.processEmailForRecipient(userId, emailAccountId, email, recipient, redactedUserReply, redactionResult)
       )
     );
     
@@ -174,10 +175,11 @@ export class EmailIngestPipeline {
   
   private async processEmailForRecipient(
     userId: string,
+    emailAccountId: string,
     email: ProcessedEmail,
     recipient: { address: string; name?: string },
     redactedUserReply: string,
-    redactionResult: any
+    _redactionResult: any
   ) {
     
     // Extract NLP features from the redacted user reply ONLY
@@ -211,7 +213,7 @@ export class EmailIngestPipeline {
             formalityScore: features.stats.formalityScore
           }
         });
-      } catch (error) {
+      } catch (error: unknown) {
         const emailPreview = email.textContent ? email.textContent.split(/\s+/).slice(0, 50).join(' ') : 'No content';
         const errorContext = `
 Email Details:
@@ -241,68 +243,44 @@ Email Details:
       }
     );
     
-    // Create unique ID for this email-recipient combination
-    const vectorId = `${email.messageId}-${recipient.address}`;
-    
-    // Store in vector database with retry
+    // Store in PostgreSQL with retry
     await withRetry(
-      () => this.vectorStore.upsertEmail({
-      id: vectorId, // Unique ID per recipient
-      userId,
-      vector,
-      metadata: {
-        emailId: email.messageId,
-        userId,
-        userReply: redactedUserReply, // Store redacted user reply for analysis
-        rawText: email.textContent || '', // Store original full text (with quotes, etc)
-        respondedTo: email.respondedTo, // The quoted content the user was responding to
-        redactedNames: redactionResult.namesFound, // Store names that were redacted
-        redactedEmails: redactionResult.emailsFound, // Store emails that were redacted
-        recipientEmail: recipient.address || '',
-        subject: email.subject,
-        sentDate: email.date.toISOString(),
-        features,
-        relationship: {
-          type: relationship.relationship,
-          confidence: relationship.confidence,
-          detectionMethod: relationship.method
-        },
-        frequencyScore: 1,
-        wordCount: features.stats.wordCount,
-        eml_file: email.rawMessage || '' // Store raw RFC 5322 message
-      }
-    }),
+      async () => {
+        // Check if email already exists for this recipient
+        const exists = await this.emailRepository.sentEmailExists(
+          email.messageId,
+          userId,
+          recipient.address
+        );
+
+        if (exists) {
+          // Email already exists, skip
+          return;
+        }
+
+        // Insert new email with actual email_account_id
+        await this.emailRepository.insertSentEmail({
+          emailId: email.messageId,
+          userId,
+          emailAccountId,
+          userReply: redactedUserReply,
+          rawText: email.textContent || '',  // Can be empty for HTML-only emails
+          subject: email.subject,
+          recipientEmail: recipient.address,
+          relationshipType: relationship.relationship,
+          wordCount: features.stats.wordCount,
+          sentDate: email.date,
+          semanticVector: vector,
+          fullMessage: email.fullMessage  // Validated above - cannot be empty
+        });
+      },
       {
         onRetry: (error, attempt) => {
-          console.warn(`Vector store operation failed (attempt ${attempt}):`, error.message);
+          console.warn(`PostgreSQL insert operation failed (attempt ${attempt}):`, error.message);
         }
       }
     );
-    
-    // Style aggregation should be done once after all emails are processed,
-    // not for every single email. Commenting out to prevent inefficiency and race conditions.
-    // TODO: Move style aggregation to happen once per relationship after batch processing
-    
-    // setImmediate(async () => {
-    //   try {
-    //     const aggregated = await this.styleAggregation
-    //       .aggregateStyleForUser(userId, relationship.relationship);
-    //     
-    //     await this.styleAggregation.updateStylePreferences(
-    //       userId,
-    //       relationship.relationship,
-    //       aggregated
-    //     );
-    //     
-    //     console.log(`Updated style for ${userId} -> ${relationship.relationship}: ${aggregated.emailCount} emails`);
-    //   } catch (error: any) {
-    //     // Only log real errors, not foreign key violations from test data
-    //     if (error.code !== '23503') { // PostgreSQL foreign key violation
-    //       console.error('Style aggregation failed:', error);
-    //     }
-    //   }
-    // });
-    
+
     return { relationship: relationship.relationship };
   }
 
