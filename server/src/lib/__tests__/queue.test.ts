@@ -18,7 +18,7 @@ describe('BullMQ Queue Configuration', () => {
       await toneProfileQueue.pause();
       await emailProcessingQueue.obliterate({ force: true });
       await toneProfileQueue.obliterate({ force: true });
-    } catch (error) {
+    } catch (error: unknown) {
       // Ignore obliterate errors
     }
     

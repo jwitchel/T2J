@@ -5,7 +5,7 @@ import { encryptPassword } from '../../lib/crypto';
 // We need to test against the actual server
 // Import it in a way that prevents automatic startup
 process.env.SKIP_SERVER_START = 'true';
-import { app } from '../../server';
+import { app } from './db';
 
 describe('Generate API', () => {
   let pool: Pool;

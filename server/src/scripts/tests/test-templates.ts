@@ -18,7 +18,11 @@ const createSampleExamples = (): SelectedExample[] => [
       wordCount: 18,
       subject: 'Re: Dinner plans'
     },
-    score: 0.95
+    scores: {
+      semantic: 0.92,
+      style: 0.97,
+      combined: 0.95
+    }
   },
   {
     id: 'ex2',
@@ -33,7 +37,11 @@ const createSampleExamples = (): SelectedExample[] => [
       wordCount: 15,
       subject: 'Re: Movie night'
     },
-    score: 0.88
+    scores: {
+      semantic: 0.85,
+      style: 0.90,
+      combined: 0.88
+    }
   },
   {
     id: 'ex3',
@@ -48,7 +56,11 @@ const createSampleExamples = (): SelectedExample[] => [
       wordCount: 34,
       subject: 'Re: Q3 Proposal Review'
     },
-    score: 0.75
+    scores: {
+      semantic: 0.72,
+      style: 0.78,
+      combined: 0.75
+    }
   }
 ];
 
