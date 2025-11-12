@@ -1,10 +1,11 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { withImapJson } from '../lib/http/imap-utils';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import { EmailActionTracker } from '../lib/email-action-tracker';
 import { inboxProcessor } from '../lib/email-processing/inbox-processor';
 import { ImapOperations } from '../lib/imap-operations';
+import PostalMime from 'postal-mime';
 
 const router = express.Router();
 
@@ -17,15 +18,15 @@ router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
     messageId,
     messageSubject,
     messageFrom,
-    rawMessage,
+    fullMessage,
     providerId,
     generatedDraft
   } = req.body;
 
   // Validate required fields
-  if (!emailAccountId || !rawMessage || !providerId || !messageUid) {
+  if (!emailAccountId || !fullMessage || !providerId || !messageUid) {
     res.status(400).json({
-      error: 'Missing required fields: emailAccountId, rawMessage, providerId, messageUid'
+      error: 'Missing required fields: emailAccountId, fullMessage, providerId, messageUid'
     });
     return;
   }
@@ -38,7 +39,7 @@ router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
         messageId,
         subject: messageSubject,
         from: messageFrom,
-        rawMessage
+        fullMessage
       },
       accountId: emailAccountId,
       userId,
@@ -107,7 +108,7 @@ router.get('/emails/:accountId', requireAuth, async (req, res): Promise<void> =>
           date: msg.date || new Date(),
           flags: msg.flags || [],
           size: msg.size || 0,
-          rawMessage: msg.rawMessage || ''
+          fullMessage: msg.fullMessage || ''
         }));
       }
 
@@ -246,8 +247,6 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
     const userId = (req as any).user.id;
     const { accountId, messageId } = req.params;
 
-    console.log('[inbox-get-email] Looking for email:', { userId, accountId, messageId });
-
     // Validate account belongs to user
     const accountCheck = await pool.query(
       'SELECT id FROM email_accounts WHERE id = $1 AND user_id = $2',
@@ -255,22 +254,50 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
     );
 
     if (accountCheck.rows.length === 0) {
-      console.log('[inbox-get-email] Account not found or unauthorized');
       res.status(404).json({ error: 'Email account not found' });
       return;
     }
 
-    // Fetch email from Qdrant
-    const { VectorStore, RECEIVED_COLLECTION } = await import('../lib/vector/qdrant-client');
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
+    // Fetch email from PostgreSQL with action tracking and draft context
+    const emailResult = await pool.query(`
+      SELECT
+        er.email_id as "emailId",
+        er.subject,
+        er.sender_email as "senderEmail",
+        er.sender_name as "senderName",
+        er.received_date as "receivedDate",
+        er.full_message as "fullMessage",
+        er.word_count as "wordCount",
+        eat.action_taken as "actionTaken",
+        dt.id as "draftId",
+        dt.context_data as "contextData",
+        dt.created_at as "draftCreatedAt",
+        dt.generated_content as "draftBody"
+      FROM email_received er
+      LEFT JOIN email_action_tracking eat
+        ON eat.message_id = er.email_id
+        AND eat.email_account_id = er.email_account_id
+      LEFT JOIN draft_tracking dt
+        ON dt.original_message_id = er.email_id
+        AND dt.user_id = er.user_id
+      WHERE er.user_id = $1 AND er.email_account_id = $2 AND er.email_id = $3
+      LIMIT 1
+    `, [userId, accountId, messageId]);
 
-    let email = await vectorStore.getByMessageId(userId, accountId, messageId, RECEIVED_COLLECTION);
+    let email = emailResult.rows.length > 0 ? emailResult.rows[0] : null;
 
-    // If not found in Qdrant, check if it exists in action tracking and has a UID we can use
+    // Validate that actionTaken exists (must exist if email was processed)
+    if (email && !email.actionTaken) {
+      console.error('[inbox-get-email] Email exists but actionTaken is missing:', { emailId: email.emailId });
+      res.status(500).json({
+        error: 'Data integrity error - email exists without action tracking',
+        message: 'This email was processed but action tracking is missing. Please contact support.'
+      });
+      return;
+    }
+
+    // If not found in PostgreSQL, check if it exists in action tracking and has a UID we can use
     if (!email) {
-      console.log('[inbox-get-email] Email not found in Qdrant, checking action tracking for UID...');
-
       // Check if this email exists in the action tracking table with a UID
       const actionRecord = await pool.query(
         `SELECT eat.message_id, eat.uid, eat.subject, eat.created_at
@@ -282,7 +309,6 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
 
       if (actionRecord.rows.length > 0 && actionRecord.rows[0].uid) {
         const uid = actionRecord.rows[0].uid;
-        console.log('[inbox-get-email] Found UID in action tracking, fetching from IMAP:', { uid });
 
         // Fetch from IMAP using the UID
         try {
@@ -291,9 +317,8 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
 
           if (messages.length > 0) {
             const msg = messages[0];
-            console.log('[inbox-get-email] Retrieved email from IMAP');
 
-            // Return the email in the same format as Qdrant would
+            // Return the email in the same format as PostgreSQL would
             res.json({
               success: true,
               email: {
@@ -304,7 +329,7 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
                 to: msg.to || [],
                 cc: [], // CC not available from IMAP basic fetch
                 date: msg.date?.toISOString() || actionRecord.rows[0].created_at,
-                rawMessage: msg.rawMessage || '',
+                fullMessage: msg.fullMessage || '',
                 uid: msg.uid,
                 flags: msg.flags || [],
                 size: msg.size || 0,
@@ -320,7 +345,6 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
         }
       }
 
-      console.log('[inbox-get-email] Email not found in Qdrant or IMAP with filters:', { userId, accountId, messageId });
       res.status(404).json({
         error: 'Email not available',
         message: 'This email was processed before the history feature was implemented. Only newly processed emails can be viewed from history. Please process new emails to see them here.'
@@ -328,26 +352,66 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
       return;
     }
 
-    console.log('[inbox-get-email] Email found in Qdrant:', { emailId: email.metadata.emailId });
+    // Build llmResponse if draft context exists
+    let llmResponse = undefined;
+    if (email.contextData && email.draftId) {
+      const contextData = email.contextData;
+      llmResponse = {
+        meta: contextData.meta || {},
+        generatedAt: email.draftCreatedAt?.toISOString() || new Date().toISOString(),
+        providerId: contextData.providerId || 'unknown',
+        modelName: contextData.modelName || 'unknown',
+        draftId: email.draftId,
+        relationship: contextData.relationship || { type: 'unknown', confidence: 0, detectionMethod: 'none' },
+        spamAnalysis: contextData.spamAnalysis || { isSpam: false, indicators: [], senderResponseCount: 0 },
+        body: email.draftBody
+      };
+    }
 
-    // Return email data with metadata
+    // Parse email to extract To/CC from raw message
+    let toAddresses: string[] = [];
+    let ccAddresses: string[] = [];
+
+    try {
+      const parser = new PostalMime();
+      const parsed = await parser.parse(email.fullMessage);
+
+      // Extract To addresses
+      if (parsed.to && Array.isArray(parsed.to)) {
+        toAddresses = parsed.to
+          .map(addr => addr.address)
+          .filter((addr): addr is string => typeof addr === 'string' && addr.length > 0);
+      }
+
+      // Extract CC addresses
+      if (parsed.cc && Array.isArray(parsed.cc)) {
+        ccAddresses = parsed.cc
+          .map(addr => addr.address)
+          .filter((addr): addr is string => typeof addr === 'string' && addr.length > 0);
+      }
+    } catch (parseError) {
+      console.error('[Inbox] Error parsing email for To/CC:', parseError);
+      // Continue with empty arrays if parsing fails
+    }
+
+    // Return email data
     res.json({
       success: true,
       email: {
-        messageId: email.metadata.emailId,
-        subject: email.metadata.subject,
-        from: email.metadata.senderEmail || email.metadata.from,
-        fromName: email.metadata.senderName,
-        to: email.metadata.to || [],
-        cc: email.metadata.cc || [],
-        date: email.metadata.sentDate,
-        rawMessage: email.metadata.eml_file,
-        uid: email.metadata.uid,
-        flags: email.metadata.flags || [],
-        size: email.metadata.size || 0,
-        // Include LLM response metadata if available
-        llmResponse: email.metadata.llmResponse,
-        relationship: email.metadata.relationship
+        messageId: email.emailId,
+        subject: email.subject,
+        from: email.senderEmail,
+        fromName: email.senderName,
+        to: toAddresses,
+        cc: ccAddresses,
+        date: email.receivedDate,
+        rawMessage: email.fullMessage,
+        uid: undefined,  // UID not stored in email_received
+        flags: [],
+        size: email.wordCount || 0,
+        actionTaken: email.actionTaken,  // Validated above - must exist
+        llmResponse,  // From draft_tracking if available
+        relationship: llmResponse?.relationship
       }
     });
 

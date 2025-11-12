@@ -3,13 +3,13 @@ import { requireAuth } from '../middleware/auth';
 import { ImapOperations } from '../lib/imap-operations';
 import { withImapContext } from '../lib/imap-context';
 import { ToneLearningOrchestrator } from '../lib/pipeline/tone-learning-orchestrator';
-import { VectorStore, SENT_COLLECTION } from '../lib/vector/qdrant-client';
 import { realTimeLogger } from '../lib/real-time-logger';
 import { WritingPatternAnalyzer } from '../lib/pipeline/writing-pattern-analyzer';
 import { RegexSignatureDetector } from '../lib/regex-signature-detector';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import { EmbeddingService } from '../lib/vector/embedding-service';
 import { emailStorageService } from '../lib/email-storage-service';
+import { vectorSearchService } from '../lib/vector';
 
 const router = express.Router();
 const regexSignatureDetector = new RegexSignatureDetector(pool);
@@ -135,7 +135,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
 
         try {
           // Validate message has required data
-          if (!fullMessage.rawMessage) {
+          if (!fullMessage.fullMessage) {
             errors++;
             console.error(`[Training] Email ${fullMessage.uid} missing raw message`);
             realTimeLogger.log(userId, {
@@ -257,15 +257,29 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
 router.post('/wipe', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
-    await vectorStore.deleteUserData(userId);
-    
+
+    // Clear vectors from PostgreSQL (vectors are now stored in email_sent/email_received)
+    await pool.query(`
+      UPDATE email_sent
+      SET semantic_vector = NULL, style_vector = NULL, vector_generated_at = NULL
+      WHERE user_id = $1
+    `, [userId]);
+
+    await pool.query(`
+      UPDATE email_received
+      SET semantic_vector = NULL, style_vector = NULL, vector_generated_at = NULL
+      WHERE user_id = $1
+    `, [userId]);
+
+    // Delete style clusters
+    await pool.query(`
+      DELETE FROM style_clusters WHERE user_id = $1
+    `, [userId]);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Wipe error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to wipe data',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
@@ -281,11 +295,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     // Initialize services
     const patternAnalyzer = new WritingPatternAnalyzer();
     await patternAnalyzer.initialize();
-    
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
-    
-    
+
     // Clear existing patterns to make the operation idempotent
     realTimeLogger.log(userId, {
       userId,
@@ -296,9 +306,9 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         raw: 'Clearing existing writing patterns...'
       }
     });
-    
+
     await patternAnalyzer.clearPatterns(userId);
-    
+
     // Log the start of pattern analysis
     realTimeLogger.log(userId, {
       userId,
@@ -309,33 +319,39 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         raw: 'Starting comprehensive pattern analysis across all email accounts'
       }
     });
-    
-    // Get ALL sent emails for the user across ALL accounts and relationships
+
+    // Get ALL sent emails for the user across ALL accounts and relationships from PostgreSQL
     // (Pattern analysis uses sent emails to learn the user's writing style)
-    // IMPORTANT: Only fetch fields we need to avoid hitting string length limits
-    const scrollResult = await vectorStore['client'].scroll(SENT_COLLECTION, {
-      filter: {
-        must: [
-          { key: 'userId', match: { value: userId } }
-        ]
-      },
-      limit: 10000,
-      with_payload: [
-        'userId',
-        'emailAccountId',
-        'userReply',
-        'sentDate',
-        'relationship',
-        'recipientEmail',
-        'subject',
-        'emailId'
-      ],
-      with_vector: false
-    });
-    
-    const allEmails = scrollResult.points.map(point => ({
-      id: point.id,
-      metadata: point.payload as any
+    const emailsResult = await pool.query(`
+      SELECT
+        id,
+        user_id as "userId",
+        email_account_id as "emailAccountId",
+        user_reply as "userReply",
+        sent_date as "sentDate",
+        relationship_type as relationship,
+        recipient_email as "recipientEmail",
+        subject,
+        email_id as "emailId"
+      FROM email_sent
+      WHERE user_id = $1
+        AND semantic_vector IS NOT NULL
+      ORDER BY sent_date DESC
+      LIMIT 10000
+    `, [userId]);
+
+    const allEmails = emailsResult.rows.map(row => ({
+      id: row.id,
+      metadata: {
+        userId: row.userId,
+        emailAccountId: row.emailAccountId,
+        userReply: row.userReply,
+        sentDate: row.sentDate,
+        relationship: { type: row.relationship },
+        recipientEmail: row.recipientEmail,
+        subject: row.subject,
+        emailId: row.emailId
+      }
     }));
     
     if (allEmails.length === 0) {
@@ -359,7 +375,90 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         }
       }
     });
-    
+
+    // Generate style vectors for all emails via batchIndex()
+    // This is the correct phase for style vector generation (analysis, not ingestion)
+    realTimeLogger.log(userId, {
+      userId,
+      emailAccountId: 'pattern-training',
+      level: 'info',
+      command: 'patterns.training.generating_vectors',
+      data: {
+        raw: `Generating style vectors for ${allEmails.length} emails...`
+      }
+    });
+
+    try {
+      await vectorSearchService.initialize();
+
+      // Prepare documents for batchIndex
+      const documents = await Promise.all(allEmails.map(async (email: any) => {
+        // Fetch the full email text from database
+        const emailResult = await pool.query(
+          'SELECT user_reply FROM email_sent WHERE id = $1',
+          [email.id]
+        );
+
+        const text = emailResult.rows[0]?.user_reply || '';
+
+        return {
+          userId,
+          emailId: email.id,
+          emailType: 'sent' as const,
+          text,
+          metadata: {
+            userId: email.metadata.userId,
+            emailAccountId: email.metadata.emailAccountId,
+            recipientEmail: email.metadata.recipientEmail,
+            relationship: email.metadata.relationship?.type,
+            subject: email.metadata.subject,
+            sentDate: new Date(email.metadata.sentDate)
+          }
+        };
+      }));
+
+      const batchResult = await vectorSearchService.batchIndex({
+        documents,
+        batchSize: 50
+      });
+
+      // Log any errors that occurred during indexing
+      if (batchResult.errors.length > 0) {
+        console.error('[Pattern Analysis] Style vector indexing errors:');
+        batchResult.errors.slice(0, 5).forEach((err, idx) => {
+          console.error(`  ${idx + 1}. Document ${err.documentId}: ${err.error}`);
+        });
+        if (batchResult.errors.length > 5) {
+          console.error(`  ... and ${batchResult.errors.length - 5} more errors`);
+        }
+      }
+
+      realTimeLogger.log(userId, {
+        userId,
+        emailAccountId: 'pattern-training',
+        level: batchResult.failed > 0 ? 'error' : 'info',
+        command: 'patterns.training.vectors_complete',
+        data: {
+          parsed: {
+            indexed: batchResult.indexed,
+            failed: batchResult.failed,
+            errors: batchResult.errors.length
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Vector generation error:', error);
+      realTimeLogger.log(userId, {
+        userId,
+        emailAccountId: 'pattern-training',
+        level: 'error',
+        command: 'patterns.training.vector_error',
+        data: {
+          raw: `Style vector generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Continuing with pattern analysis...`
+        }
+      });
+    }
+
     // Group emails by relationship type (ignoring email account)
     const emailsByRelationship: Record<string, any[]> = {};
     allEmails.forEach((email: any) => {
@@ -425,7 +524,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
               htmlContent: null,
               userReply: textForAnalysis,
               respondedTo: '',
-              rawMessage: '' // Not needed for pattern analysis
+              fullMessage: '' // Not needed for pattern analysis
             };
           }));
         
@@ -526,7 +625,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
             htmlContent: null,
             userReply: textForAnalysis,
             respondedTo: '',
-            rawMessage: '' // Not needed for pattern analysis
+            fullMessage: '' // Not needed for pattern analysis
           };
         }));
       
@@ -666,111 +765,101 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
   }
 });
 
-// Clean signatures from existing emails
+// Clean signatures from existing emails (DEPRECATED - signatures are cleaned during ingestion)
 router.post('/clean-emails', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    
+
     // Log the start of cleaning
     realTimeLogger.log(userId, {
       userId,
       emailAccountId: 'all',
       level: 'info',
       command: 'CLEAN_EMAILS_START',
-      data: { 
+      data: {
         parsed: { action: 'Starting email signature cleaning' }
       }
     });
 
-    // Initialize services
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
-    
+    // Initialize embedding service
     const embeddingService = new EmbeddingService();
     await embeddingService.initialize();
-    
-    // Get all relationships for the user
-    const relationshipStats = await vectorStore.getRelationshipStats(userId);
-    const relationships = Object.keys(relationshipStats);
-    
+
+    // Get all sent emails from PostgreSQL
+    const emailsResult = await pool.query(`
+      SELECT id, user_reply as "userReply", raw_text as "rawText", relationship_type as relationship
+      FROM email_sent
+      WHERE user_id = $1
+      ORDER BY sent_date DESC
+      LIMIT 1000
+    `, [userId]);
+
     let totalProcessed = 0;
     let totalCleaned = 0;
     const results: any[] = [];
-    
-    for (const relationship of relationships) {
-      const emails = await vectorStore.getByRelationship(userId, relationship, 1000);
-      
-      for (const email of emails) {
-        // Use rawText if available, otherwise use extractedText
-        const originalText = email.metadata.rawText || email.metadata.userReply || '';
-        
-        // Remove signature
-        const result = await regexSignatureDetector.removeSignature(originalText, userId);
-        
-        if (result.signature && result.cleanedText.trim()) {
-          // Log the email that was cleaned
-          realTimeLogger.log(userId, {
-            userId,
-            emailAccountId: 'all',
-            level: 'info',
-            command: 'CLEAN_EMAIL',
-            data: { 
-              parsed: {
-                emailId: email.id,
-                relationship,
-                status: 'cleaned',
-                before: originalText,
-                after: result.cleanedText,
-                signatureRemoved: result.signature,
-                matchedPattern: result.matchedPattern
-              }
+
+    for (const email of emailsResult.rows) {
+      // Use rawText if available, otherwise use userReply
+      const originalText = email.rawText || email.userReply || '';
+
+      // Remove signature
+      const result = await regexSignatureDetector.removeSignature(originalText, userId);
+
+      if (result.signature && result.cleanedText.trim()) {
+        // Log the email that was cleaned
+        realTimeLogger.log(userId, {
+          userId,
+          emailAccountId: 'all',
+          level: 'info',
+          command: 'CLEAN_EMAIL',
+          data: {
+            parsed: {
+              emailId: email.id,
+              relationship: email.relationship,
+              status: 'cleaned',
+              before: originalText,
+              after: result.cleanedText,
+              signatureRemoved: result.signature,
+              matchedPattern: result.matchedPattern
             }
-          });
-          
-          // Update the email in vector store
-          const updatedMetadata = {
-            ...email.metadata,
-            userReply: result.cleanedText,
-            rawText: originalText
-          };
-          
-          // Re-embed with cleaned text
-          const { vector } = await embeddingService.embedText(result.cleanedText);
-          
-          // Update in vector store
-          await vectorStore.upsertEmail({
-            id: email.id,
-            userId,
-            vector,
-            metadata: updatedMetadata
-          });
-          
-          totalCleaned++;
-          results.push({
-            emailId: email.id,
-            relationship,
-            signatureLength: result.signature.split('\n').length
-          });
-        } else {
-          // Log emails that didn't need cleaning
-          realTimeLogger.log(userId, {
-            userId,
-            emailAccountId: 'all',
-            level: 'info',
-            command: 'CLEAN_EMAIL',
-            data: { 
-              parsed: {
-                emailId: email.id,
-                relationship,
-                status: 'no_signature_found',
-                text: originalText
-              }
+          }
+        });
+
+        // Re-embed with cleaned text
+        const { vector } = await embeddingService.embedText(result.cleanedText);
+
+        // Update in PostgreSQL
+        await pool.query(`
+          UPDATE email_sent
+          SET user_reply = $1, semantic_vector = $2, updated_at = NOW()
+          WHERE id = $3
+        `, [result.cleanedText, vector, email.id]);
+
+        totalCleaned++;
+        results.push({
+          emailId: email.id,
+          relationship: email.relationship,
+          signatureLength: result.signature.split('\n').length
+        });
+      } else {
+        // Log emails that didn't need cleaning
+        realTimeLogger.log(userId, {
+          userId,
+          emailAccountId: 'all',
+          level: 'info',
+          command: 'CLEAN_EMAIL',
+          data: {
+            parsed: {
+              emailId: email.id,
+              relationship: email.relationship,
+              status: 'no_signature_found',
+              text: originalText
             }
-          });
-        }
-        
-        totalProcessed++;
+          }
+        });
       }
+
+      totalProcessed++;
     }
     
     // Log completion
@@ -819,133 +908,121 @@ router.post('/clean-emails', requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-// Process emails: clean signatures and redact names
+// Process emails: clean signatures and redact names (DEPRECATED - processing done during ingestion)
 router.post('/process-emails', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    
+
     // Import nameRedactor
     const { nameRedactor } = await import('../lib/name-redactor');
-    
+
     // Log the start
     realTimeLogger.log(userId, {
       userId,
       emailAccountId: 'all',
       level: 'info',
       command: 'PROCESS_EMAILS_START',
-      data: { 
+      data: {
         parsed: { action: 'Starting email processing (signature removal + name redaction)' }
       }
     });
 
-    // Initialize services
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
-    
+    // Initialize embedding service
     const embeddingService = new EmbeddingService();
     await embeddingService.initialize();
-    
-    // Get all relationships for the user
-    const relationshipStats = await vectorStore.getRelationshipStats(userId);
-    const relationships = Object.keys(relationshipStats);
-    
+
+    // Get all sent emails from PostgreSQL
+    const emailsResult = await pool.query(`
+      SELECT id, user_reply as "userReply", raw_text as "rawText", relationship_type as relationship
+      FROM email_sent
+      WHERE user_id = $1
+      ORDER BY sent_date DESC
+      LIMIT 1000
+    `, [userId]);
+
     let totalProcessed = 0;
     let totalCleaned = 0;
     let totalRedacted = 0;
     let totalNamesFound = 0;
     let totalEmailsFound = 0;
     const results: any[] = [];
-    
-    for (const relationship of relationships) {
-      const emails = await vectorStore.getByRelationship(userId, relationship, 1000);
-      
-      for (const email of emails) {
-        // Get the original text (prefer rawText if available)
-        const originalText = email.metadata.rawText || email.metadata.userReply || '';
-        
-        // Step 1: Remove signature
-        const signatureResult = await regexSignatureDetector.removeSignature(originalText, userId);
-        const textAfterSignatureRemoval = signatureResult.cleanedText || originalText;
-        
-        // Step 2: Redact names and emails from the signature-cleaned text
-        const redactionResult = nameRedactor.redactNames(textAfterSignatureRemoval);
-        const finalText = redactionResult.text;
-        
-        // Only update if something changed
-        if (signatureResult.signature || redactionResult.namesFound.length > 0 || redactionResult.emailsFound.length > 0) {
-          // Log the processing
-          realTimeLogger.log(userId, {
-            userId,
-            emailAccountId: 'all',
-            level: 'info',
-            command: 'PROCESS_EMAIL',
-            data: { 
-              parsed: {
-                emailId: email.id,
-                relationship,
-                signatureRemoved: !!signatureResult.signature,
-                namesRedacted: redactionResult.namesFound,
-                namesCount: redactionResult.namesFound.length,
-                emailsRedacted: redactionResult.emailsFound,
-                emailsCount: redactionResult.emailsFound.length
-              }
+
+    for (const email of emailsResult.rows) {
+      // Get the original text (prefer rawText if available)
+      const originalText = email.rawText || email.userReply || '';
+
+      // Step 1: Remove signature
+      const signatureResult = await regexSignatureDetector.removeSignature(originalText, userId);
+      const textAfterSignatureRemoval = signatureResult.cleanedText || originalText;
+
+      // Step 2: Redact names and emails from the signature-cleaned text
+      const redactionResult = nameRedactor.redactNames(textAfterSignatureRemoval);
+      const finalText = redactionResult.text;
+
+      // Only update if something changed
+      if (signatureResult.signature || redactionResult.namesFound.length > 0 || redactionResult.emailsFound.length > 0) {
+        // Log the processing
+        realTimeLogger.log(userId, {
+          userId,
+          emailAccountId: 'all',
+          level: 'info',
+          command: 'PROCESS_EMAIL',
+          data: {
+            parsed: {
+              emailId: email.id,
+              relationship: email.relationship,
+              signatureRemoved: !!signatureResult.signature,
+              namesRedacted: redactionResult.namesFound,
+              namesCount: redactionResult.namesFound.length,
+              emailsRedacted: redactionResult.emailsFound,
+              emailsCount: redactionResult.emailsFound.length
             }
-          });
-          
-          // Update the email in vector store
-          const updatedMetadata = {
-            ...email.metadata,
-            userReply: finalText,  // Store fully processed text
-            rawText: originalText,     // Keep original text
-            redactedNames: redactionResult.namesFound,  // Store list of redacted names
-            redactedEmails: redactionResult.emailsFound  // Store list of redacted emails
-          };
-          
-          // Re-embed with fully processed text
-          const { vector } = await embeddingService.embedText(finalText);
-          
-          // Update in vector store
-          await vectorStore.upsertEmail({
-            id: email.id,
-            userId,
-            vector,
-            metadata: updatedMetadata
-          });
-          
-          if (signatureResult.signature) totalCleaned++;
-          if (redactionResult.namesFound.length > 0 || redactionResult.emailsFound.length > 0) totalRedacted++;
-          totalNamesFound += redactionResult.namesFound.length;
-          totalEmailsFound += redactionResult.emailsFound.length;
-          
-          results.push({
-            emailId: email.id,
-            relationship,
-            signatureRemoved: !!signatureResult.signature,
-            namesRedacted: redactionResult.namesFound,
-            emailsRedacted: redactionResult.emailsFound
-          });
-        }
-        
-        totalProcessed++;
-        
-        // Log progress every 50 emails
-        if (totalProcessed % 50 === 0) {
-          realTimeLogger.log(userId, {
-            userId,
-            emailAccountId: 'all',
-            level: 'info',
-            command: 'PROCESS_PROGRESS',
-            data: { 
-              parsed: {
-                processed: totalProcessed,
-                cleaned: totalCleaned,
-                redacted: totalRedacted,
-                totalNames: totalNamesFound,
-                totalEmails: totalEmailsFound
-              }
+          }
+        });
+
+        // Re-embed with fully processed text
+        const { vector } = await embeddingService.embedText(finalText);
+
+        // Update in PostgreSQL
+        await pool.query(`
+          UPDATE email_sent
+          SET user_reply = $1, semantic_vector = $2, updated_at = NOW()
+          WHERE id = $3
+        `, [finalText, vector, email.id]);
+
+        if (signatureResult.signature) totalCleaned++;
+        if (redactionResult.namesFound.length > 0 || redactionResult.emailsFound.length > 0) totalRedacted++;
+        totalNamesFound += redactionResult.namesFound.length;
+        totalEmailsFound += redactionResult.emailsFound.length;
+
+        results.push({
+          emailId: email.id,
+          relationship: email.relationship,
+          signatureRemoved: !!signatureResult.signature,
+          namesRedacted: redactionResult.namesFound,
+          emailsRedacted: redactionResult.emailsFound
+        });
+      }
+
+      totalProcessed++;
+
+      // Log progress every 50 emails
+      if (totalProcessed % 50 === 0) {
+        realTimeLogger.log(userId, {
+          userId,
+          emailAccountId: 'all',
+          level: 'info',
+          command: 'PROCESS_PROGRESS',
+          data: {
+            parsed: {
+              processed: totalProcessed,
+              cleaned: totalCleaned,
+              redacted: totalRedacted,
+              totalNames: totalNamesFound,
+              totalEmails: totalEmailsFound
             }
-          });
-        }
+          }
+        });
       }
     }
     
@@ -1003,139 +1080,105 @@ router.post('/process-emails', requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-// Redact names from existing emails
+// Redact names from existing emails (DEPRECATED - redaction done during ingestion)
 router.post('/redact-names', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    
+
     // Import nameRedactor
     const { nameRedactor } = await import('../lib/name-redactor');
-    
+
     // Log the start of redaction
     realTimeLogger.log(userId, {
       userId,
       emailAccountId: 'all',
       level: 'info',
       command: 'REDACT_NAMES_START',
-      data: { 
+      data: {
         parsed: { action: 'Starting name redaction for existing emails' }
       }
     });
 
-    // Initialize services
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
-    
+    // Initialize embedding service
     const embeddingService = new EmbeddingService();
     await embeddingService.initialize();
-    
-    // Get all relationships for the user
-    const relationshipStats = await vectorStore.getRelationshipStats(userId);
-    const relationships = Object.keys(relationshipStats);
-    
+
+    // Get all sent emails from PostgreSQL
+    const emailsResult = await pool.query(`
+      SELECT id, user_reply as "userReply", raw_text as "rawText", relationship_type as relationship
+      FROM email_sent
+      WHERE user_id = $1
+      ORDER BY sent_date DESC
+      LIMIT 1000
+    `, [userId]);
+
     let totalProcessed = 0;
     let totalRedacted = 0;
     let totalNamesFound = 0;
     const results: any[] = [];
-    
-    for (const relationship of relationships) {
-      const emails = await vectorStore.getByRelationship(userId, relationship, 1000);
-      
-      for (const email of emails) {
-        // Skip if already has redacted names stored
-        if (email.metadata.redactedNames && email.metadata.redactedNames.length > 0) {
-          totalProcessed++;
-          continue;
-        }
-        
-        // Use extractedText (which should already have signatures removed) for redaction
-        // Fall back to rawText if extractedText is not available
-        const textToRedact = email.metadata.userReply || email.metadata.rawText || '';
-        
-        // Store the original text (before any processing) if not already stored
-        const originalText = email.metadata.rawText || email.metadata.userReply || '';
-        
-        // Redact names from the signature-cleaned text
-        const redactionResult = nameRedactor.redactNames(textToRedact);
-        
-        if (redactionResult.namesFound.length > 0) {
-          // Log the email that was redacted
-          realTimeLogger.log(userId, {
-            userId,
-            emailAccountId: 'all',
-            level: 'info',
-            command: 'REDACT_EMAIL',
-            data: { 
-              parsed: {
-                emailId: email.id,
-                relationship,
-                status: 'redacted',
-                namesFound: redactionResult.namesFound,
-                count: redactionResult.namesFound.length
-              }
+
+    for (const email of emailsResult.rows) {
+      // Use userReply (which should already have signatures removed) for redaction
+      // Fall back to rawText if userReply is not available
+      const textToRedact = email.userReply || email.rawText || '';
+
+      // Redact names from the text
+      const redactionResult = nameRedactor.redactNames(textToRedact);
+
+      if (redactionResult.namesFound.length > 0) {
+        // Log the email that was redacted
+        realTimeLogger.log(userId, {
+          userId,
+          emailAccountId: 'all',
+          level: 'info',
+          command: 'REDACT_EMAIL',
+          data: {
+            parsed: {
+              emailId: email.id,
+              relationship: email.relationship,
+              status: 'redacted',
+              namesFound: redactionResult.namesFound,
+              count: redactionResult.namesFound.length
             }
-          });
-          
-          // Update the email in vector store
-          const updatedMetadata = {
-            ...email.metadata,
-            userReply: redactionResult.text,  // Store redacted text
-            rawText: originalText,               // Keep original text
-            redactedNames: redactionResult.namesFound  // Store list of redacted names
-          };
-          
-          // Re-embed with redacted text
-          const { vector } = await embeddingService.embedText(redactionResult.text);
-          
-          // Update in vector store
-          await vectorStore.upsertEmail({
-            id: email.id,
-            userId,
-            vector,
-            metadata: updatedMetadata
-          });
-          
-          totalRedacted++;
-          totalNamesFound += redactionResult.namesFound.length;
-          results.push({
-            emailId: email.id,
-            relationship,
-            namesRedacted: redactionResult.namesFound
-          });
-        } else {
-          // Update metadata to indicate no names were found
-          const updatedMetadata = {
-            ...email.metadata,
-            redactedNames: []  // Empty array indicates processing was done but no names found
-          };
-          
-          // Update in vector store (no need to re-embed if text didn't change)
-          await vectorStore.upsertEmail({
-            id: email.id,
-            userId,
-            vector: email.vector,  // Keep existing vector
-            metadata: updatedMetadata
-          });
-        }
-        
-        totalProcessed++;
-        
-        // Log progress every 50 emails
-        if (totalProcessed % 50 === 0) {
-          realTimeLogger.log(userId, {
-            userId,
-            emailAccountId: 'all',
-            level: 'info',
-            command: 'REDACT_PROGRESS',
-            data: { 
-              parsed: {
-                processed: totalProcessed,
-                redacted: totalRedacted,
-                totalNames: totalNamesFound
-              }
+          }
+        });
+
+        // Re-embed with redacted text
+        const { vector } = await embeddingService.embedText(redactionResult.text);
+
+        // Update in PostgreSQL
+        await pool.query(`
+          UPDATE email_sent
+          SET user_reply = $1, semantic_vector = $2, updated_at = NOW()
+          WHERE id = $3
+        `, [redactionResult.text, vector, email.id]);
+
+        totalRedacted++;
+        totalNamesFound += redactionResult.namesFound.length;
+        results.push({
+          emailId: email.id,
+          relationship: email.relationship,
+          namesRedacted: redactionResult.namesFound
+        });
+      }
+
+      totalProcessed++;
+
+      // Log progress every 50 emails
+      if (totalProcessed % 50 === 0) {
+        realTimeLogger.log(userId, {
+          userId,
+          emailAccountId: 'all',
+          level: 'info',
+          command: 'REDACT_PROGRESS',
+          data: {
+            parsed: {
+              processed: totalProcessed,
+              redacted: totalRedacted,
+              totalNames: totalNamesFound
             }
-          });
-        }
+          }
+        });
       }
     }
     
