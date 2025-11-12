@@ -26,8 +26,8 @@ export interface PromptTemplateData {
   };
 
   // Examples formatted for templates
-  exactExamples?: FormattedExample[];
-  otherExamples?: FormattedExample[];
+  directExamples?: FormattedExample[];     // Direct correspondence with recipient
+  categoryExamples?: FormattedExample[];   // Same relationship category
 
   // Relationship profile with aggregated style
   profile?: EnhancedRelationshipProfile | null;
@@ -246,11 +246,12 @@ export class TemplateManager {
       availableActions?: string;
     }
   ): PromptTemplateData {
-    const exactMatches = params.examples.filter(e => 
-      e.metadata.relationship?.type === params.relationship
+    // Split examples by source: direct correspondence vs relationship category
+    const directCorrespondenceExamples = params.examples.filter(e =>
+      e.metadata.isDirectCorrespondence === true
     );
-    const otherMatches = params.examples.filter(e => 
-      e.metadata.relationship?.type !== params.relationship
+    const categoryExamples = params.examples.filter(e =>
+      e.metadata.isDirectCorrespondence === false
     );
     
     // Debug logging
@@ -276,18 +277,18 @@ export class TemplateManager {
       incomingEmail: params.incomingEmail,
       userNames: params.userNames,
       incomingEmailMetadata: params.incomingEmailMetadata,
-      exactExamples: exactMatches.length > 0
-        ? this.formatExamplesForTemplate(exactMatches)
+      directExamples: directCorrespondenceExamples.length > 0
+        ? this.formatExamplesForTemplate(directCorrespondenceExamples)
         : undefined,
-      otherExamples: otherMatches.length > 0
-        ? this.formatExamplesForTemplate(otherMatches)
+      categoryExamples: categoryExamples.length > 0
+        ? this.formatExamplesForTemplate(categoryExamples)
         : undefined,
       profile: params.relationshipProfile,
       patterns: params.writingPatterns ? this.transformPatternsForTemplate(params.writingPatterns) : undefined,
       availableActions: params.availableActions,
       meta: {
         exampleCount: params.examples.length,
-        relationshipMatchCount: exactMatches.length,
+        relationshipMatchCount: directCorrespondenceExamples.length,
         avgWordCount,
         formalityLevel: this.describeFormalityLevel(avgFormality)
       }

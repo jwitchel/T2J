@@ -41,27 +41,34 @@ You must return a JSON object with this exact structure:
 }
 
 === YOUR WRITING EXAMPLES ===
-The following are examples of the writer's writing style chosen by similarity to the inbound email and the relationship of {{relationship}}.  
+The following are examples of the writer's writing style chosen by similarity to the inbound email and the relationship of {{relationship}}.
 IMPORTANT: Favor any convention you identify in the thread you're replying to, but you should **rely heavily on these examples for tone**. Consider the similarity score.
-{{#if exactExamples}}
+{{#if directExamples}}
 
-Examples from {{relationship}} relationships ({{exactExamples.length}} found):
-{{#each exactExamples}}
+=== DIRECT CORRESPONDENCE EXAMPLES ===
+The following examples are from emails you have previously sent to {{recipientEmail}}.
+These should be weighted most heavily for tone and style.
+({{directExamples.length}} examples)
 
+{{#each directExamples}}
 +++ Example {{inc @index}} (Combined: {{round this.combinedScore 2}} | Topic: {{round this.semanticScore 2}}, Tone: {{round this.styleScore 2}})+++
 Subject: {{this.subject}}
-Body: {{truncate this.text 1000}}
+Body: {{truncate this.text 500}}
+
 {{/each}}
-{{else}}
-No examples found for {{relationship}} relationship.
 {{/if}}
 
-{{#if otherExamples}}
-Additional examples from other relationships:
-{{#each otherExamples}}
+{{#if categoryExamples}}
+=== RELATIONSHIP CATEGORY EXAMPLES ===
+The following examples are from emails you have sent to others in {{relationship}} relationships.
+Use these for additional context about your typical style with this type of relationship.
+({{categoryExamples.length}} examples)
 
-Example {{inc @index}} ({{this.relationship}}, Combined: {{round this.combinedScore 2}} | Topic: {{round this.semanticScore 2}}, Tone: {{round this.styleScore 2}}):
-"{{truncate this.text 1000}}"
+{{#each categoryExamples}}
++++ Example {{inc @index}} (Combined: {{round this.combinedScore 2}} | Topic: {{round this.semanticScore 2}}, Tone: {{round this.styleScore 2}})+++
+Subject: {{this.subject}}
+Body: {{truncate this.text 500}}
+
 {{/each}}
 {{/if}}
 

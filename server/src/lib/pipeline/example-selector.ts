@@ -62,10 +62,10 @@ export class ExampleSelector {
   constructor(
     private relationshipDetector: RelationshipDetector
   ) {
-    // Load configuration from environment with defaults
-    this.exampleCount = parseInt(process.env.EXAMPLE_COUNT || '5');
-    this.directEmailMaxPct = parseFloat(process.env.DIRECT_EMAIL_MAX_PERCENTAGE || '0.4');
-    this.scoreThreshold = parseFloat(process.env.VECTOR_SCORE_THRESHOLD || '0.5');
+    // Load configuration from environment
+    this.exampleCount = parseInt(process.env.EXAMPLE_COUNT!);
+    this.directEmailMaxPct = parseFloat(process.env.DIRECT_EMAIL_MAX_PERCENTAGE!);
+    this.scoreThreshold = parseFloat(process.env.VECTOR_SCORE_THRESHOLD!);
   }
 
   /**
@@ -84,8 +84,8 @@ export class ExampleSelector {
    * Select examples for email draft generation
    *
    * Purpose: Implements two-phase selection strategy:
-   * 1. Direct correspondence (up to 40% of examples)
-   * 2. Same relationship category (remaining slots)
+   * 1. Direct correspondence (up to 60% of examples, default 6 out of 10)
+   * 2. Same relationship category (remaining slots, default 4 out of 10)
    *
    * Uses dual vector search (semantic + style) with temporal weighting
    *
@@ -125,8 +125,10 @@ export class ExampleSelector {
         directResults.map(r => r.id)
       );
 
-      // Step 4: Combine and format results
-      const examples = this._convertToSelectedExamples([...directResults, ...categoryResults], desiredCount);
+      // Step 4: Combine and format results, marking source type
+      const directExamples = this._convertToSelectedExamples(directResults, directResults.length, true);
+      const categoryExamples = this._convertToSelectedExamples(categoryResults, categoryResults.length, false);
+      const examples = [...directExamples, ...categoryExamples].slice(0, desiredCount);
 
       // Step 5: Calculate statistics
       const stats = this._calculateStats(
@@ -255,11 +257,18 @@ export class ExampleSelector {
    * Purpose: Standardizes result format for upstream consumers (prompt templates)
    * @private
    */
-  private _convertToSelectedExamples(matches: SearchMatch[], maxCount: number): SelectedExample[] {
+  private _convertToSelectedExamples(
+    matches: SearchMatch[],
+    maxCount: number,
+    isDirectCorrespondence: boolean
+  ): SelectedExample[] {
     return matches.slice(0, maxCount).map(match => ({
       id: match.id,
       text: match.text || '',
-      metadata: match.metadata,
+      metadata: {
+        ...match.metadata,
+        isDirectCorrespondence
+      },
       scores: {
         semantic: match.scores.semantic,
         style: match.scores.style,

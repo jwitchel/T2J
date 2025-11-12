@@ -2,12 +2,19 @@
 Is this email **unsolicited bulk email or gray mail**?
 
 **Definition**: Unsolicited bulk email or gray mail includes:
-- Unwanted marketing emails, business solitications, and other unsolicited emails
+- Unwanted marketing emails, business solicitations, and other unsolicited emails
 - Cold outreach from unknown senders (sales pitches, recruitment, etc.)
-- Emails that have a bold claim or teaser followed by a teaser or call to action (often including a footer or closing line for unsubscribe or opt-out however informal or casual)
+- Emails that have a bold claim or teaser followed by a call to action (often including a footer or closing line for unsubscribe or opt-out however informal or casual)
 - Emails that come from suspicious domains, foreign domains, or domains that are not related to the user's business or industry
 - Emails with x-headers that are missing or have a suspicious value
 - Emails that appear to a thread or reply but are the same sender repeating the same message
+
+**IMPORTANT EXCLUSIONS - NOT SPAM**:
+- **Legitimate newsletters and subscriptions**: Emails from reputable publications (news sites, magazines, professional journals like The Economist, New York Times, Wall Street Journal, etc.) with professional formatting and unsubscribe links - these are WANTED subscriptions even if mass-distributed
+- **Transactional emails**: Order confirmations, shipping updates, password resets, account notifications from services
+- **Service notifications**: Updates from SaaS platforms, monitoring alerts, automated reports from tools
+- **Professional mailing lists**: Industry updates, conference announcements, professional association communications
+
 **Note**: Personal emails, business correspondence with known contacts, transactional emails from services the user actively uses, and emails the user has opted into are NOT considered unsolicited bulk email.
 
 IMPORTANT: You must respond with a valid JSON object only. Do not include any text before or after the JSON.
@@ -22,8 +29,8 @@ Return a JSON object with this exact structure:
 }
 
 **CRITICAL**: The `spamIndicators` field must ALWAYS contain specific, actionable reasons:
-- If `isSpam` is **true**: List specific indicators (e.g., "Unsolicited cold outreach from unknown sender", "Generic marketing email with unsubscribe link", "Mass-distributed newsletter", "Suspicious .top domain", "Urgent action request from unknown source")
-- If `isSpam` is **false**: List specific legitimacy indicators (e.g., "Not unsolicited - legitimate .com domain from known service", "Not bulk mail - personalized business correspondence", "Not unsolicited - transactional email from active service", "Not bulk mail - direct personal communication")
+- If `isSpam` is **true**: List specific indicators (e.g., "Unsolicited cold outreach from unknown sender", "Generic marketing pitch from unfamiliar company", "Suspicious .top/.xyz domain", "Urgent action request from unknown source", "Phishing attempt with deceptive links", "Unwanted business solicitation")
+- If `isSpam` is **false**: List specific legitimacy indicators (e.g., "Not spam - legitimate publication newsletter (The Economist, NY Times, etc.)", "Not spam - personalized business correspondence", "Not spam - transactional email from active service", "Not spam - professional subscription with unsubscribe link", "Not spam - service notification from known platform")
 
 **DO NOT** use generic responses like ["Not spam"] or ["Spam"]. Always provide specific reasoning.
 

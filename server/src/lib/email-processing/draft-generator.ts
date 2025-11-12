@@ -95,7 +95,7 @@ export class DraftGenerator {
   ): Promise<EmailProcessingResult> {
     const { parsed, processedEmail } = parsedData;
     const recipientEmail = processedEmail.from[0].address;
-    const maxExamples = parseInt(process.env.EXAMPLE_COUNT || '25');
+    const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
 
     try {
       // Step 1: Get provider-specific orchestrator (cached, already initialized)
@@ -200,6 +200,19 @@ export class DraftGenerator {
         desiredCount: maxExamples
       });
       console.log(`[DraftGenerator] ⏱️  selectExamples: ${Date.now() - t0}ms`);
+
+      // Log selected examples for draft generation
+      const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
+      const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;
+      console.log(`[DraftGenerator] 📧 Selected ${exampleSelection.examples.length} examples for ${exampleSelection.relationship} relationship: ${directCount} direct, ${categoryCount} category`);
+      exampleSelection.examples.forEach((example, idx) => {
+        const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
+        const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
+        const subject = example.metadata?.subject || 'No subject';
+        const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
+        const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
+        console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
+      });
 
       // Get the detected relationship
       const t1 = Date.now();
