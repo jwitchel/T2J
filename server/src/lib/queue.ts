@@ -83,31 +83,3 @@ export async function addTrainingJob(
 ): Promise<Job> {
   return trainingQueue.add(type, data, { priority });
 }
-
-// Deprecated exports for backward compatibility
-/** @deprecated Use inboxQueue instead */
-export const emailProcessingQueue = inboxQueue;
-/** @deprecated Use trainingQueue instead */
-export const toneProfileQueue = trainingQueue;
-/** @deprecated Use addInboxJob or addTrainingJob instead */
-export const addEmailJob = async (
-  type: JobType,
-  data: ProcessInboxJobData | LearnFromEditJobData,
-  priority: JobPriority = JobPriority.NORMAL
-): Promise<Job> => {
-  // Route to the appropriate queue based on job type
-  if (type === JobType.PROCESS_INBOX) {
-    return addInboxJob(data as ProcessInboxJobData, priority);
-  } else if (type === JobType.LEARN_FROM_EDIT) {
-    return addTrainingJob(JobType.LEARN_FROM_EDIT, data as LearnFromEditJobData, priority);
-  } else {
-    throw new Error(`Invalid job type for addEmailJob: ${type}`);
-  }
-};
-/** @deprecated Use addTrainingJob instead */
-export const addToneProfileJob = async (
-  data: BuildToneProfileJobData,
-  priority: JobPriority = JobPriority.NORMAL
-): Promise<Job> => {
-  return addTrainingJob(JobType.BUILD_TONE_PROFILE, data, priority);
-};

@@ -517,5 +517,3 @@ process.on('SIGINT', async () => {
   console.log('SIGINT received, stopping IMAP monitors...');
   await imapMonitor.stopAll();
 });
-
-export default imapMonitor;

@@ -38,11 +38,12 @@ describe('EmailActionRouter', () => {
       });
 
       const requiredFolders = router.getRequiredFolders();
-      
+
       // With empty root, folders should be at root level (drafts excluded - system managed)
       expect(requiredFolders).toEqual([
         'AI-No-Action',
-        'AI-Spam'
+        'AI-Spam',
+        't2j-todo'
       ]);
     });
 
@@ -54,12 +55,13 @@ describe('EmailActionRouter', () => {
       });
 
       const requiredFolders = router.getRequiredFolders();
-      
+
       // With root folder, should include root and subfolders (drafts excluded - system managed)
       expect(requiredFolders).toEqual([
         'Prescreen',
         'Prescreen/AI-No-Action',
-        'Prescreen/AI-Spam'
+        'Prescreen/AI-Spam',
+        'Prescreen/t2j-todo'
       ]);
     });
   });

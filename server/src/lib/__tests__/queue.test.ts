@@ -1,8 +1,8 @@
 import {
-  emailProcessingQueue,
-  toneProfileQueue,
-  addEmailJob,
-  addToneProfileJob,
+  inboxQueue,
+  trainingQueue,
+  addInboxJob,
+  addTrainingJob,
   JobType,
   JobPriority
 } from '../queue';
@@ -14,16 +14,16 @@ describe('BullMQ Queue Configuration', () => {
   afterAll(async () => {
     // Clean up after tests
     try {
-      await emailProcessingQueue.pause();
-      await toneProfileQueue.pause();
-      await emailProcessingQueue.obliterate({ force: true });
-      await toneProfileQueue.obliterate({ force: true });
+      await inboxQueue.pause();
+      await trainingQueue.pause();
+      await inboxQueue.obliterate({ force: true });
+      await trainingQueue.obliterate({ force: true });
     } catch (error: unknown) {
       // Ignore obliterate errors
     }
     
-    await emailProcessingQueue.close();
-    await toneProfileQueue.close();
+    await inboxQueue.close();
+    await trainingQueue.close();
     
     // Give a moment for connections to close
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -31,20 +31,19 @@ describe('BullMQ Queue Configuration', () => {
 
   describe('Queue Creation', () => {
     it('should create email processing queue', () => {
-      expect(emailProcessingQueue).toBeDefined();
-      expect(emailProcessingQueue.name).toBe('inbox');
+      expect(inboxQueue).toBeDefined();
+      expect(inboxQueue.name).toBe('inbox');
     });
 
     it('should create tone profile queue', () => {
-      expect(toneProfileQueue).toBeDefined();
-      expect(toneProfileQueue.name).toBe('training');
+      expect(trainingQueue).toBeDefined();
+      expect(trainingQueue.name).toBe('training');
     });
   });
 
   describe('Job Addition', () => {
     it('should add process inbox job', async () => {
-      const job = await addEmailJob(
-        JobType.PROCESS_INBOX,
+      const job = await addInboxJob(
         {
           userId: 'test-user-1',
           accountId: 'test-account-1',
@@ -60,9 +59,7 @@ describe('BullMQ Queue Configuration', () => {
     });
 
     it('should add process inbox job with high priority', async () => {
-      const job = await addEmailJob(
-        JobType.PROCESS_INBOX,
-        {
+      const job = await addInboxJob({
           userId: 'test-user-2',
           accountId: 'test-account-2',
           folderName: 'INBOX'
@@ -76,7 +73,7 @@ describe('BullMQ Queue Configuration', () => {
     });
 
     it('should add learn from edit job', async () => {
-      const job = await addEmailJob(
+      const job = await addTrainingJob(
         JobType.LEARN_FROM_EDIT,
         {
           userId: 'test-user-3',
@@ -96,7 +93,7 @@ describe('BullMQ Queue Configuration', () => {
     });
 
     it('should add build tone profile job', async () => {
-      const job = await addToneProfileJob(
+      const job = await addTrainingJob(JobType.BUILD_TONE_PROFILE,
         {
           userId: 'test-user-4',
           accountId: 'test-account-4',
@@ -122,9 +119,7 @@ describe('BullMQ Queue Configuration', () => {
       ];
 
       for (const priority of priorities) {
-        const job = await addEmailJob(
-          JobType.PROCESS_INBOX,
-          {
+        const job = await addInboxJob({
             userId: 'test',
             accountId: 'test',
             folderName: 'INBOX'
@@ -140,9 +135,7 @@ describe('BullMQ Queue Configuration', () => {
   describe('Queue Statistics', () => {
     it('should get queue statistics using native BullMQ methods', async () => {
       // Add a test job
-      await addEmailJob(
-        JobType.PROCESS_INBOX,
-        {
+      await addInboxJob({
           userId: 'stats-test',
           accountId: 'stats-test',
           folderName: 'INBOX'
@@ -151,8 +144,8 @@ describe('BullMQ Queue Configuration', () => {
       );
 
       // Get job counts directly from queues
-      const emailCounts = await emailProcessingQueue.getJobCounts();
-      const toneCounts = await toneProfileQueue.getJobCounts();
+      const emailCounts = await inboxQueue.getJobCounts();
+      const toneCounts = await trainingQueue.getJobCounts();
 
       expect(emailCounts).toBeDefined();
       expect(typeof emailCounts.waiting).toBe('number');
@@ -164,8 +157,8 @@ describe('BullMQ Queue Configuration', () => {
     });
 
     it('should check if queues are paused', async () => {
-      const emailPaused = await emailProcessingQueue.isPaused();
-      const tonePaused = await toneProfileQueue.isPaused();
+      const emailPaused = await inboxQueue.isPaused();
+      const tonePaused = await trainingQueue.isPaused();
 
       expect(typeof emailPaused).toBe('boolean');
       expect(typeof tonePaused).toBe('boolean');
@@ -174,9 +167,7 @@ describe('BullMQ Queue Configuration', () => {
 
   describe('Job Configuration', () => {
     it('should configure email jobs with simplified settings', async () => {
-      const job = await addEmailJob(
-        JobType.PROCESS_INBOX,
-        {
+      const job = await addInboxJob({
           userId: 'config-test',
           accountId: 'config-test',
           folderName: 'INBOX'
@@ -190,7 +181,7 @@ describe('BullMQ Queue Configuration', () => {
     });
 
     it('should configure tone profile jobs with simplified settings', async () => {
-      const job = await addToneProfileJob(
+      const job = await addTrainingJob(JobType.BUILD_TONE_PROFILE,
         {
           userId: 'config-test',
           accountId: 'config-test',
@@ -205,9 +196,7 @@ describe('BullMQ Queue Configuration', () => {
 
   describe('Queue Operations', () => {
     it('should retrieve jobs from queue', async () => {
-      const job = await addEmailJob(
-        JobType.PROCESS_INBOX,
-        {
+      const job = await addInboxJob({
           userId: 'retrieve-test',
           accountId: 'retrieve-test',
           folderName: 'INBOX'
@@ -219,7 +208,7 @@ describe('BullMQ Queue Configuration', () => {
       expect(job.id).toBeDefined();
       
       // Try to retrieve it (may be null if already processed)
-      const retrieved = await emailProcessingQueue.getJob(job.id!);
+      const retrieved = await inboxQueue.getJob(job.id!);
       
       // If job still exists in queue, verify it's the same
       if (retrieved) {
@@ -231,9 +220,7 @@ describe('BullMQ Queue Configuration', () => {
 
     it('should clean queue', async () => {
       // Add a job
-      await addEmailJob(
-        JobType.PROCESS_INBOX,
-        {
+      await addInboxJob({
           userId: 'clean-test',
           accountId: 'clean-test',
           folderName: 'INBOX'
@@ -242,19 +229,19 @@ describe('BullMQ Queue Configuration', () => {
       );
 
       // Pause the queue first (required for obliterate)
-      await emailProcessingQueue.pause();
+      await inboxQueue.pause();
       
       // Wait a moment to ensure pause is effective
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Clean the queue
-      await emailProcessingQueue.obliterate({ force: true });
+      await inboxQueue.obliterate({ force: true });
       
       // Resume the queue for other tests
-      await emailProcessingQueue.resume();
+      await inboxQueue.resume();
       
       // Check it's empty
-      const counts = await emailProcessingQueue.getJobCounts();
+      const counts = await inboxQueue.getJobCounts();
       expect(counts.waiting).toBe(0);
     });
   });
