@@ -1,30 +1,26 @@
 import { Pool } from 'pg';
-import { VectorStore, SENT_COLLECTION } from '../vector/qdrant-client';
-import { EmailFeatures } from '../nlp-feature-extractor';
-import dotenv from 'dotenv';
-import path from 'path';
+import { pool } from '../db';
+import { extractEmailFeatures } from '../pipeline/types';
+import {
+  MAX_EMAILS_TO_ANALYZE,
+  ESTIMATED_AVG_SENTENCE_LENGTH,
+  MULTI_PARAGRAPH_THRESHOLD,
+  CONFIDENCE_THRESHOLDS
+} from './style-constants';
 
-// Load environment variables
-dotenv.config({ path: path.join(__dirname, '../../../../.env') });
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL!
-});
-
-export interface AggregatedStyle {
-  greetings: Array<{ text: string; frequency: number; percentage: number }>;
-  closings: Array<{ text: string; frequency: number; percentage: number }>;
-  emojis: Array<{ emoji: string; frequency: number; contexts: string[] }>;
-  // contractions field removed - no longer analyzed
-  sentimentProfile: { 
-    primaryTone: string; 
-    averageWarmth: number; 
-    averageFormality: number; 
+/**
+ * Currently implemented style metrics
+ * These fields are actively populated by the aggregation service
+ */
+export interface ImplementedStyleMetrics {
+  sentimentProfile: {
+    primaryTone: string;
+    averageWarmth: number;
+    averageFormality: number;
   };
   vocabularyProfile: {
     complexityLevel: string;
-    technicalTerms: string[];
-    commonPhrases: Array<{ phrase: string; frequency: number }>; // No longer populated
+    technicalTerms: string[];  // Currently empty, but structure ready
   };
   structuralPatterns: {
     averageEmailLength: number;
@@ -37,134 +33,123 @@ export interface AggregatedStyle {
   confidenceScore: number;
 }
 
+/**
+ * Common phrase with frequency tracking
+ */
+export interface PhraseFrequency {
+  phrase: string;
+  frequency: number;
+}
+
+/**
+ * Greeting with usage statistics
+ */
+export interface GreetingFrequency {
+  text: string;
+  frequency: number;
+  percentage: number;
+}
+
+/**
+ * Closing with usage statistics
+ */
+export interface ClosingFrequency {
+  text: string;
+  frequency: number;
+  percentage: number;
+}
+
+/**
+ * Emoji with usage context tracking
+ */
+export interface EmojiFrequency {
+  emoji: string;
+  frequency: number;
+  contexts: string[];
+}
+
+/**
+ * Future style features requiring pattern extraction
+ * These fields are optional until the pattern analyzer is implemented
+ */
+export interface FutureStyleFeatures {
+  greetings?: GreetingFrequency[];
+  closings?: ClosingFrequency[];
+  emojis?: EmojiFrequency[];
+  commonPhrases?: PhraseFrequency[];
+}
+
+/**
+ * Complete aggregated style combining implemented and future features
+ */
+export type AggregatedStyle = ImplementedStyleMetrics & FutureStyleFeatures;
+
 export class StyleAggregationService {
   constructor(
-    private vectorStore: VectorStore,
     private customPool: Pool = pool
   ) {}
 
-  async aggregateStyleForUser(
+  public async aggregateStyleForUser(
     userId: string,
     relationshipType: string
   ): Promise<AggregatedStyle> {
-    // Query emails for THIS user and THIS relationship type
-    const searchResults = await this.vectorStore.searchSimilar({
-      userId: userId,
-      queryVector: new Array(384).fill(0), // Dummy vector to get all matches
-      relationship: relationshipType,
-      limit: 1000, // Get all user's emails for this relationship
-      scoreThreshold: 0, // Get all matches
-      collectionName: SENT_COLLECTION // Only aggregate style from sent emails
-    });
-    
-    // Aggregate patterns
-    const greetingMap = new Map<string, number>();
-    const closingMap = new Map<string, number>();
-    const emojiMap = new Map<string, Set<string>>();
-    
-    let totalWarmth = 0;
-    let totalFormality = 0;
-    let totalWords = 0;
-    let totalSentences = 0;
-    
-    for (const result of searchResults) {
-      const features = result.metadata.features as EmailFeatures;
-      
-      // Aggregate greetings from relationship hints
-      if (features.relationshipHints?.linguisticMarkers?.greetingStyle) {
-        const greeting = features.relationshipHints.linguisticMarkers.greetingStyle;
-        const count = greetingMap.get(greeting) || 0;
-        greetingMap.set(greeting, count + 1);
-      }
-      
-      // Removed closings aggregation - now using only relationship hints
-      
-      // Also check closing style from relationship hints
-      if (features.relationshipHints?.linguisticMarkers?.closingStyle) {
-        const closing = features.relationshipHints.linguisticMarkers.closingStyle;
-        const count = closingMap.get(closing) || 0;
-        closingMap.set(closing, count + 1);
-      }
-      
-      // Aggregate emojis with context
-      features.sentiment.emojis?.forEach((emoji: string) => {
-        if (!emojiMap.has(emoji)) {
-          emojiMap.set(emoji, new Set());
-        }
-        emojiMap.get(emoji)!.add(features.sentiment.primary);
-      });
-      
-      // Removed contractions aggregation - data no longer available
-      
-      // Removed phrases aggregation - data no longer available
-      
-      // Aggregate metrics
-      totalWarmth += features.tonalQualities.warmth;
-      totalFormality += features.tonalQualities.formality;
-      totalWords += features.stats.wordCount;
-      totalSentences += features.stats.sentenceCount;
-    }
-    
-    const emailCount = searchResults.length;
-    if (emailCount === 0) {
+    // Query email_sent from PostgreSQL for this user and relationship
+    const emailsResult = await this.customPool.query(`
+      SELECT user_reply, word_count, sent_date
+      FROM email_sent
+      WHERE user_id = $1 AND relationship_type = $2
+      ORDER BY sent_date DESC
+      LIMIT $3
+    `, [userId, relationshipType, MAX_EMAILS_TO_ANALYZE]);
+
+    const emails = emailsResult.rows;
+
+    if (emails.length === 0) {
       return this.getDefaultStyle(relationshipType);
     }
-    
-    // Convert to sorted arrays with percentages
-    const sortedGreetings = Array.from(greetingMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([text, frequency]) => ({
-        text,
-        frequency,
-        percentage: Math.round((frequency / emailCount) * 100)
-      }));
-    
-    const sortedClosings = Array.from(closingMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([text, frequency]) => ({
-        text,
-        frequency,
-        percentage: Math.round((frequency / emailCount) * 100)
-      }));
-    
-    const sortedEmojis = Array.from(emojiMap.entries())
-      .sort((a, b) => b[1].size - a[1].size)
-      .slice(0, 20)
-      .map(([emoji, contexts]) => ({
-        emoji,
-        frequency: contexts.size,
-        contexts: Array.from(contexts)
-      }));
-    
-    
-    return {
-      greetings: sortedGreetings,
-      closings: sortedClosings,
-      emojis: sortedEmojis,
+
+    // Extract basic features from each email (using stub extractor)
+    const allFeatures = emails.map(email =>
+      extractEmailFeatures(email.user_reply, { email: '', name: '' })
+    );
+
+    // Calculate average formality from extracted features
+    const totalFormality = allFeatures.reduce((sum, f) => sum + f.stats.formalityScore, 0);
+    const averageFormality = totalFormality / allFeatures.length;
+
+    // Calculate warmth as inverse of formality (simplified)
+    const averageWarmth = 1 - averageFormality;
+
+    // Calculate structural patterns from word counts
+    const totalWords = emails.reduce((sum, email) => sum + (email.word_count || 0), 0);
+    const averageEmailLength = totalWords / emails.length;
+    const averageSentenceLength = ESTIMATED_AVG_SENTENCE_LENGTH;
+
+    const aggregated: AggregatedStyle = {
       sentimentProfile: {
-        primaryTone: this.determinePrimaryTone(totalWarmth / emailCount),
-        averageWarmth: totalWarmth / emailCount,
-        averageFormality: totalFormality / emailCount
+        primaryTone: this.determinePrimaryTone(averageWarmth),
+        averageWarmth,
+        averageFormality
       },
       vocabularyProfile: {
-        complexityLevel: this.determineComplexityLevel(totalWords / totalSentences),
-        technicalTerms: [], // Could extract from features if needed
-        commonPhrases: []
+        complexityLevel: this.determineComplexityLevel(averageSentenceLength),
+        technicalTerms: []
       },
       structuralPatterns: {
-        averageEmailLength: totalWords / emailCount,
-        averageSentenceLength: totalWords / totalSentences,
-        paragraphingStyle: 'single' // Could analyze paragraph patterns
+        averageEmailLength,
+        averageSentenceLength,
+        paragraphingStyle: averageEmailLength > MULTI_PARAGRAPH_THRESHOLD ? 'multi' : 'single'
       },
-      emailCount,
+      emailCount: emails.length,
       lastUpdated: new Date().toISOString(),
-      confidenceScore: this.calculateConfidence(emailCount)
+      confidenceScore: this.calculateConfidence(emails.length)
+      // Future features (greetings, closings, emojis, commonPhrases) omitted until implemented
     };
+
+    return aggregated;
   }
-  
-  async updateStylePreferences(
+
+  public async updateStylePreferences(
     userId: string,
     relationshipType: string,
     aggregatedStyle: AggregatedStyle
@@ -182,41 +167,60 @@ export class StyleAggregationService {
     await this.customPool.query(
       `INSERT INTO tone_preferences (user_id, preference_type, target_identifier, profile_data, emails_analyzed, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-       ON CONFLICT (user_id, preference_type, target_identifier) 
-       DO UPDATE SET 
-         profile_data = $4,
+       ON CONFLICT (user_id, preference_type, target_identifier)
+       DO UPDATE SET
+         -- Merge new aggregatedStyle and meta into existing profile_data
+         -- This preserves writingPatterns if it exists
+         profile_data = COALESCE(tone_preferences.profile_data, '{}'::jsonb) || $4::jsonb,
          emails_analyzed = $5,
          updated_at = NOW()`,
       [userId, 'category', relationshipType, JSON.stringify(profileData), aggregatedStyle.emailCount]
     );
   }
-  
-  async getAggregatedStyle(userId: string, relationshipType: string): Promise<AggregatedStyle | null> {
+
+  public async getAggregatedStyle(userId: string, relationshipType: string): Promise<AggregatedStyle | null> {
     const result = await this.customPool.query(
-      `SELECT profile_data 
-       FROM tone_preferences 
+      `SELECT profile_data
+       FROM tone_preferences
        WHERE user_id = $1 AND preference_type = $2 AND target_identifier = $3`,
       [userId, 'category', relationshipType]
     );
-    
+
     if (result.rows.length > 0 && result.rows[0].profile_data) {
-      // Handle both old format (direct aggregatedStyle) and new format (with meta)
       const data = result.rows[0].profile_data;
-      return data.aggregatedStyle || data;
+
+      // Check if data has aggregatedStyle
+      if (data.aggregatedStyle) {
+        return data.aggregatedStyle;
+      }
+
+      // Check if data itself looks like AggregatedStyle (has sentimentProfile)
+      if (data.sentimentProfile) {
+        return data as AggregatedStyle;
+      }
+
+      // If data only has writingPatterns (from pattern analyzer), we need to aggregate style
+      console.log(`[StyleAggregation] No aggregatedStyle found for ${relationshipType}, generating...`);
+      const aggregated = await this.aggregateStyleForUser(userId, relationshipType);
+
+      // Save it for next time
+      await this.updateStylePreferences(userId, relationshipType, aggregated);
+
+      return aggregated;
     }
-    
+
     return null;
   }
   
   private calculateConfidence(emailCount: number): number {
     // Confidence increases with sample size
-    if (emailCount < 10) return 0.2;
-    if (emailCount < 50) return 0.4;
-    if (emailCount < 100) return 0.6;
-    if (emailCount < 500) return 0.8;
+    if (emailCount < CONFIDENCE_THRESHOLDS.MIN_SAMPLE) return 0.2;
+    if (emailCount < CONFIDENCE_THRESHOLDS.LOW_CONFIDENCE) return 0.4;
+    if (emailCount < CONFIDENCE_THRESHOLDS.MEDIUM_CONFIDENCE) return 0.6;
+    if (emailCount < CONFIDENCE_THRESHOLDS.HIGH_CONFIDENCE) return 0.8;
     return 0.95;
   }
-  
+
   private determinePrimaryTone(warmth: number): string {
     if (warmth > 0.8) return 'very warm';
     if (warmth > 0.6) return 'warm';
@@ -224,7 +228,7 @@ export class StyleAggregationService {
     if (warmth > 0.2) return 'professional';
     return 'formal';
   }
-  
+
   private determineComplexityLevel(avgSentenceLength: number): string {
     if (avgSentenceLength < 10) return 'simple';
     if (avgSentenceLength < 15) return 'moderate';
@@ -235,9 +239,6 @@ export class StyleAggregationService {
   private getDefaultStyle(_relationshipType: string): AggregatedStyle {
     // Return minimal default style when no data exists
     return {
-      greetings: [],
-      closings: [],
-      emojis: [],
       sentimentProfile: {
         primaryTone: 'neutral',
         averageWarmth: 0.5,
@@ -245,22 +246,23 @@ export class StyleAggregationService {
       },
       vocabularyProfile: {
         complexityLevel: 'moderate',
-        technicalTerms: [],
-        commonPhrases: []
+        technicalTerms: []
       },
       structuralPatterns: {
         averageEmailLength: 100,
-        averageSentenceLength: 15,
+        averageSentenceLength: ESTIMATED_AVG_SENTENCE_LENGTH,
         paragraphingStyle: 'single'
       },
       emailCount: 0,
       lastUpdated: new Date().toISOString(),
       confidenceScore: 0
+      // Future features omitted - no defaults for unimplemented features
     };
   }
-  
-  async getUserRelationshipTypes(userId: string): Promise<Array<{
+
+  public async getUserRelationshipTypes(userId: string): Promise<Array<{
     relationshipType: string;
+    displayName: string;
     hasAggregatedStyle: boolean;
     emailCount?: number;
     lastUpdated?: string;
@@ -282,12 +284,12 @@ export class StyleAggregationService {
       [userId]
     );
     
-    const styleMap = new Map<string, any>();
+    const styleMap = new Map<string, AggregatedStyle>();
     for (const row of stylesResult.rows) {
       const data = row.profile_data;
       const style = data.aggregatedStyle || data;
       if (style && 'emailCount' in style) {
-        styleMap.set(row.target_identifier, style);
+        styleMap.set(row.target_identifier, style as AggregatedStyle);
       }
     }
     
@@ -302,4 +304,4 @@ export class StyleAggregationService {
 }
 
 // Export singleton instance
-export const styleAggregationService = new StyleAggregationService(new VectorStore());
+export const styleAggregationService = new StyleAggregationService();
