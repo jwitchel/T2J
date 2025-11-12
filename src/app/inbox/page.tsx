@@ -18,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
 import { EmailActions, RecommendedAction } from '../../../server/src/lib/email-actions';
 import type { SpamCheckResult } from '../../../server/src/lib/pipeline/types';
+import type { EmailActionType } from '../../../server/src/types/email-action-tracking';
 
 interface EmailAccount {
   id: string;
@@ -35,7 +36,7 @@ interface EmailMessage {
   flags: string[];
   size: number;
   rawMessage: string;
-  actionTaken?: 'none' | 'replied' | 'forwarded' | 'draft_created' | 'manually_handled';
+  actionTaken?: EmailActionType;
   updatedAt?: Date;  // When the action was taken
 }
 
@@ -292,6 +293,7 @@ function InboxContent() {
           uid?: number;
           flags: string[];
           size: number;
+          actionTaken?: EmailActionType;
           llmResponse?: {
             meta: {
               inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
@@ -309,6 +311,8 @@ function InboxContent() {
             providerId: string;
             modelName: string;
             draftId: string;
+            body?: string;
+            bodyHtml?: string;
             relationship: {
               type: string;
               confidence: number;
@@ -323,7 +327,7 @@ function InboxContent() {
       }>(`/api/inbox/email/${accountId}/${encodeURIComponent(messageId)}`);
 
       if (data.success && data.email) {
-        // Convert the Qdrant email data to the EmailMessage format
+        // Convert the email data to the EmailMessage format
         const emailMessage: EmailMessage = {
           uid: data.email.uid || 0,
           messageId: data.email.messageId,
@@ -334,7 +338,7 @@ function InboxContent() {
           flags: data.email.flags,
           size: data.email.size,
           rawMessage: data.email.rawMessage,
-          actionTaken: 'draft_created' // This email has been processed
+          actionTaken: data.email.actionTaken // Must exist - backend validates
         };
 
         setCurrentMessage(emailMessage);
@@ -346,10 +350,10 @@ function InboxContent() {
             id: data.email.llmResponse.draftId,
             from: '', // Not stored in llmResponse
             to: data.email.to.join(', '),
-            cc: data.email.cc?.join(', '),
+            cc: data.email.cc?.join(', ') || '',
             subject: data.email.subject,
-            body: '', // Not stored (body not needed for view mode)
-            bodyHtml: '',
+            body: data.email.llmResponse.body || '',
+            bodyHtml: data.email.llmResponse.bodyHtml,
             inReplyTo: data.email.messageId,
             references: data.email.messageId,
             meta: data.email.llmResponse.meta,
@@ -457,16 +461,12 @@ function InboxContent() {
       if (data.preferences?.folderPreferences) {
         const { draftsFolderPath, ...otherPrefs } = data.preferences.folderPreferences;
 
-        // Only validation needed: check if drafts folder has been auto-detected
-        // All other folders are guaranteed by backend (defaults merged with saved prefs)
-        if (!draftsFolderPath) {
-          setConfigError('Drafts folder not detected. Please run "Test Folders" in Settings to auto-detect your email provider\'s drafts folder.');
-        } else {
-          setConfigError(null);
-        }
+        // Use default [Gmail]/Drafts if not configured (matches backend fallback)
+        // No validation needed - backend handles fallback gracefully
+        setConfigError(null);
 
         setUserFolderPrefs(otherPrefs);
-        setDraftsFolderPath(draftsFolderPath || null);
+        setDraftsFolderPath(draftsFolderPath || '[Gmail]/Drafts');
       } else {
         // Should never happen - backend always returns defaults
         setConfigError('Folder preferences not configured. Please refresh the page.');
@@ -994,7 +994,7 @@ function InboxContent() {
                         <h3 className="font-semibold">AI Analysis</h3>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono">
-                        Qdrant ID: {generatedDraft.inReplyTo}
+                        Message ID: {generatedDraft.inReplyTo}
                       </div>
                     </div>
                     
