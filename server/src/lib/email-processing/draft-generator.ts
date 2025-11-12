@@ -244,20 +244,9 @@ export class DraftGenerator {
         console.log(`[DraftGenerator] No writing patterns for ${exampleSelection.relationship} - using aggregatedStyle only`);
       }
 
-      // Step 3: Meta-Context Analysis (First LLM Call)
+      // Step 3: Action Analysis (First LLM Call)
+      // Single source of truth for email classification and action determination
       const t4 = Date.now();
-      const metaContextPrompt = await orchestrator['promptFormatter'].formatMetaContextAnalysis({
-        incomingEmail: processedEmail.userReply,
-        recipientEmail,
-        userNames: userContext.userNames,
-        incomingEmailMetadata
-      });
-
-      const metaContextAnalysis = await llmClient.generateMetaContextAnalysis(metaContextPrompt);
-      console.log(`[DraftGenerator] ⏱️  metaContextAnalysis (LLM 1): ${Date.now() - t4}ms`);
-
-      // Step 4: Action Analysis (Second LLM Call)
-      const t5 = Date.now();
       const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
@@ -267,15 +256,12 @@ export class DraftGenerator {
       });
 
       const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
-      console.log(`[DraftGenerator] ⏱️  actionAnalysis (LLM 2): ${Date.now() - t5}ms`);
+      console.log(`[DraftGenerator] ⏱️  actionAnalysis (LLM 1): ${Date.now() - t4}ms`);
 
-      // Combine meta-context and action into full metadata
-      const combinedMeta: LLMMetadata = {
-        ...metaContextAnalysis.meta,
-        ...actionAnalysis.meta
-      };
+      // Use action analysis as complete metadata (no merging needed)
+      const combinedMeta: LLMMetadata = actionAnalysis.meta;
 
-      // Step 5: Response Generation (Third LLM Call - conditional)
+      // Step 4: Response Generation (Second LLM Call - conditional)
       const needsResponse = !ActionHelpers.isSilentAction(combinedMeta.recommendedAction);
       let responseMessage = '';
 

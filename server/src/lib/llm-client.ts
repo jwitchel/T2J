@@ -7,33 +7,41 @@ import { LLMProviderConfig, LLMProviderError, LLMProviderType } from '../types/l
 import { RecommendedAction } from './email-actions';
 import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
 
-export interface MetaContext {
+/**
+ * Context flags for email classification
+ * Includes both structural info and semantic analysis
+ */
+export interface ContextFlags {
+  // Structural flags
+  isThreaded: boolean;
+  hasAttachments: boolean;
+  isGroupEmail: boolean;
+  // Semantic flags (from LLM analysis)
   inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
-  inboundMsgIsRequesting: 'meeting-request' | 'answer-questions' | 'acknowledge-receipt' | 'acknowledge-emotional' | 'request-for-info' | 'fyi-only' | 'task-assignment' | 'approval-needed' | 'none';
   urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
-  contextFlags: {
-    isThreaded: boolean;
-    hasAttachments: boolean;
-    isGroupEmail: boolean;
-  };
 }
 
+/**
+ * Action analysis result from LLM
+ * Single source of truth for email classification and action determination
+ */
 export interface ActionData {
   recommendedAction: RecommendedAction;
   keyConsiderations: string[]; // Includes spam screening reasons for transparency (e.g., "Not spam - legitimate domain")
+  contextFlags: ContextFlags;
 }
 
-export interface LLMMetadata extends MetaContext, ActionData {}
+/**
+ * Complete metadata for email draft generation
+ * Combines action analysis with context flags
+ */
+export interface LLMMetadata extends ActionData {}
 
 export interface SpamCheckResponse {
   meta: {
     isSpam: boolean;
     spamIndicators: string[];
   };
-}
-
-export interface MetaContextAnalysisResponse {
-  meta: MetaContext;
 }
 
 export interface ActionAnalysisResponse {
@@ -246,36 +254,8 @@ export class LLMClient {
   }
 
   /**
-   * Generate meta-context analysis for email (urgency, request type, context flags)
-   */
-  async generateMetaContextAnalysis(prompt: string, options?: {
-    temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
-  }): Promise<MetaContextAnalysisResponse> {
-    try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 500,
-      });
-
-      const parsed = this.extractJSON(text, 'meta-context analysis');
-
-      this.validateJSON(
-        parsed,
-        (p) => p.meta,
-        'missing meta field',
-        'meta-context analysis'
-      );
-
-      return { meta: parsed.meta };
-    } catch (error: unknown) {
-      this.handleJSONError(error, 'Meta-context analysis');
-    }
-  }
-
-  /**
    * Generate action analysis for email (what action to take)
+   * Single source of truth for email classification and action determination
    */
   async generateActionAnalysis(prompt: string, options?: {
     temperature?: number;

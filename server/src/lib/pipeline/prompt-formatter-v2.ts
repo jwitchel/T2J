@@ -121,26 +121,14 @@ export class PromptFormatterV2 {
     });
   }
 
-  // Format meta-context analysis prompt
-  async formatMetaContextAnalysis(params: Partial<PromptFormatterParams>): Promise<string> {
-    await this.initialize();
-    const templateData = this.templateManager.prepareTemplateData({
-      incomingEmail: params.incomingEmail || '',
-      recipientEmail: params.recipientEmail || '',
-      relationship: 'unknown', // Not needed for meta-context analysis
-      examples: [], // No examples needed for meta-context analysis
-      userNames: params.userNames,
-      incomingEmailMetadata: params.incomingEmailMetadata
-    });
-    return this.templateManager.renderPrompt('meta-context-analysis', templateData);
-  }
-
   // Format action analysis prompt (no tone/style needed)
   async formatActionAnalysis(params: Partial<PromptFormatterParams> & { spamCheckResult: SpamCheckResult }): Promise<string> {
     await this.initialize();
 
-    // Generate available actions list from EmailActions constant
+    // Generate dynamic enum values to prevent hardcoded template drift
     const availableActions = Object.values(EmailActions).join('|');
+    const addressedToOptions = 'you|group|someone-else';
+    const urgencyOptions = 'low|medium|high|critical';
 
     // Build minimal template data for action-analysis (no examples/patterns needed)
     const templateData = {
@@ -153,6 +141,8 @@ export class PromptFormatterV2 {
         spamCheckResult: params.spamCheckResult
       } : undefined,
       availableActions,
+      addressedToOptions,
+      urgencyOptions,
       meta: {
         exampleCount: 0,
         relationshipMatchCount: 0,
@@ -176,6 +166,6 @@ export class PromptFormatterV2 {
   // Get available templates
   getAvailableTemplates(): string[] {
     // In a real implementation, this would scan the template directory
-    return ['default', 'verbose', 'spam-check', 'meta-context-analysis', 'action-analysis', 'response-generation'];
+    return ['default', 'verbose', 'spam-check', 'action-analysis', 'response-generation'];
   }
 }

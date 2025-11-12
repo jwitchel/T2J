@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, Mail, Paperclip, FileText, Send, Loader2, Brain, AlertCircle, Users, FolderOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Mail, Paperclip, FileText, Send, Loader2, Brain, AlertCircle, FolderOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PostalMime from 'postal-mime';
 import { apiGet, apiPost } from '@/lib/api';
@@ -73,15 +73,14 @@ interface GeneratedDraft {
   inReplyTo: string;
   references: string;
   meta?: {
-    inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
     recommendedAction: RecommendedAction;
-    inboundMsgIsRequesting: string | string[];
     keyConsiderations: string[];
-    urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
     contextFlags: {
       isThreaded: boolean;
       hasAttachments: boolean;
       isGroupEmail: boolean;
+      inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
+      urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
     };
   };
   relationship: {
@@ -296,15 +295,14 @@ function InboxContent() {
           actionTaken?: EmailActionType;
           llmResponse?: {
             meta: {
-              inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
               recommendedAction: RecommendedAction;
-              inboundMsgIsRequesting: string | string[];
               keyConsiderations: string[];
-              urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
               contextFlags: {
                 isThreaded: boolean;
                 hasAttachments: boolean;
                 isGroupEmail: boolean;
+                inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
+                urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
               };
             };
             generatedAt: string;
@@ -1002,14 +1000,6 @@ function InboxContent() {
                       {/* Left Column */}
                       <div className="space-y-3">
                         <div>
-                          <div className="text-sm font-medium text-muted-foreground mb-1">Inbound Message Addressed To</div>
-                          <Badge variant={generatedDraft.meta.inboundMsgAddressedTo === 'you' ? 'default' : 'secondary'}>
-                            {generatedDraft.meta.inboundMsgAddressedTo === 'you' && <Users className="mr-1 h-3 w-3" />}
-                            {generatedDraft.meta.inboundMsgAddressedTo}
-                          </Badge>
-                        </div>
-
-                        <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Spam Analysis</div>
                           {
                             generatedDraft.draftMetadata.spamAnalysis.isSpam ? (
@@ -1060,40 +1050,10 @@ function InboxContent() {
                             {generatedDraft.meta.recommendedAction}
                           </Badge>
                         </div>
-                        
-                        <div>
-                          <div className="text-sm font-medium text-muted-foreground mb-1">Urgency Level</div>
-                          <Badge variant={
-                            generatedDraft.meta.urgencyLevel === 'critical' ? 'destructive' :
-                            generatedDraft.meta.urgencyLevel === 'high' ? 'default' :
-                            generatedDraft.meta.urgencyLevel === 'medium' ? 'secondary' : 'outline'
-                          }>
-                            {generatedDraft.meta.urgencyLevel === 'critical' && <AlertCircle className="mr-1 h-3 w-3" />}
-                            {generatedDraft.meta.urgencyLevel}
-                          </Badge>
-                        </div>
-                        
                       </div>
                       
                       {/* Right Column */}
                       <div className="space-y-3">
-                        <div>
-                          <div className="text-sm font-medium text-muted-foreground mb-1">Inbound Message Is Requesting</div>
-                          <div className="flex flex-wrap gap-1">
-                            {Array.isArray(generatedDraft.meta.inboundMsgIsRequesting) ? (
-                              generatedDraft.meta.inboundMsgIsRequesting.map((request, idx) => (
-                                <Badge key={idx} variant="secondary">
-                                  {request}
-                                </Badge>
-                              ))
-                            ) : (
-                              <Badge variant="secondary">
-                                {generatedDraft.meta.inboundMsgIsRequesting}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Destination Folder</div>
                           <Badge
@@ -1108,7 +1068,7 @@ function InboxContent() {
                             {getDestinationFolder(generatedDraft.meta.recommendedAction).displayName}
                           </Badge>
                         </div>
-                        
+
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Context Flags</div>
                           <div className="flex flex-wrap gap-1">
@@ -1120,6 +1080,16 @@ function InboxContent() {
                             </Badge>
                             <Badge variant={generatedDraft.meta.contextFlags.isGroupEmail ? "default" : "outline"} className="text-xs">
                               {generatedDraft.meta.contextFlags.isGroupEmail ? "✓" : "✗"} Group Email
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              Addressed To: {generatedDraft.meta.contextFlags.inboundMsgAddressedTo}
+                            </Badge>
+                            <Badge variant={
+                              generatedDraft.meta.contextFlags.urgencyLevel === 'critical' ? 'destructive' :
+                              generatedDraft.meta.contextFlags.urgencyLevel === 'high' ? 'default' :
+                              'secondary'
+                            } className="text-xs">
+                              Urgency: {generatedDraft.meta.contextFlags.urgencyLevel}
                             </Badge>
                           </div>
                         </div>
