@@ -4,6 +4,8 @@ import { pool } from '../lib/db';
 import { EmailActionRouter } from '../lib/email-action-router';
 import { ImapOperations } from '../lib/imap-operations';
 import { withImapContext } from '../lib/imap-context';
+import { relationshipService } from '../lib/relationships/relationship-service';
+import { relationshipDetector } from '../lib/relationships/relationship-detector';
 
 const router = express.Router();
 
@@ -47,7 +49,10 @@ router.get('/profile', requireAuth, async (req, res) => {
         name: preferences.name || user.name || '',
         nicknames: preferences.nicknames || '',
         signatureBlock: preferences.signatureBlock || '',
-        folderPreferences: completeFolderPreferences
+        folderPreferences: completeFolderPreferences,
+        workDomainsCSV: preferences.workDomainsCSV || '',
+        familyEmailsCSV: preferences.familyEmailsCSV || '',
+        spouseEmailsCSV: preferences.spouseEmailsCSV || ''
       }
     });
   } catch (error) {
@@ -60,36 +65,71 @@ router.get('/profile', requireAuth, async (req, res) => {
 router.post('/profile', requireAuth, async (req, res) => {
   try {
     const userId = (req as any).user.id;
-    const { name, nicknames, signatureBlock } = req.body;
-    
-    // Update preferences JSONB with new profile data
-    const result = await pool.query(
-      `UPDATE "user"
-       SET preferences = jsonb_set(
-         jsonb_set(
-           jsonb_set(
-             COALESCE(preferences, '{}'::jsonb),
-             '{name}',
-             $2::jsonb
-           ),
-           '{nicknames}',
-           $3::jsonb
-         ),
-         '{signatureBlock}',
-         $4::jsonb
-       )
-       WHERE id = $1
-       RETURNING preferences`,
-      [userId, JSON.stringify(name), JSON.stringify(nicknames), JSON.stringify(signatureBlock)]
+    const { name, nicknames, signatureBlock, workDomainsCSV, familyEmailsCSV, spouseEmailsCSV } = req.body;
+
+    // Helper to parse CSV and handle empty values
+    const parseCSV = (csv: string | undefined): string[] => {
+      if (!csv || csv.trim().length === 0) return [];
+      return csv.split(',').map((item: string) => item.trim().toLowerCase()).filter((item: string) => item.length > 0);
+    };
+
+    // Fetch current preferences
+    const currentResult = await pool.query(
+      `SELECT preferences FROM "user" WHERE id = $1`,
+      [userId]
     );
-    
-    if (result.rows.length === 0) {
+
+    if (currentResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
-    return res.json({ 
+
+    // Merge current preferences with updates
+    const currentPrefs = currentResult.rows[0].preferences || {};
+    const updatedPrefs = {
+      ...currentPrefs,
+      ...(name !== undefined && { name }),
+      ...(nicknames !== undefined && { nicknames }),
+      ...(signatureBlock !== undefined && { signatureBlock }),
+      ...(workDomainsCSV !== undefined && { workDomainsCSV: workDomainsCSV || '' }),
+      ...(familyEmailsCSV !== undefined && { familyEmailsCSV: familyEmailsCSV || '' }),
+      ...(spouseEmailsCSV !== undefined && { spouseEmailsCSV: spouseEmailsCSV || '' })
+    };
+
+    // Update with merged preferences
+    const result = await pool.query(
+      `UPDATE "user" SET preferences = $2 WHERE id = $1 RETURNING preferences`,
+      [userId, JSON.stringify(updatedPrefs)]
+    );
+
+    // If relationship domains were provided, clear cache and re-categorize
+    let recategorization = null;
+    if (workDomainsCSV !== undefined || familyEmailsCSV !== undefined || spouseEmailsCSV !== undefined) {
+      relationshipDetector.clearConfigCache(userId);
+
+      const workDomains = parseCSV(workDomainsCSV);
+      const familyEmails = parseCSV(familyEmailsCSV);
+      const spouseEmails = parseCSV(spouseEmailsCSV);
+
+      recategorization = await relationshipService.recategorizePeople(userId, {
+        workDomains,
+        familyEmails,
+        spouseEmails
+      });
+    }
+
+    return res.json({
       success: true,
-      preferences: result.rows[0].preferences
+      preferences: result.rows[0].preferences,
+      ...(recategorization && {
+        recategorization: {
+          updated: recategorization.updated,
+          breakdown: {
+            spouse: recategorization.spouse,
+            family: recategorization.family,
+            colleague: recategorization.colleague
+          }
+        }
+      })
     });
   } catch (error) {
     console.error('Error updating profile preferences:', error);

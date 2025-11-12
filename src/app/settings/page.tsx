@@ -26,6 +26,13 @@ export default function SettingsPage() {
     spamFolder: '',
     todoFolder: ''
   })
+  const [workDomainsCSV, setWorkDomainsCSV] = useState('')
+  const [familyEmailsCSV, setFamilyEmailsCSV] = useState('')
+  const [spouseEmailsCSV, setSpouseEmailsCSV] = useState('')
+  const [originalWorkDomainsCSV, setOriginalWorkDomainsCSV] = useState('')
+  const [originalFamilyEmailsCSV, setOriginalFamilyEmailsCSV] = useState('')
+  const [originalSpouseEmailsCSV, setOriginalSpouseEmailsCSV] = useState('')
+  const [recategorization, setRecategorization] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTestingFolders, setIsTestingFolders] = useState(false)
@@ -50,16 +57,33 @@ export default function SettingsPage() {
       
       setIsLoading(true)
       try {
-        const data = await apiGet<{ preferences: { name?: string; nicknames?: string; signatureBlock?: string; folderPreferences?: {
-          rootFolder?: string;
-          noActionFolder?: string;
-          spamFolder?: string;
-          todoFolder?: string;
-        } } }>('/api/settings/profile')
+        const data = await apiGet<{ preferences: {
+          name?: string;
+          nicknames?: string;
+          signatureBlock?: string;
+          folderPreferences?: {
+            rootFolder?: string;
+            noActionFolder?: string;
+            spamFolder?: string;
+            todoFolder?: string;
+          };
+          workDomainsCSV?: string;
+          familyEmailsCSV?: string;
+          spouseEmailsCSV?: string;
+        } }>('/api/settings/profile')
         if (data.preferences) {
           setName(data.preferences.name || user.name || '')
           setNicknames(data.preferences.nicknames || '')
           setSignatureBlock(data.preferences.signatureBlock || '')
+          const workDomains = data.preferences.workDomainsCSV || ''
+          const familyEmails = data.preferences.familyEmailsCSV || ''
+          const spouseEmails = data.preferences.spouseEmailsCSV || ''
+          setWorkDomainsCSV(workDomains)
+          setFamilyEmailsCSV(familyEmails)
+          setSpouseEmailsCSV(spouseEmails)
+          setOriginalWorkDomainsCSV(workDomains)
+          setOriginalFamilyEmailsCSV(familyEmails)
+          setOriginalSpouseEmailsCSV(spouseEmails)
           if (data.preferences.folderPreferences) {
             setFolderPreferences(prev => ({
               ...prev,
@@ -81,13 +105,60 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     setIsSaving(true)
+    setRecategorization([])
+
+    // Track which relationship fields changed
+    const spouseChanged = spouseEmailsCSV !== originalSpouseEmailsCSV
+    const familyChanged = familyEmailsCSV !== originalFamilyEmailsCSV
+    const workChanged = workDomainsCSV !== originalWorkDomainsCSV
+
     try {
-      await apiPost('/api/settings/profile', {
+      const response = await apiPost<{
+        success: boolean;
+        preferences: Record<string, unknown>;
+        recategorization?: {
+          updated: number;
+          breakdown: { spouse: number; family: number; colleague: number };
+        };
+      }>('/api/settings/profile', {
         name,
         nicknames,
-        signatureBlock
+        signatureBlock,
+        workDomainsCSV,
+        familyEmailsCSV,
+        spouseEmailsCSV
       })
-      success('Profile updated successfully')
+
+      if (response.recategorization && response.recategorization.updated > 0) {
+        const messages: string[] = []
+        const { breakdown } = response.recategorization
+
+        if (spouseChanged && breakdown.spouse > 0) {
+          messages.push(`${breakdown.spouse} spouse ${breakdown.spouse === 1 ? 'email' : 'emails'} updated`)
+        }
+        if (familyChanged && breakdown.family > 0) {
+          messages.push(`${breakdown.family} family ${breakdown.family === 1 ? 'email' : 'emails'} updated`)
+        }
+        if (workChanged && breakdown.colleague > 0) {
+          messages.push(`${breakdown.colleague} work ${breakdown.colleague === 1 ? 'email' : 'emails'} updated`)
+        }
+
+        setRecategorization(messages)
+
+        // Update original values after successful save
+        setOriginalWorkDomainsCSV(workDomainsCSV)
+        setOriginalFamilyEmailsCSV(familyEmailsCSV)
+        setOriginalSpouseEmailsCSV(spouseEmailsCSV)
+
+        success(`Profile updated! Re-categorized ${response.recategorization.updated} contacts.`)
+      } else {
+        // Update original values after successful save
+        setOriginalWorkDomainsCSV(workDomainsCSV)
+        setOriginalFamilyEmailsCSV(familyEmailsCSV)
+        setOriginalSpouseEmailsCSV(spouseEmailsCSV)
+
+        success('Profile updated successfully')
+      }
     } catch (err) {
       error('Failed to update profile')
       console.error(err)
@@ -200,8 +271,9 @@ export default function SettingsPage() {
           <h1 className="text-3xl font-bold mb-8">Settings</h1>
 
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsList className="w-full mb-6">
               <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="relationships">Relationships</TabsTrigger>
               <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="signatures">Signatures</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
@@ -264,6 +336,81 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <TypedNameSettings />
+              </CardContent>
+            </Card>
+            </TabsContent>
+
+            <TabsContent value="relationships" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Relationship Categorization</CardTitle>
+                <CardDescription>
+                  Configure domains and emails to automatically categorize contacts for more precise tone when drafting emails.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="spouseEmailsCSV">Spouse/Partner Email Addresses (CSV)</Label>
+                  <Input
+                    id="spouseEmailsCSV"
+                    type="text"
+                    value={spouseEmailsCSV}
+                    onChange={(e) => setSpouseEmailsCSV(e.target.value)}
+                    placeholder="partner@example.com"
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Enter spouse/partner email addresses separated by commas.<br />
+                    This person is treated as a special case when drafting emails to only use the tone you use specifically for them.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="familyEmailsCSV">Family Email Addresses (CSV)</Label>
+                  <Input
+                    id="familyEmailsCSV"
+                    type="text"
+                    value={familyEmailsCSV}
+                    onChange={(e) => setFamilyEmailsCSV(e.target.value)}
+                    placeholder="dad@example.com, mom@gmail.com"
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Enter family email addresses separated by commas. These contacts will be categorized as &quot;family&quot;.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="workDomainsCSV">Work Domains (CSV)</Label>
+                  <Input
+                    id="workDomainsCSV"
+                    type="text"
+                    value={workDomainsCSV}
+                    onChange={(e) => setWorkDomainsCSV(e.target.value)}
+                    placeholder="company.com, subsidiary.co.uk"
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Enter work domains separated by commas. Anyone from these domains will be categorized as &quot;colleague&quot;.
+                  </p>
+                </div>
+
+                {recategorization.length > 0 && (
+                  <div className="rounded-md bg-green-50 dark:bg-green-900/20 p-4 border border-green-200 dark:border-green-800">
+                    <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">
+                      Relationship Update Complete
+                    </h4>
+                    <ul className="text-sm text-green-800 dark:text-green-200 mt-1 space-y-1">
+                      {recategorization.map((message, index) => (
+                        <li key={index}>{message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
               </CardContent>
             </Card>
             </TabsContent>
