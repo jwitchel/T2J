@@ -1,10 +1,10 @@
-import { VectorStore } from '../vector/qdrant-client';
+import { vectorSearchService } from '../vector';
 import { EmbeddingService } from '../vector/embedding-service';
 import { ExampleSelector } from './example-selector';
 import { PromptFormatterV2 } from './prompt-formatter-v2';
 import { EmailIngestPipeline } from './email-ingest-pipeline';
 import { ProcessedEmail } from './types';
-import { RelationshipService } from '../relationships/relationship-service';
+// import { RelationshipService } from '../relationships/relationship-service'; // No longer needed
 import { RelationshipDetector } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import { WritingPatternAnalyzer } from './writing-pattern-analyzer';
@@ -21,9 +21,9 @@ export interface ToneLearningConfig {
 }
 
 export class ToneLearningOrchestrator {
-  private vectorStore: VectorStore;
   private embeddingService: EmbeddingService;
-  private relationshipService: RelationshipService;
+  // relationshipService no longer needed - ExampleSelector uses VectorSearchService internally
+  // private relationshipService: RelationshipService;
   private relationshipDetector: RelationshipDetector;
   private styleAggregationService: StyleAggregationService;
   private patternAnalyzer: WritingPatternAnalyzer;
@@ -31,36 +31,36 @@ export class ToneLearningOrchestrator {
   private exampleSelector: ExampleSelector;
   private promptFormatter: PromptFormatterV2;
   private ingestionPipeline: EmailIngestPipeline;
-  
-  constructor() {
-    this.vectorStore = new VectorStore();
-    this.embeddingService = new EmbeddingService();
-    this.relationshipService = new RelationshipService();
-    this.relationshipDetector = new RelationshipDetector();
-    this.styleAggregationService = new StyleAggregationService(this.vectorStore);
-    this.patternAnalyzer = new WritingPatternAnalyzer();
-    this.exampleSelector = new ExampleSelector(
-      this.vectorStore, 
-      this.embeddingService,
-      this.relationshipService,
-      this.relationshipDetector
-    );
-    this.promptFormatter = new PromptFormatterV2();
-    this.ingestionPipeline = new EmailIngestPipeline(
-      this.vectorStore,
+
+  constructor(
+    embeddingService?: EmbeddingService,
+    relationshipDetector?: RelationshipDetector,
+    styleAggregationService?: StyleAggregationService,
+    patternAnalyzer?: WritingPatternAnalyzer,
+    exampleSelector?: ExampleSelector,
+    promptFormatter?: PromptFormatterV2,
+    ingestionPipeline?: EmailIngestPipeline
+  ) {
+    this.embeddingService = embeddingService || new EmbeddingService();
+    this.relationshipDetector = relationshipDetector || new RelationshipDetector();
+    this.styleAggregationService = styleAggregationService || new StyleAggregationService();
+    this.patternAnalyzer = patternAnalyzer || new WritingPatternAnalyzer();
+    this.exampleSelector = exampleSelector || new ExampleSelector(this.relationshipDetector);
+    this.promptFormatter = promptFormatter || new PromptFormatterV2();
+    this.ingestionPipeline = ingestionPipeline || new EmailIngestPipeline(
       this.embeddingService,
       this.relationshipDetector,
       this.styleAggregationService,
-      { 
+      {
         batchSize: parseInt(process.env.PIPELINE_BATCH_SIZE || '100'),
         parallelism: parseInt(process.env.PIPELINE_PARALLELISM || '5'),
         errorThreshold: parseFloat(process.env.PIPELINE_ERROR_THRESHOLD || '0.1')
       }
     );
   }
-  
+
   async initialize(): Promise<void> {
-    await this.vectorStore.initialize();
+    await vectorSearchService.initialize();
     await this.embeddingService.initialize();
     await this.promptFormatter.initialize();
     await this.patternAnalyzer.initialize();
@@ -96,14 +96,14 @@ export class ToneLearningOrchestrator {
    */
   async ingestSingleEmail(
     userId: string,
-    _emailAccountId: string,
+    emailAccountId: string,
     email: ProcessedEmail
   ): Promise<{ processed: number; errors: number }> {
     try {
       // Process the email directly without batching
-      await this.ingestionPipeline.processEmail(userId, email);
+      await this.ingestionPipeline.processEmail(userId, emailAccountId, email);
       return { processed: 1, errors: 0 };
-    } catch (error) {
+    } catch (error: unknown) {
       // Include email details in error message
       const emailPreview = email.textContent ? email.textContent.split(/\s+/).slice(0, 50).join(' ') : 'No content';
       const errorContext = `
@@ -134,10 +134,8 @@ Email Details:
           await this.styleAggregationService.updateStylePreferences(userId, relationshipType, aggregated);
           console.log(`Updated style for ${relationshipType}: ${aggregated.emailCount} emails`);
         }
-      } catch (error: any) {
-        if (error.code !== '23503') { // PostgreSQL foreign key violation
-          console.error(`Style aggregation failed for ${relationshipType}:`, error);
-        }
+      } catch (error: unknown) {
+        console.error(`Style aggregation failed for ${relationshipType}:`, error);
       }
     }
   }
@@ -154,8 +152,8 @@ Email Details:
       userRating?: number;
     }
   ): Promise<void> {
-    // TODO: Implement feedback processing
-    // This would update the usage statistics in the vector store
+    // Future: Implement feedback processing to update draft quality metrics
+    // Would track: acceptance rate, edit distance, user ratings
     console.log(chalk.yellow('📝 Feedback processing not yet implemented'));
   }
   
@@ -171,9 +169,10 @@ Email Details:
    * Clear all data for a user
    */
   async clearUserData(userId: string): Promise<void> {
-    await this.vectorStore.deleteUserData(userId);
+    // Future: Delete from email_sent, email_received, tone_preferences, user_relationships
+    console.warn(`[ToneLearning] User data deletion not yet implemented for user ${userId}`);
   }
-  
+
   /**
    * Get statistics about learned tone
    */
@@ -182,15 +181,37 @@ Email Details:
     relationships: Record<string, number>;
     exampleUsage: Map<string, { used: number; rating: number }>;
   }> {
-    const relationshipStats = await this.vectorStore.getRelationshipStats(userId);
-    const totalEmails = Object.values(relationshipStats).reduce((a, b) => a + b, 0);
-    
-    // TODO: Get example usage statistics from usage tracker
-    const exampleUsage = new Map();
-    
+    // Query PostgreSQL for email statistics
+    const { pool } = await import('../../server');
+
+    // Get total emails count
+    const totalResult = await pool.query(
+      'SELECT COUNT(*) as count FROM email_sent WHERE user_id = $1',
+      [userId]
+    );
+    const totalEmails = parseInt(totalResult.rows[0]?.count || '0');
+
+    // Get relationship breakdown
+    const relationshipsResult = await pool.query(
+      `SELECT relationship_type, COUNT(*) as count
+       FROM email_sent
+       WHERE user_id = $1
+       GROUP BY relationship_type`,
+      [userId]
+    );
+
+    const relationships: Record<string, number> = {};
+    relationshipsResult.rows.forEach(row => {
+      relationships[row.relationship_type] = parseInt(row.count);
+    });
+
+    // exampleUsage is not tracked in current system
+    // Would require separate usage tracking table
+    const exampleUsage = new Map<string, { used: number; rating: number }>();
+
     return {
       totalEmails,
-      relationships: relationshipStats,
+      relationships,
       exampleUsage
     };
   }

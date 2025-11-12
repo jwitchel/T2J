@@ -1,53 +1,68 @@
-import { VectorStore, SENT_COLLECTION } from '../vector/qdrant-client';
-import { EmbeddingService } from '../vector/embedding-service';
-import { RelationshipService } from '../relationships/relationship-service';
-import { RelationshipDetector } from '../relationships/relationship-detector';
-import { withRetry } from './retry-utils';
-import { SparseVector } from '../vector/types';
-import { BM25Encoder } from '../vector/bm25-encoder';
-import { RelationshipDetectorResult } from './types';
+/**
+ * Example Selector
+ *
+ * Purpose: Select relevant examples for email draft generation using dual vector search
+ * Uses two-phase selection: direct correspondence + relationship category
+ *
+ * Updated to use VectorSearchService (PostgreSQL + Vectra) instead of Qdrant
+ * Now uses dual embeddings (semantic + style) for better tone matching
+ *
+ * Following patterns:
+ * - Two-phase initialization
+ * - Private helper methods
+ * - Well-defined types
+ */
 
+import { vectorSearchService } from '../vector';
+import { RelationshipDetector } from '../relationships/relationship-detector';
+import { RelationshipDetectorResult } from './types';
+import { SearchMatch } from '../vector/types';
+
+/**
+ * Selected example for draft generation
+ *
+ * Purpose: Standardized format for examples passed to LLM prompt
+ */
 export interface SelectedExample {
   id: string;
   text: string;
   metadata: any;
-  score: number;
+  scores: {
+    semantic: number;
+    style: number;
+    combined: number;
+  };
 }
 
-export interface EmailVector {
-  id: string;
-  score?: number;
-  metadata: any;
-}
-
+/**
+ * Result from example selection
+ *
+ * Purpose: Complete selection result with examples and statistics
+ * Following pattern: Well-defined result type
+ */
 export interface ExampleSelectionResult {
   relationship: string;
   examples: SelectedExample[];
   stats: {
     totalCandidates: number;
     relationshipMatch: number;
-    directCorrespondence: number;  // Tracks emails to the specific recipient
-    avgSimilarity: number;  // Average similarity score
-    avgAge: number;  // Average age in days
+    directCorrespondence: number;
+    avgSemanticScore: number;   // NEW: Separate semantic score
+    avgStyleScore: number;       // NEW: Separate style score
+    avgCombinedScore: number;    // NEW: Combined score
+    avgAge: number;
   };
 }
 
 export class ExampleSelector {
-  private bm25Encoder: BM25Encoder;
   private initialized = false;
   private readonly exampleCount: number;
   private readonly directEmailMaxPct: number;
   private readonly scoreThreshold: number;
 
   constructor(
-    private vectorStore: VectorStore,
-    private embeddingService: EmbeddingService,
-    // @ts-ignore - Kept for future use
-    private _relationshipService: RelationshipService,
     private relationshipDetector: RelationshipDetector
   ) {
-    this.bm25Encoder = new BM25Encoder();
-
     // Load configuration from environment with defaults
     this.exampleCount = parseInt(process.env.EXAMPLE_COUNT || '5');
     this.directEmailMaxPct = parseFloat(process.env.DIRECT_EMAIL_MAX_PERCENTAGE || '0.4');
@@ -57,25 +72,23 @@ export class ExampleSelector {
   /**
    * Initialize the example selector
    *
-   * Purpose: Lazy initialization of BM25 encoder if needed
-   * Currently a placeholder for future initialization needs
+   * Purpose: Lazy initialization of vector search service
+   * Following pattern: Two-phase init
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-
-    // BM25 encoder will be fitted on user's corpus when first used
-    // No initialization needed here
+    await vectorSearchService.initialize();
     this.initialized = true;
   }
-  
+
   /**
    * Select examples for email draft generation
    *
-   * Purpose: Implements two-phase selection strategy with hybrid search:
+   * Purpose: Implements two-phase selection strategy:
    * 1. Direct correspondence (up to 40% of examples)
    * 2. Same relationship category (remaining slots)
    *
-   * Uses hybrid search (semantic + keyword) with temporal weighting for better relevance.
+   * Uses dual vector search (semantic + style) with temporal weighting
    *
    * @param params - Selection parameters including userId, incoming email, recipient
    * @returns Selected examples with metadata and statistics
@@ -89,44 +102,35 @@ export class ExampleSelector {
     await this.initialize();
 
     try {
-      // Step 1: Detect relationship if not provided
-      const relationship = await this.detectRelationship(params.userId, params.recipientEmail);
-
-      // Step 2: Generate embeddings (dense + sparse) for incoming email
-      const { denseVector, sparseVector } = await this.generateEmbeddings(params.incomingEmail);
-
-      // Step 3: Calculate phase limits
       const desiredCount = params.desiredCount ?? this.exampleCount;
       const maxDirectCount = Math.floor(desiredCount * this.directEmailMaxPct);
 
-      // Step 4: Phase 1 - Search direct correspondence
-      const directResults = await this.searchDirectEmails(
+      // Step 1: Detect relationship
+      const relationship = await this._detectRelationship(params.userId, params.recipientEmail);
+
+      // Step 2: Phase 1 - Search direct correspondence
+      const directResults = await this._searchDirectEmails(
         params.userId,
         params.recipientEmail,
-        denseVector,
-        sparseVector,
+        params.incomingEmail,
         maxDirectCount
       );
 
-      // Step 5: Phase 2 - Search relationship category
+      // Step 3: Phase 2 - Search relationship category
       const remainingCount = desiredCount - directResults.length;
-      const categoryResults = await this.searchCategoryEmails(
+      const categoryResults = await this._searchCategoryEmails(
         params.userId,
         relationship.relationship,
-        denseVector,
-        sparseVector,
+        params.incomingEmail,
         remainingCount,
         directResults.map(r => r.id)
       );
 
-      // Step 6: Combine results
-      const combinedResults = this.combineResults(directResults, categoryResults);
+      // Step 4: Combine and format results
+      const examples = this._convertToSelectedExamples([...directResults, ...categoryResults], desiredCount);
 
-      // Step 7: Convert to SelectedExample format
-      const examples = this.convertToSelectedExamples(combinedResults, desiredCount);
-
-      // Step 8: Calculate statistics
-      const stats = this.calculateStats(
+      // Step 5: Calculate statistics
+      const stats = this._calculateStats(
         directResults,
         categoryResults,
         examples,
@@ -140,11 +144,12 @@ export class ExampleSelector {
         stats
       };
 
-    } catch (error: any) {
-      throw new Error(`Example selection failed: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Example selection failed: ${errorMessage}`);
     }
   }
-  
+
   // ============================================================================
   // Private Helper Methods
   // ============================================================================
@@ -153,7 +158,7 @@ export class ExampleSelector {
    * Detect relationship for recipient
    * @private
    */
-  private async detectRelationship(
+  private async _detectRelationship(
     userId: string,
     recipientEmail: string
   ): Promise<RelationshipDetectorResult> {
@@ -164,68 +169,41 @@ export class ExampleSelector {
   }
 
   /**
-   * Generate both dense and sparse embeddings for incoming email
-   *
-   * Purpose: Creates semantic (dense) and keyword (sparse) vectors for hybrid search
-   * @private
-   */
-  private async generateEmbeddings(
-    incomingEmail: string
-  ): Promise<{ denseVector: number[]; sparseVector: SparseVector }> {
-    // Defensive check: ensure incoming email is not empty
-    const emailText = incomingEmail?.trim() || '';
-    if (emailText.length === 0) {
-      throw new Error('Cannot select examples: incoming email content is empty');
-    }
-
-    // Generate dense vector (semantic embedding) with retry
-    const { vector: denseVector } = await withRetry(
-      () => this.embeddingService.embedText(emailText)
-    );
-
-    // Generate sparse vector (BM25 keyword matching)
-    // Note: BM25 encoder will be fitted on user's corpus on first use
-    const sparseVector = this.bm25Encoder.encode(emailText);
-
-    return { denseVector, sparseVector };
-  }
-
-  /**
    * Search for direct correspondence examples
    *
    * Purpose: Find emails sent to this specific recipient (Phase 1)
    * @private
    */
-  private async searchDirectEmails(
+  private async _searchDirectEmails(
     userId: string,
     recipientEmail: string,
-    denseVector: number[],
-    sparseVector: SparseVector,
+    queryText: string,
     maxCount: number
-  ): Promise<EmailVector[]> {
+  ): Promise<SearchMatch[]> {
     if (maxCount === 0) return [];
 
     try {
-      // Use hybrid search (currently falls back to dense-only until sparse vectors are added)
-      const results = await withRetry(
-        () => this.vectorStore.hybridSearch({
-          userId,
-          denseVector,
-          sparseVector,
-          filters: {
-            recipientEmail  // Filter to this specific recipient
-          },
-          limit: Math.max(50, maxCount * 2),  // Get more than needed for filtering
-          scoreThreshold: this.scoreThreshold,
-          collectionName: SENT_COLLECTION
-        })
-      );
+      // Use env variable for direct email fetch limit
+      const DIRECT_EMAIL_FETCH_LIMIT = parseInt(process.env.DIRECT_EMAIL_FETCH_LIMIT || '');
+      if (!DIRECT_EMAIL_FETCH_LIMIT) {
+        throw new Error('DIRECT_EMAIL_FETCH_LIMIT environment variable is required');
+      }
 
-      // Return up to maxCount results
-      return results.slice(0, maxCount);
+      const result = await vectorSearchService.search({
+        userId,
+        queryText,
+        filters: {
+          recipientEmail
+        },
+        limit: Math.max(DIRECT_EMAIL_FETCH_LIMIT, maxCount * 2),
+        scoreThreshold: this.scoreThreshold
+      });
 
-    } catch (error: any) {
-      console.error(`Direct email search failed: ${error.message}`);
+      return result.documents.slice(0, maxCount);
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[ExampleSelector] Direct email search failed: ${errorMessage}`);
       return [];
     }
   }
@@ -236,70 +214,58 @@ export class ExampleSelector {
    * Purpose: Find emails to others in same relationship type (Phase 2)
    * @private
    */
-  private async searchCategoryEmails(
+  private async _searchCategoryEmails(
     userId: string,
     relationship: string,
-    denseVector: number[],
-    sparseVector: SparseVector,
+    queryText: string,
     maxCount: number,
     excludeIds: string[]
-  ): Promise<EmailVector[]> {
+  ): Promise<SearchMatch[]> {
     if (maxCount === 0) return [];
 
     try {
-      // Use hybrid search with relationship filter
-      const results = await withRetry(
-        () => this.vectorStore.hybridSearch({
-          userId,
-          denseVector,
-          sparseVector,
-          filters: {
-            relationship,  // Same relationship type
-            excludeIds  // Don't include direct emails again
-          },
-          limit: Math.max(100, maxCount * 2),  // Get more than needed for filtering
-          scoreThreshold: this.scoreThreshold,
-          collectionName: SENT_COLLECTION
-        })
-      );
+      // Use env variable for category email fetch limit
+      const CATEGORY_EMAIL_FETCH_LIMIT = parseInt(process.env.CATEGORY_EMAIL_FETCH_LIMIT || '');
+      if (!CATEGORY_EMAIL_FETCH_LIMIT) {
+        throw new Error('CATEGORY_EMAIL_FETCH_LIMIT environment variable is required');
+      }
 
-      // Return up to maxCount results
-      return results.slice(0, maxCount);
+      const result = await vectorSearchService.search({
+        userId,
+        queryText,
+        filters: {
+          relationship,
+          excludeIds
+        },
+        limit: Math.max(CATEGORY_EMAIL_FETCH_LIMIT, maxCount * 2),
+        scoreThreshold: this.scoreThreshold
+      });
 
-    } catch (error: any) {
-      console.error(`Category email search failed: ${error.message}`);
+      return result.documents.slice(0, maxCount);
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[ExampleSelector] Category email search failed: ${errorMessage}`);
       return [];
     }
   }
 
   /**
-   * Combine direct and category results
+   * Convert SearchMatch results to SelectedExample format
    *
-   * Purpose: Merge Phase 1 and Phase 2 results, preserving order
+   * Purpose: Standardizes result format for upstream consumers (prompt templates)
    * @private
    */
-  private combineResults(
-    directResults: EmailVector[],
-    categoryResults: EmailVector[]
-  ): EmailVector[] {
-    return [...directResults, ...categoryResults];
-  }
-
-  /**
-   * Convert EmailVector results to SelectedExample format
-   *
-   * Purpose: Standardizes result format for upstream consumers
-   * @private
-   */
-  private convertToSelectedExamples(
-    results: EmailVector[],
-    maxCount: number
-  ): SelectedExample[] {
-    return results.slice(0, maxCount).map(result => ({
-      id: result.id,
-      text: result.metadata.userReply || result.metadata.rawText || '',
-      metadata: result.metadata,
-      score: result.score || 0
+  private _convertToSelectedExamples(matches: SearchMatch[], maxCount: number): SelectedExample[] {
+    return matches.slice(0, maxCount).map(match => ({
+      id: match.id,
+      text: match.text || '',
+      metadata: match.metadata,
+      scores: {
+        semantic: match.scores.semantic,
+        style: match.scores.style,
+        combined: match.scores.combined
+      }
     }));
   }
 
@@ -309,9 +275,9 @@ export class ExampleSelector {
    * Purpose: Provides metadata about example selection for debugging and monitoring
    * @private
    */
-  private calculateStats(
-    directResults: EmailVector[],
-    categoryResults: EmailVector[],
+  private _calculateStats(
+    directResults: SearchMatch[],
+    categoryResults: SearchMatch[],
     selectedExamples: SelectedExample[],
     recipientEmail: string,
     relationship: string
@@ -320,7 +286,7 @@ export class ExampleSelector {
 
     // Count examples matching relationship
     const relationshipMatch = selectedExamples.filter(e =>
-      e.metadata.relationship?.type === relationship
+      e.metadata.relationship === relationship
     ).length;
 
     // Count examples from direct correspondence
@@ -328,9 +294,17 @@ export class ExampleSelector {
       e.metadata.recipientEmail === recipientEmail
     ).length;
 
-    // Calculate average similarity score
-    const avgSimilarity = selectedExamples.length > 0
-      ? selectedExamples.reduce((sum, e) => sum + e.score, 0) / selectedExamples.length
+    // Calculate average scores
+    const avgSemanticScore = selectedExamples.length > 0
+      ? selectedExamples.reduce((sum, e) => sum + e.scores.semantic, 0) / selectedExamples.length
+      : 0;
+
+    const avgStyleScore = selectedExamples.length > 0
+      ? selectedExamples.reduce((sum, e) => sum + e.scores.style, 0) / selectedExamples.length
+      : 0;
+
+    const avgCombinedScore = selectedExamples.length > 0
+      ? selectedExamples.reduce((sum, e) => sum + e.scores.combined, 0) / selectedExamples.length
       : 0;
 
     // Calculate average age in days
@@ -347,7 +321,9 @@ export class ExampleSelector {
       totalCandidates,
       relationshipMatch,
       directCorrespondence,
-      avgSimilarity,
+      avgSemanticScore,
+      avgStyleScore,
+      avgCombinedScore,
       avgAge
     };
   }

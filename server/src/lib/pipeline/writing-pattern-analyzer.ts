@@ -1,13 +1,12 @@
 import { LLMClient } from '../llm-client';
 import { ProcessedEmail } from './types';
-import { pool as db } from '../../server';
+import { pool as db } from '../db';
 import { realTimeLogger } from '../real-time-logger';
 import { TemplateManager } from './template-manager';
 import { decryptPassword } from '../crypto';
 import { nameRedactor } from '../name-redactor';
 import nlp from 'compromise';
 import sentencesPlugin from 'compromise-sentences';
-import { VectorStore } from '../vector/qdrant-client';
 import * as ss from 'simple-statistics';
 
 // Extend compromise with sentence plugin
@@ -91,17 +90,15 @@ export class WritingPatternAnalyzer {
   private llmClient: LLMClient | null = null;
   private templateManager: TemplateManager;
   private modelName: string = '';
-  private vectorStore: VectorStore;
 
   constructor() {
     this.templateManager = new TemplateManager();
-    this.vectorStore = new VectorStore();
   }
 
   /**
    * Load sentence statistics from the database if available
    */
-  async loadSentenceStats(
+  public async loadSentenceStats(
     userId: string,
     relationship: string
   ): Promise<SentencePatterns | null> {
@@ -139,7 +136,7 @@ export class WritingPatternAnalyzer {
           examples: [] // Required by interface
         };
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to load sentence stats:', error);
     }
     
@@ -192,7 +189,7 @@ export class WritingPatternAnalyzer {
       ]);
       
       console.log(`Stored sentence stats for ${userId}/${relationship} in database`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to store sentence stats:', error);
       // Don't throw - this is a non-critical operation
     }
@@ -201,22 +198,59 @@ export class WritingPatternAnalyzer {
   /**
    * Calculate sentence statistics directly from email texts
    * This replaces the LLM-based calculation for accuracy
+   *
+   * @param userId User ID
+   * @param relationship Relationship type (or 'aggregate' for all)
+   * @param styleClusterName Optional: Filter by style cluster (e.g., 'formal', 'casual')
    */
   async calculateSentenceStats(
     userId: string,
-    relationship: string
+    relationship: string,
+    styleClusterName?: string
   ): Promise<SentencePatterns> {
-    // Try to load from cache first
+    // Try to load from cache first (outside transaction)
     const cached = await this.loadSentenceStats(userId, relationship);
     if (cached) {
       return cached;
     }
-    
-    // Fetch emails for this relationship from vector store
-    const emails = await this.vectorStore.getByRelationship(userId, relationship, 1000);
-    
-    console.log(`[SentenceStats] Fetched ${emails.length} emails for ${relationship === 'aggregate' ? 'ALL relationships (aggregate)' : relationship}`);
-    
+
+    // Use advisory lock to prevent duplicate calculations across processes
+    // Advisory locks are lightweight and don't require a row to exist
+    const lockKey = this.getAdvisoryLockKey(userId, relationship);
+
+    try {
+      // Try to acquire advisory lock (non-blocking)
+      const lockResult = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
+      const lockAcquired = lockResult.rows[0]?.pg_try_advisory_lock;
+
+      if (!lockAcquired) {
+        // Someone else is calculating, wait and retry cache
+        console.log(`[SentenceStats] Another process is calculating for ${relationship}, waiting...`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        const cachedAfterWait = await this.loadSentenceStats(userId, relationship);
+        if (cachedAfterWait) {
+          console.log(`[SentenceStats] Cache hit after wait for ${relationship}`);
+          return cachedAfterWait;
+        }
+        // If still no cache after wait, try to acquire lock ourselves
+        const retryLock = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
+        if (!retryLock.rows[0]?.pg_try_advisory_lock) {
+          console.log(`[SentenceStats] Still locked, calculating anyway for ${relationship}`);
+        }
+      }
+
+      // Double-check cache after acquiring lock
+      const cachedAfterLock = await this.loadSentenceStats(userId, relationship);
+      if (cachedAfterLock) {
+        console.log(`[SentenceStats] Cache hit after lock for ${relationship}`);
+        return cachedAfterLock;
+      }
+
+      // Fetch emails for this relationship from PostgreSQL
+      const emails = await this._fetchEmailsFromPostgres(userId, relationship, styleClusterName);
+
+    console.log(`[SentenceStats] Fetched ${emails.length} emails for ${relationship === 'aggregate' ? 'ALL relationships (aggregate)' : relationship}${styleClusterName ? ` (style: ${styleClusterName})` : ''}`);
+
     if (emails.length === 0) {
       return {
         avgLength: 0,
@@ -327,13 +361,101 @@ export class WritingPatternAnalyzer {
       stdDev: result.stdDeviation
     });
     
-    // Store the stats in the database
-    await this.storeSentenceStats(userId, relationship, {
-      ...result,
-      totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
-    } as any);
-    
-    return result;
+      // Store the stats in the database
+      await this.storeSentenceStats(userId, relationship, {
+        ...result,
+        totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
+      } as any);
+
+      return result;
+    } finally {
+      // Always release the advisory lock
+      try {
+        await db.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+      } catch (error) {
+        console.error(`[SentenceStats] Failed to release lock for ${relationship}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Generate advisory lock key from userId and relationship
+   * PostgreSQL advisory locks use bigint, so we hash the strings to a 64-bit integer
+   * @private
+   */
+  private getAdvisoryLockKey(userId: string, relationship: string): number {
+    // Simple hash function to convert string to integer
+    // We use a combination of userId and relationship to ensure uniqueness
+    const str = `${userId}:${relationship}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    // Ensure positive integer for PostgreSQL advisory lock
+    return Math.abs(hash);
+  }
+
+  /**
+   * Fetch emails from PostgreSQL with optional style cluster filtering
+   *
+   * Purpose: Replace VectorStore.getByRelationship with direct PostgreSQL query
+   * @private
+   */
+  private async _fetchEmailsFromPostgres(
+    userId: string,
+    relationship: string,
+    styleClusterName?: string
+  ): Promise<Array<{ metadata: { userReply: string; sentDate: Date } }>> {
+    try {
+      let query = `
+        SELECT se.user_reply, se.sent_date
+        FROM email_sent se
+        WHERE se.user_id = $1
+          AND se.semantic_vector IS NOT NULL
+      `;
+
+      const params: any[] = [userId];
+      let paramCount = 1;
+
+      // Filter by relationship if not aggregate
+      if (relationship && relationship !== 'aggregate') {
+        paramCount++;
+        query += ` AND se.relationship_type = $${paramCount}`;
+        params.push(relationship);
+      }
+
+      // Filter by style cluster if specified
+      if (styleClusterName) {
+        query += `
+          AND se.id IN (
+            SELECT esm.email_id
+            FROM email_style_mapping esm
+            JOIN style_clusters sc ON esm.style_cluster_id = sc.id
+            WHERE sc.cluster_name = $${paramCount + 1}
+          )
+        `;
+        paramCount++;
+        params.push(styleClusterName);
+      }
+
+      query += ' ORDER BY se.sent_date DESC LIMIT 1000';
+
+      const result = await db.query(query, params);
+
+      return result.rows.map(row => ({
+        metadata: {
+          userReply: row.user_reply,
+          sentDate: row.sent_date
+        }
+      }));
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to fetch emails from PostgreSQL: ${errorMessage}`);
+      return [];
+    }
   }
 
   /**
@@ -371,10 +493,9 @@ export class WritingPatternAnalyzer {
   /**
    * Initialize with LLM configuration
    */
-  async initialize(llmProviderId?: string): Promise<void> {
-    // Initialize template manager and vector store
+  public async initialize(llmProviderId?: string): Promise<void> {
+    // Initialize template manager
     await this.templateManager.initialize();
-    await this.vectorStore.initialize();
     // Get LLM provider configuration using raw SQL
     let query = `
       SELECT id, provider_name, provider_type, api_key_encrypted as api_key, api_endpoint, 
@@ -411,7 +532,7 @@ export class WritingPatternAnalyzer {
     let decryptedApiKey = '';
     try {
       decryptedApiKey = decryptPassword(provider.api_key);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to decrypt API key:', error);
       throw new Error('Failed to decrypt LLM provider API key');
     }
@@ -429,7 +550,7 @@ export class WritingPatternAnalyzer {
   /**
    * Main entry point - analyze writing patterns from email corpus
    */
-  async analyzeWritingPatterns(
+  public async analyzeWritingPatterns(
     userId: string,
     emails: ProcessedEmail[],
     relationship?: string
@@ -468,7 +589,7 @@ export class WritingPatternAnalyzer {
         const analysis = await this.analyzeBatch(batches[i], relationship);
         batchAnalyses.push(analysis);
         successfulBatches++;
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`Error analyzing batch ${i + 1}:`, error);
         failedBatches++;
         // Continue with other batches even if one fails
@@ -631,7 +752,7 @@ export class WritingPatternAnalyzer {
           end: emails[emails.length - 1].date
         }
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to parse LLM response:', response);
       throw new Error('Invalid response format from LLM');
     }

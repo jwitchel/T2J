@@ -5,40 +5,33 @@ import { SelectedExample } from './example-selector';
 import { RelationshipProfile } from './types';
 import { WritingPatterns } from './writing-pattern-analyzer';
 import { SpamCheckResult } from './types';
+import { AggregatedStyle } from '../style/style-aggregation-service';
+import { SimplifiedEmailMetadata } from './types';
 
 export interface PromptTemplateData {
   // Core data
   recipientEmail: string;
   relationship: string;
   incomingEmail: string;
-  
+
   // User identity
   userNames?: {
     name: string;
     nicknames?: string;
   };
-  
+
   // Incoming email metadata
-  incomingEmailMetadata?: {
-    from: { address: string; name?: string }[];
-    to: { address: string; name?: string }[];
-    cc?: { address: string; name?: string }[];
-    subject: string;
-    date: Date;
-    rawMessage?: string;  // Complete raw email (headers + body)
+  incomingEmailMetadata?: SimplifiedEmailMetadata & {
     spamCheckResult?: SpamCheckResult;  // Spam screening analysis
   };
-  
+
   // Examples formatted for templates
   exactExamples?: FormattedExample[];
   otherExamples?: FormattedExample[];
-  
+
   // Relationship profile with aggregated style
   profile?: EnhancedRelationshipProfile | null;
-  
-  // NLP features from incoming email
-  nlpFeatures?: any;
-  
+
   // Writing patterns
   patterns?: WritingPatterns;
 
@@ -56,29 +49,7 @@ export interface PromptTemplateData {
 
 // Enhanced profile that includes aggregated style patterns
 export interface EnhancedRelationshipProfile extends RelationshipProfile {
-  aggregatedStyle?: {
-    greetings: Array<{ text: string; frequency: number; percentage: number }>;
-    closings: Array<{ text: string; frequency: number; percentage: number }>;
-    emojis: Array<{ emoji: string; frequency: number; contexts: string[] }>;
-    sentimentProfile: { 
-      primaryTone: string; 
-      averageWarmth: number; 
-      averageFormality: number; 
-    };
-    vocabularyProfile: {
-      complexityLevel: string;
-      technicalTerms: string[];
-      commonPhrases: Array<{ phrase: string; frequency: number }>;
-    };
-    structuralPatterns: {
-      averageEmailLength: number;
-      averageSentenceLength: number;
-      paragraphingStyle: string;
-    };
-    emailCount: number;
-    confidenceScore: number;
-    lastUpdated?: string;
-  };
+  aggregatedStyle?: AggregatedStyle;
   personName?: string;
   relationshipType?: string;
 }
@@ -87,6 +58,9 @@ export interface FormattedExample {
   text: string;
   relationship: string;
   score?: number;
+  semanticScore?: number;  // NEW: Topic similarity
+  styleScore?: number;      // NEW: Tone similarity
+  combinedScore?: number;   // NEW: Weighted combination
   subject?: string;
   formalityScore?: number;
   sentiment?: string;
@@ -168,7 +142,7 @@ export class TemplateManager {
           Handlebars.registerPartial(name, content);
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.warn('No partials directory found, continuing without partials');
     }
   }
@@ -196,7 +170,7 @@ export class TemplateManager {
       this.lastModified.set(cacheKey, mtime);
       
       return compiled;
-    } catch (error) {
+    } catch (error: unknown) {
       throw new Error(`Failed to load template ${name}: ${error}`);
     }
   }
@@ -214,8 +188,11 @@ export class TemplateManager {
   formatExamplesForTemplate(examples: SelectedExample[]): FormattedExample[] {
     return examples.map(ex => ({
       text: this.transformExampleText(ex.text),
-      relationship: ex.metadata.relationship?.type || 'unknown',
-      score: ex.score,
+      relationship: ex.metadata.relationship?.type || ex.metadata.relationship || 'unknown',
+      score: ex.scores?.combined || (ex as any).score || 0,  // Backwards compat
+      semanticScore: ex.scores?.semantic || 0,  // NEW: Semantic similarity
+      styleScore: ex.scores?.style || 0,        // NEW: Style similarity
+      combinedScore: ex.scores?.combined || (ex as any).score || 0,  // NEW: Combined score
       subject: ex.metadata.subject,
       formalityScore: ex.metadata.features?.stats?.formalityScore,
       sentiment: ex.metadata.features?.sentiment?.dominant,
@@ -260,19 +237,12 @@ export class TemplateManager {
       relationship: string;
       examples: SelectedExample[];
       relationshipProfile?: EnhancedRelationshipProfile | null;
-      nlpFeatures?: any;
       writingPatterns?: WritingPatterns | null;
       userNames?: {
         name: string;
         nicknames?: string;
       };
-      incomingEmailMetadata?: {
-        from: { address: string; name?: string }[];
-        to: { address: string; name?: string }[];
-        cc?: { address: string; name?: string }[];
-        subject: string;
-        date: Date;
-      };
+      incomingEmailMetadata?: SimplifiedEmailMetadata;
       availableActions?: string;
     }
   ): PromptTemplateData {
@@ -313,7 +283,6 @@ export class TemplateManager {
         ? this.formatExamplesForTemplate(otherMatches)
         : undefined,
       profile: params.relationshipProfile,
-      nlpFeatures: params.nlpFeatures,
       patterns: params.writingPatterns ? this.transformPatternsForTemplate(params.writingPatterns) : undefined,
       availableActions: params.availableActions,
       meta: {
