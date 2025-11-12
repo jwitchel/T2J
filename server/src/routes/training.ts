@@ -151,7 +151,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
             continue;
           }
 
-          // Save to Qdrant using EmailStorageService
+          // Save to database using EmailStorageService
           const result = await emailStorageService.saveEmail({
             userId,
             emailAccountId,
@@ -237,7 +237,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       res.json({
       success: true,
       processed,
-      saved,  // Number of Qdrant entries created (can be > processed for sent emails with multiple recipients)
+      saved,  // Number of database entries created (can be > processed for sent emails with multiple recipients)
       errors,
       duration
       });

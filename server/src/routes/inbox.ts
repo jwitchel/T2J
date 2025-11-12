@@ -241,7 +241,7 @@ router.get('/accounts', requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-// Get a specific email by messageId from Qdrant
+// Get a specific email by messageId from database
 router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
