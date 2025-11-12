@@ -41,26 +41,26 @@ Relationship Type: {{relationship}}
 {{/if}}
 
 === YOUR WRITING EXAMPLES ===
-The following are examples of the writer's writing style chosen by similarity to the inbound email and the relationship of {{relationship}}.  
+The following are examples of the writer's writing style chosen by similarity to the inbound email and the relationship of {{relationship}}.
 IMPORTANT:Favor any convention you identify in the thread you're replying to, but you should **rely heavily on these examples for tone**. Consider the similarity score.
-{{#if exactExamples}}
+{{#if directExamples}}
 
-Examples from {{relationship}} relationships ({{exactExamples.length}} found):
-{{#each exactExamples}}
+Examples from {{relationship}} relationships ({{directExamples.length}} found):
+{{#each directExamples}}
 
-+++ Example {{inc @index}} (Similarity Score: {{round this.score 2}})+++ 
++++ Example {{inc @index}} (Similarity Score: {{round this.score 2}})+++
 Subject: {{this.subject}}
-Body: {{truncate this.text 1000}}
+Body: {{truncate this.text 500}}
 {{/each}}
 {{else}}
 No examples found for {{relationship}} relationship.
 {{/if}}
 
-{{#if otherExamples}}
+{{#if categoryExamples}}
 Additional examples from other relationships:
-{{#each otherExamples}}
+{{#each categoryExamples}}
 
 Example {{inc @index}} ({{this.relationship}}, Similarity Score: {{round this.score 2}}):
-"{{truncate this.text 1000}}"
+"{{truncate this.text 500}}"
 {{/each}}
 {{/if}}

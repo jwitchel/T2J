@@ -135,7 +135,7 @@ describe('TemplateManager', () => {
         {
           id: '1',
           text: 'Hello there!',
-          score: 0.9,
+          scores: { semantic: 0.9, style: 0, combined: 0.9 },
           metadata: {
             relationship: { type: 'friend', confidence: 0.9, detectionMethod: 'auto' },
             features: {
@@ -156,7 +156,7 @@ describe('TemplateManager', () => {
         text: 'Hello there!',
         relationship: 'friend',
         score: 0.9,
-        semanticScore: 0,
+        semanticScore: 0.9,
         styleScore: 0,
         combinedScore: 0.9,
         subject: 'Greeting',
@@ -175,7 +175,7 @@ describe('TemplateManager', () => {
         {
           id: '1',
           text: 'Hey friend!',
-          score: 0.95,
+          scores: { semantic: 0.95, style: 0, combined: 0.95 },
           metadata: {
             relationship: { type: 'friend', confidence: 0.9, detectionMethod: 'auto' },
             features: {
@@ -188,7 +188,7 @@ describe('TemplateManager', () => {
         {
           id: '2',
           text: 'Hello colleague',
-          score: 0.8,
+          scores: { semantic: 0.8, style: 0, combined: 0.8 },
           metadata: {
             relationship: { type: 'colleague', confidence: 0.85, detectionMethod: 'auto' },
             features: {

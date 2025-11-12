@@ -10,6 +10,7 @@ import {
 } from '../style/style-aggregation-service';
 import { EnhancedRelationshipProfile } from '../pipeline/template-manager';
 import { formalityScoreToString, PHRASE_FREQUENCY_THRESHOLDS, RELATIONSHIP_THRESHOLDS } from '../style/style-constants';
+import { RelationshipDetector, RelationshipType } from './relationship-detector';
 
 export interface VectorSearchContext {
   relationship: string;
@@ -363,6 +364,102 @@ export class RelationshipService {
       avoid_phrases: defaults.avoid_phrases, // Keep defaults as we don't track these
       common_emojis: commonEmojis,
       common_contractions: [] // No longer analyzed
+    };
+  }
+
+  /**
+   * Re-categorize all people for a user based on new relationship domain configuration
+   * Called after user updates their work domains, family emails, or spouse emails
+   *
+   * Uses RelationshipDetector.determineConfiguredRelationship() for consistent logic
+   *
+   * @param userId - User whose people should be re-categorized
+   * @param config - New relationship configuration (work domains, family/spouse emails)
+   * @returns Summary of changes made
+   */
+  async recategorizePeople(userId: string, config: {
+    workDomains: string[];
+    familyEmails: string[];
+    spouseEmails: string[];
+  }): Promise<{
+    updated: number;
+    spouse: number;
+    family: number;
+    colleague: number;
+  }> {
+    // Fetch all people and their emails for this user
+    const peopleResult = await pool.query(
+      `SELECT p.id, p.user_id, pe.email_address, ur.relationship_type, pr.confidence, pr.id as pr_id, pr.user_relationship_id
+       FROM people p
+       JOIN person_emails pe ON p.id = pe.person_id
+       LEFT JOIN person_relationships pr ON p.id = pr.person_id AND pr.is_primary = true
+       LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+       WHERE p.user_id = $1`,
+      [userId]
+    );
+
+    const updates: {personId: string; prId: string | null; newRelationship: RelationshipType}[] = [];
+    let spouseCount = 0;
+    let familyCount = 0;
+    let colleagueCount = 0;
+
+    for (const row of peopleResult.rows) {
+      const email = row.email_address;
+      const currentRelationship = row.relationship_type;
+
+      // Use shared logic from RelationshipDetector
+      const newRelationship = RelationshipDetector.determineConfiguredRelationship(email, config);
+
+      // Track counts and updates
+      if (newRelationship) {
+        if (newRelationship === RelationshipType.SPOUSE) spouseCount++;
+        else if (newRelationship === RelationshipType.FAMILY) familyCount++;
+        else if (newRelationship === RelationshipType.COLLEAGUE) colleagueCount++;
+
+        // Only update if relationship changed
+        if (newRelationship !== currentRelationship) {
+          updates.push({ personId: row.id, prId: row.pr_id, newRelationship });
+        }
+      }
+    }
+
+    // Batch update all changed relationships
+    if (updates.length > 0) {
+      for (const {personId, prId, newRelationship} of updates) {
+        // Get or create the user_relationship record for this relationship type
+        const urResult = await pool.query(
+          `INSERT INTO user_relationships (user_id, relationship_type, display_name, is_system_default)
+           VALUES ($1, $2, $3, true)
+           ON CONFLICT (user_id, relationship_type) DO UPDATE SET updated_at = NOW()
+           RETURNING id`,
+          [userId, newRelationship, newRelationship]
+        );
+        const userRelationshipId = urResult.rows[0].id;
+
+        if (prId) {
+          // Update existing person_relationship
+          await pool.query(
+            `UPDATE person_relationships
+             SET user_relationship_id = $1, confidence = 1.0, updated_at = NOW()
+             WHERE id = $2`,
+            [userRelationshipId, prId]
+          );
+        } else {
+          // Create new person_relationship
+          await pool.query(
+            `INSERT INTO person_relationships (user_id, person_id, user_relationship_id, is_primary, confidence, user_set)
+             VALUES ($1, $2, $3, true, 1.0, true)`,
+            [userId, personId, userRelationshipId]
+          );
+        }
+      }
+    }
+
+    return {
+      updated: updates.length,
+      spouse: spouseCount,
+      family: familyCount,
+      colleague: colleagueCount
     };
   }
 }

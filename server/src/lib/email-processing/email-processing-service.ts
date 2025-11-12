@@ -21,6 +21,7 @@ import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
+import { stripAttachments } from '../email-attachment-stripper';
 
 /**
  * User context needed for email processing
@@ -79,6 +80,7 @@ export class EmailProcessingService {
     return emailBody;
   }
 
+
   /**
    * Parse email exactly once
    * @private
@@ -99,6 +101,10 @@ export class EmailProcessingService {
     // Extract email body
     const emailBody = await this.extractEmailBody(parsed);
 
+    // Strip attachments from fullMessage before passing to LLM
+    // This prevents massive DocuSign PDFs, etc from bloating token count
+    const cleanFullMessage = await stripAttachments(fullMessage, parsed);
+
     const processedEmail: ProcessedEmail = {
       uid: messageId,
       messageId: messageId,
@@ -113,7 +119,7 @@ export class EmailProcessingService {
       htmlContent: parsed.html || null,
       userReply: emailBody,
       respondedTo: '', // Set by reply extractor when content is split into user text vs quoted text
-      fullMessage: fullMessage
+      fullMessage: cleanFullMessage
     };
 
     return { parsed, processedEmail, emailBody };
@@ -222,7 +228,8 @@ export class EmailProcessingService {
       const spamDetector = await getSpamDetector(providerId);
       const spamCheckResult = await spamDetector.checkSpam({
         senderEmail,
-        fullMessage,
+        fullMessage: parsedData.processedEmail.fullMessage, // Use stripped version
+        subject: parsedData.processedEmail.subject,
         userNames: userContext.userNames,
         userId
       });

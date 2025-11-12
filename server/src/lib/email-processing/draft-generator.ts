@@ -109,8 +109,7 @@ export class DraftGenerator {
         throw new Error('Email missing subject, cannot generate draft');
       }
 
-      // Initialize constants - pass complete raw email for LLM analysis
-      // Note: LLMClient automatically strips attachments to prevent token limit errors
+      // Initialize constants
       const incomingEmailMetadata = {
         from: processedEmail.from,
         to: processedEmail.to,
