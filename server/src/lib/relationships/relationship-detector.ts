@@ -1,5 +1,5 @@
 import { RelationshipDetectorResult } from '../pipeline/types';
-import { personService } from './person-service';
+import { personService as defaultPersonService, PersonService } from './person-service';
 
 export interface DetectRelationshipParams {
   userId: string;
@@ -14,15 +14,21 @@ export interface DetectRelationshipParams {
 }
 
 export class RelationshipDetector {
-  async initialize(): Promise<void> {
-    await personService.initialize();
+  private personService: PersonService;
+
+  constructor(personService?: PersonService) {
+    this.personService = personService || defaultPersonService;
   }
 
-  async detectRelationship(params: DetectRelationshipParams): Promise<RelationshipDetectorResult> {
+  public async initialize(): Promise<void> {
+    await this.personService.initialize();
+  }
+
+  public async detectRelationship(params: DetectRelationshipParams): Promise<RelationshipDetectorResult> {
     const { userId, recipientEmail } = params;
-    
+
     // First, check if we have this person in our database
-    const person = await personService.findPersonByEmail(recipientEmail, userId);
+    const person = await this.personService.findPersonByEmail(recipientEmail, userId);
     
     if (person && person.relationships.length > 0) {
       // Find the primary relationship or the one with highest confidence
@@ -77,14 +83,14 @@ export class RelationshipDetector {
     // Create person record for future use (only if we didn't find them)
     if (!person) {
       try {
-        await personService.findOrCreatePerson({
+        await this.personService.findOrCreatePerson({
           userId,
           name: email.split('@')[0], // Use email prefix as initial name
           emailAddress: recipientEmail,
           relationshipType: relationship,
           confidence
         });
-      } catch (error) {
+      } catch (error: unknown) {
         // Log but don't fail - the detection still worked
         console.error('Failed to create person record:', error);
       }
