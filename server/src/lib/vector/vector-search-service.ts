@@ -2,7 +2,7 @@
  * Vector Search Service
  *
  * Purpose: PostgreSQL + in-memory vector search with dual embeddings (semantic + style)
- * Replaces Qdrant with simpler architecture optimized for small-to-medium scale (500-2000 emails)
+ * Optimized for small-to-medium scale (500-2000 emails)
  *
  * Architecture:
  * - Storage: PostgreSQL (semantic_vector, style_vector columns)

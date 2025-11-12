@@ -179,12 +179,6 @@ export function Navbar() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/qdrant" className="flex items-center gap-2 cursor-pointer">
-                    <Database className="h-4 w-4" />
-                    Vector DB Viewer
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
                   <Link href="/db-browser" className="flex items-center gap-2 cursor-pointer">
                     <Database className="h-4 w-4" />
                     Database Browser

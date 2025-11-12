@@ -126,7 +126,7 @@ function InboxContent() {
   const [showAllEmails, setShowAllEmails] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
 
-  // URL parameter mode: viewing a specific email from Qdrant
+  // URL parameter mode: viewing a specific email from database
   const urlEmailAccountId = searchParams.get('emailAccountId');
   const urlMessageId = searchParams.get('messageId');
   const isViewMode = !!(urlEmailAccountId && urlMessageId);
@@ -275,7 +275,7 @@ function InboxContent() {
     }
   };
 
-  // Fetch a specific email from Qdrant by messageId (view mode)
+  // Fetch a specific email from database by messageId (view mode)
   const fetchSpecificEmail = async (accountId: string, messageId: string) => {
     setLoading(true);
     try {

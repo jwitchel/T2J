@@ -23,7 +23,7 @@ The email processing system handles automated draft generation for incoming emai
 4. **Record action tracking** (optimistic - prevents retry on crash)
 5. **Check AbortSignal again** (before IMAP operations)
 6. Upload draft OR move email (based on action type)
-7. Save email to Qdrant vector store
+7. Save email to database
 8. Release lock automatically
 
 #### `email-lock-manager.ts` - Distributed Locking

@@ -4,8 +4,7 @@
  * Purpose: Select relevant examples for email draft generation using dual vector search
  * Uses two-phase selection: direct correspondence + relationship category
  *
- * Updated to use VectorSearchService (PostgreSQL + Vectra) instead of Qdrant
- * Now uses dual embeddings (semantic + style) for better tone matching
+ * Uses VectorSearchService (PostgreSQL + Vectra) with dual embeddings (semantic + style) for better tone matching
  *
  * Following patterns:
  * - Two-phase initialization
