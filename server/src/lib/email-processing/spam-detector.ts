@@ -10,6 +10,7 @@ import { SpamCheckResult } from '../pipeline/types';
 
 export interface SpamCheckParams {
   senderEmail: string;
+  replyTo?: string;  // Optional: Reply-To header address (checked first for response count)
   fullMessage: string;
   subject?: string;
   userNames: {
@@ -89,12 +90,20 @@ export class SpamDetector {
       throw new Error('SpamDetector not initialized. Call initialize() first.');
     }
 
-    const { senderEmail, fullMessage, userNames, userId } = params;
+    const { senderEmail, replyTo, fullMessage, userNames, userId } = params;
 
-    // Step 1: Get response count across ALL user's accounts
-    const responseCount = await this.getResponseCount(userId, senderEmail);
+    // Check response count for BOTH Reply-To and From addresses
+    // Use the maximum count (if user replied to either address, it's not spam)
+    // For Google Docs: From=noreply@google.com (0 replies), Reply-To=workmate@foo.com (5 replies)
+    // We want to use the 5 replies from the actual person
+    let responseCount = await this.getResponseCount(userId, senderEmail);
 
-    // Step 2: Auto-whitelist if user has replied 2+ times
+    if (replyTo && replyTo !== senderEmail) {
+      const replyToResponseCount = await this.getResponseCount(userId, replyTo);
+      responseCount = Math.max(responseCount, replyToResponseCount);
+    }
+
+    // Step 2: Auto-whitelist if user has replied 2+ times to either address
     if (responseCount >= 2) {
       const result: SpamCheckResult = {
         isSpam: false,

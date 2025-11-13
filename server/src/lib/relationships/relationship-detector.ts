@@ -13,9 +13,43 @@ export enum RelationshipType {
   EXTERNAL = 'external'
 }
 
+/**
+ * Namespace for RelationshipType utility functions
+ */
+export namespace RelationshipType {
+  /**
+   * Priority order for relationship types (lower number = higher priority)
+   */
+  const PRIORITY: Record<string, number> = {
+    [RelationshipType.SPOUSE]: 1,
+    [RelationshipType.FAMILY]: 2,
+    [RelationshipType.COLLEAGUE]: 3,
+    [RelationshipType.FRIENDS]: 4,
+    [RelationshipType.EXTERNAL]: 5
+  };
+
+  /**
+   * Select the higher priority relationship match
+   * Priority: spouse > family > colleague > friends > external
+   */
+  export function selectHigherPriorityMatch(
+    match1: { relationship: string; confidence: number } | null,
+    match2: { relationship: string; confidence: number } | null
+  ): { relationship: string; confidence: number } | null {
+    if (!match1) return match2;
+    if (!match2) return match1;
+
+    const priority1 = PRIORITY[match1.relationship] || 999;
+    const priority2 = PRIORITY[match2.relationship] || 999;
+
+    return priority1 <= priority2 ? match1 : match2;
+  }
+}
+
 export interface DetectRelationshipParams {
   userId: string;
   recipientEmail: string;
+  replyToEmail?: string;  // Optional: Reply-To header address (checked first for relationship detection)
   subject?: string;
   historicalContext?: {
     familiarityLevel: string;
@@ -143,10 +177,22 @@ export class RelationshipDetector {
   }
 
   public async detectRelationship(params: DetectRelationshipParams): Promise<RelationshipDetectorResult> {
-    const { userId, recipientEmail } = params;
+    const { userId, recipientEmail, replyToEmail } = params;
 
-    // First, check if we have this person in our database
-    const person = await this.personService.findPersonByEmail(recipientEmail, userId);
+    // Check BOTH Reply-To and From addresses (not just fallback)
+    // For Google Docs shares: From=noreply@google.com, Reply-To=tmoon@kingenergy.com
+    // We want to detect the relationship for either address
+
+    // Step 1: Check database for both addresses (prefer Reply-To if both exist)
+    let person = null;
+
+    if (replyToEmail) {
+      person = await this.personService.findPersonByEmail(replyToEmail, userId);
+    }
+
+    if (!person) {
+      person = await this.personService.findPersonByEmail(recipientEmail, userId);
+    }
 
     if (person && person.relationships.length > 0) {
       // Find the primary relationship or the one with highest confidence
@@ -160,19 +206,34 @@ export class RelationshipDetector {
       };
     }
 
-    // Get user's relationship configuration
+    // Step 2: Check configured relationships for BOTH addresses
+    // Priority: spouse > family > colleague
     const config = await this.getUserRelationshipConfig(userId);
 
-    // Check configured relationships (deterministic, highest priority for new contacts)
-    const configuredMatch = this.checkConfiguredRelationship(recipientEmail, config);
+    let replyToMatch = null;
+    let fromMatch = null;
+
+    if (replyToEmail) {
+      replyToMatch = this.checkConfiguredRelationship(replyToEmail, config);
+    }
+    fromMatch = this.checkConfiguredRelationship(recipientEmail, config);
+
+    // Choose the higher priority match (spouse > family > colleague)
+    const configuredMatch = RelationshipType.selectHigherPriorityMatch(replyToMatch, fromMatch);
+
     if (configuredMatch) {
+      // Determine which email to store based on which one matched
+      const matchedEmail = (replyToMatch?.relationship === configuredMatch.relationship && replyToEmail)
+        ? replyToEmail
+        : recipientEmail;
+
       // Create person record with configured relationship
       if (!person) {
         try {
           await this.personService.findOrCreatePerson({
             userId,
-            name: recipientEmail.split('@')[0],
-            emailAddress: recipientEmail,
+            name: matchedEmail.split('@')[0],
+            emailAddress: matchedEmail,
             relationshipType: configuredMatch.relationship,
             confidence: configuredMatch.confidence
           });
@@ -188,8 +249,8 @@ export class RelationshipDetector {
       };
     }
 
-    // If person not found and no configured match, use domain-based heuristics
-    const email = recipientEmail.toLowerCase();
+    // Step 3: Use domain-based heuristics (prefer Reply-To if available)
+    const email = (replyToEmail || recipientEmail).toLowerCase();
     let relationship = RelationshipType.EXTERNAL;
     let confidence = 0.5;
 
@@ -225,10 +286,11 @@ export class RelationshipDetector {
     // Create person record for future use (only if we didn't find them)
     if (!person) {
       try {
+        const emailToStore = replyToEmail || recipientEmail;
         await this.personService.findOrCreatePerson({
           userId,
           name: email.split('@')[0], // Use email prefix as initial name
-          emailAddress: recipientEmail,
+          emailAddress: emailToStore,
           relationshipType: relationship,
           confidence
         });

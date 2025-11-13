@@ -52,6 +52,7 @@ export interface ProcessedEmail {
   inReplyTo: string | null;
   date: Date;
   from: Array<{ address: string; name?: string }>;
+  replyTo: Array<{ address: string; name?: string }>;
   to: Array<{ address: string; name?: string }>;
   cc: Array<{ address: string; name?: string }>;
   bcc: Array<{ address: string; name?: string }>;

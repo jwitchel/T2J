@@ -94,6 +94,7 @@ export class EmailProcessingService {
     const subject = parsed.subject || '';
     const to = (parsed.to || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
     const cc = (parsed.cc || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
+    const replyTo = (parsed.replyTo || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
     const messageId = parsed.messageId || `<${Date.now()}@${emailAccountId}>`;
     const messageDate = parsed.date ? new Date(parsed.date) : new Date();
     const inReplyTo = parsed.inReplyTo || null;
@@ -111,6 +112,7 @@ export class EmailProcessingService {
       inReplyTo: inReplyTo,
       date: messageDate,
       from: [{ address: fromAddress, name: fromName }],
+      replyTo,
       to,
       cc,
       bcc: [],
@@ -225,9 +227,11 @@ export class EmailProcessingService {
       // Step 3: Check for spam
       const spamCheckStartTime = Date.now();
       const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase() || '';
+      const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
       const spamDetector = await getSpamDetector(providerId);
       const spamCheckResult = await spamDetector.checkSpam({
         senderEmail,
+        replyTo,
         fullMessage: parsedData.processedEmail.fullMessage, // Use stripped version
         subject: parsedData.processedEmail.subject,
         userNames: userContext.userNames,
