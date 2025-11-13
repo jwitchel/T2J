@@ -118,10 +118,12 @@ describe('BullMQ Queue Configuration', () => {
         JobPriority.LOW
       ];
 
-      for (const priority of priorities) {
+      for (let i = 0; i < priorities.length; i++) {
+        const priority = priorities[i];
+        // Use unique account ID for each priority to avoid job ID collision
         const job = await addInboxJob({
             userId: 'test',
-            accountId: 'test',
+            accountId: `test-${i}`,
             folderName: 'INBOX'
           },
           priority

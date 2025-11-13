@@ -87,9 +87,10 @@ describe('Queue Integration Tests', () => {
 
   it('should handle different job priorities', async () => {
     // Add jobs with different priorities
+    // Use different account IDs to avoid job ID collision
     const criticalJob = await addInboxJob({
         userId: 'test',
-        accountId: 'test',
+        accountId: 'test-critical',
         folderName: 'INBOX'
       },
       JobPriority.CRITICAL
@@ -97,7 +98,7 @@ describe('Queue Integration Tests', () => {
 
     const lowJob = await addInboxJob({
         userId: 'test',
-        accountId: 'test',
+        accountId: 'test-low',
         folderName: 'INBOX'
       },
       JobPriority.LOW
