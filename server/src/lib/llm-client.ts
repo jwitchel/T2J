@@ -268,6 +268,13 @@ export class LLMClient {
     }
   }
 
+  /**
+   * Get model information (context window, max output, etc.)
+   */
+  getModelInfo() {
+    return getModelInfo(this.modelName);
+  }
+
 
   /**
    * Truncate prompt to fit within model's context window
