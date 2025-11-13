@@ -14,7 +14,7 @@ import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
 import { ActionHelpers } from '../email-actions';
 import { StyleAggregationService } from '../style/style-aggregation-service';
-import { ParsedMail, AddressObject } from 'mailparser';
+import type { Email as PostalMimeEmail, Address } from 'postal-mime';
 
 /**
  * Simplified email address format
@@ -34,34 +34,30 @@ interface RelationshipResult {
 }
 
 /**
- * Extract email addresses from AddressObject field
- * Handles both single AddressObject and arrays
+ * Extract email addresses from Address array
+ * Handles PostalMime's Address[] type
  */
-function extractAddresses(field: AddressObject | AddressObject[] | undefined): EmailAddress[] {
+function extractAddresses(field: Address[] | undefined): EmailAddress[] {
   if (!field) return [];
 
-  const fields = Array.isArray(field) ? field : [field];
-
-  return fields.flatMap(f =>
-    (f.value || []).map(addr => ({
-      address: addr.address || '',
-      name: addr.name
-    }))
-  );
+  return field.map(addr => ({
+    address: addr.address || '',
+    name: addr.name
+  }));
 }
 
 /**
  * Extract single email address (for from field)
+ * Handles PostalMime's Address type: { name: string; address?: string }
  */
-function extractSingleAddress(field: AddressObject | undefined): EmailAddress | undefined {
-  if (!field || !field.value || field.value.length === 0) {
+function extractSingleAddress(field: Address | undefined): EmailAddress | undefined {
+  if (!field || !field.address) {
     return undefined;
   }
 
-  const addr = field.value[0];
   return {
-    address: addr.address || '',
-    name: addr.name
+    address: field.address,
+    name: field.name
   };
 }
 
@@ -342,7 +338,7 @@ export class DraftGenerator {
    * @private
    */
   private buildBaseDraft(
-    parsed: ParsedMail,
+    parsed: PostalMimeEmail,
     meta: LLMMetadata,
     relationship: RelationshipResult,
     userContext: UserContext,
@@ -374,7 +370,7 @@ export class DraftGenerator {
    * @private
    */
   private buildSilentDraft(
-    parsed: ParsedMail,
+    parsed: PostalMimeEmail,
     meta: LLMMetadata,
     relationship: RelationshipResult,
     userContext: UserContext,
@@ -395,7 +391,7 @@ export class DraftGenerator {
    * @private
    */
   private buildReplyDraft(
-    parsed: ParsedMail,
+    parsed: PostalMimeEmail,
     emailBody: string,
     cleanedBody: string,
     meta: LLMMetadata,
@@ -512,7 +508,7 @@ ${originalHtml}
    * Calculate recipients for reply-all
    * @private
    */
-  private calculateReplyAllRecipients(parsed: ParsedMail, userEmail: string): { to: string; cc: string } {
+  private calculateReplyAllRecipients(parsed: PostalMimeEmail, userEmail: string): { to: string; cc: string } {
     const allTo: string[] = [];
     const allCc: string[] = [];
 
