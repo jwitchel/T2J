@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, Mail, Paperclip, FileText, Send, Loader2, Brain, AlertCircle, Users, FolderOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Mail, Paperclip, FileText, Send, Loader2, Brain, AlertCircle, FolderOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PostalMime from 'postal-mime';
 import { apiGet, apiPost } from '@/lib/api';
@@ -18,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
 import { EmailActions, RecommendedAction } from '../../../server/src/lib/email-actions';
 import type { SpamCheckResult } from '../../../server/src/lib/pipeline/types';
+import type { EmailActionType } from '../../../server/src/types/email-action-tracking';
 
 interface EmailAccount {
   id: string;
@@ -35,7 +36,7 @@ interface EmailMessage {
   flags: string[];
   size: number;
   rawMessage: string;
-  actionTaken?: 'none' | 'replied' | 'forwarded' | 'draft_created' | 'manually_handled';
+  actionTaken?: EmailActionType;
   updatedAt?: Date;  // When the action was taken
 }
 
@@ -72,15 +73,14 @@ interface GeneratedDraft {
   inReplyTo: string;
   references: string;
   meta?: {
-    inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
     recommendedAction: RecommendedAction;
-    inboundMsgIsRequesting: string | string[];
     keyConsiderations: string[];
-    urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
     contextFlags: {
       isThreaded: boolean;
       hasAttachments: boolean;
       isGroupEmail: boolean;
+      inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
+      urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
     };
   };
   relationship: {
@@ -125,7 +125,7 @@ function InboxContent() {
   const [showAllEmails, setShowAllEmails] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
 
-  // URL parameter mode: viewing a specific email from Qdrant
+  // URL parameter mode: viewing a specific email from database
   const urlEmailAccountId = searchParams.get('emailAccountId');
   const urlMessageId = searchParams.get('messageId');
   const isViewMode = !!(urlEmailAccountId && urlMessageId);
@@ -274,7 +274,7 @@ function InboxContent() {
     }
   };
 
-  // Fetch a specific email from Qdrant by messageId (view mode)
+  // Fetch a specific email from database by messageId (view mode)
   const fetchSpecificEmail = async (accountId: string, messageId: string) => {
     setLoading(true);
     try {
@@ -292,23 +292,25 @@ function InboxContent() {
           uid?: number;
           flags: string[];
           size: number;
+          actionTaken?: EmailActionType;
           llmResponse?: {
             meta: {
-              inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
               recommendedAction: RecommendedAction;
-              inboundMsgIsRequesting: string | string[];
               keyConsiderations: string[];
-              urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
               contextFlags: {
                 isThreaded: boolean;
                 hasAttachments: boolean;
                 isGroupEmail: boolean;
+                inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
+                urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
               };
             };
             generatedAt: string;
             providerId: string;
             modelName: string;
             draftId: string;
+            body?: string;
+            bodyHtml?: string;
             relationship: {
               type: string;
               confidence: number;
@@ -323,7 +325,7 @@ function InboxContent() {
       }>(`/api/inbox/email/${accountId}/${encodeURIComponent(messageId)}`);
 
       if (data.success && data.email) {
-        // Convert the Qdrant email data to the EmailMessage format
+        // Convert the email data to the EmailMessage format
         const emailMessage: EmailMessage = {
           uid: data.email.uid || 0,
           messageId: data.email.messageId,
@@ -334,7 +336,7 @@ function InboxContent() {
           flags: data.email.flags,
           size: data.email.size,
           rawMessage: data.email.rawMessage,
-          actionTaken: 'draft_created' // This email has been processed
+          actionTaken: data.email.actionTaken // Must exist - backend validates
         };
 
         setCurrentMessage(emailMessage);
@@ -346,10 +348,10 @@ function InboxContent() {
             id: data.email.llmResponse.draftId,
             from: '', // Not stored in llmResponse
             to: data.email.to.join(', '),
-            cc: data.email.cc?.join(', '),
+            cc: data.email.cc?.join(', ') || '',
             subject: data.email.subject,
-            body: '', // Not stored (body not needed for view mode)
-            bodyHtml: '',
+            body: data.email.llmResponse.body || '',
+            bodyHtml: data.email.llmResponse.bodyHtml,
             inReplyTo: data.email.messageId,
             references: data.email.messageId,
             meta: data.email.llmResponse.meta,
@@ -457,16 +459,12 @@ function InboxContent() {
       if (data.preferences?.folderPreferences) {
         const { draftsFolderPath, ...otherPrefs } = data.preferences.folderPreferences;
 
-        // Only validation needed: check if drafts folder has been auto-detected
-        // All other folders are guaranteed by backend (defaults merged with saved prefs)
-        if (!draftsFolderPath) {
-          setConfigError('Drafts folder not detected. Please run "Test Folders" in Settings to auto-detect your email provider\'s drafts folder.');
-        } else {
-          setConfigError(null);
-        }
+        // Use default [Gmail]/Drafts if not configured (matches backend fallback)
+        // No validation needed - backend handles fallback gracefully
+        setConfigError(null);
 
         setUserFolderPrefs(otherPrefs);
-        setDraftsFolderPath(draftsFolderPath || null);
+        setDraftsFolderPath(draftsFolderPath || '[Gmail]/Drafts');
       } else {
         // Should never happen - backend always returns defaults
         setConfigError('Folder preferences not configured. Please refresh the page.');
@@ -994,21 +992,13 @@ function InboxContent() {
                         <h3 className="font-semibold">AI Analysis</h3>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono">
-                        Qdrant ID: {generatedDraft.inReplyTo}
+                        Message ID: {generatedDraft.inReplyTo}
                       </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Left Column */}
                       <div className="space-y-3">
-                        <div>
-                          <div className="text-sm font-medium text-muted-foreground mb-1">Inbound Message Addressed To</div>
-                          <Badge variant={generatedDraft.meta.inboundMsgAddressedTo === 'you' ? 'default' : 'secondary'}>
-                            {generatedDraft.meta.inboundMsgAddressedTo === 'you' && <Users className="mr-1 h-3 w-3" />}
-                            {generatedDraft.meta.inboundMsgAddressedTo}
-                          </Badge>
-                        </div>
-
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Spam Analysis</div>
                           {
@@ -1060,40 +1050,10 @@ function InboxContent() {
                             {generatedDraft.meta.recommendedAction}
                           </Badge>
                         </div>
-                        
-                        <div>
-                          <div className="text-sm font-medium text-muted-foreground mb-1">Urgency Level</div>
-                          <Badge variant={
-                            generatedDraft.meta.urgencyLevel === 'critical' ? 'destructive' :
-                            generatedDraft.meta.urgencyLevel === 'high' ? 'default' :
-                            generatedDraft.meta.urgencyLevel === 'medium' ? 'secondary' : 'outline'
-                          }>
-                            {generatedDraft.meta.urgencyLevel === 'critical' && <AlertCircle className="mr-1 h-3 w-3" />}
-                            {generatedDraft.meta.urgencyLevel}
-                          </Badge>
-                        </div>
-                        
                       </div>
                       
                       {/* Right Column */}
                       <div className="space-y-3">
-                        <div>
-                          <div className="text-sm font-medium text-muted-foreground mb-1">Inbound Message Is Requesting</div>
-                          <div className="flex flex-wrap gap-1">
-                            {Array.isArray(generatedDraft.meta.inboundMsgIsRequesting) ? (
-                              generatedDraft.meta.inboundMsgIsRequesting.map((request, idx) => (
-                                <Badge key={idx} variant="secondary">
-                                  {request}
-                                </Badge>
-                              ))
-                            ) : (
-                              <Badge variant="secondary">
-                                {generatedDraft.meta.inboundMsgIsRequesting}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Destination Folder</div>
                           <Badge
@@ -1108,7 +1068,7 @@ function InboxContent() {
                             {getDestinationFolder(generatedDraft.meta.recommendedAction).displayName}
                           </Badge>
                         </div>
-                        
+
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Context Flags</div>
                           <div className="flex flex-wrap gap-1">
@@ -1120,6 +1080,16 @@ function InboxContent() {
                             </Badge>
                             <Badge variant={generatedDraft.meta.contextFlags.isGroupEmail ? "default" : "outline"} className="text-xs">
                               {generatedDraft.meta.contextFlags.isGroupEmail ? "✓" : "✗"} Group Email
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              Addressed To: {generatedDraft.meta.contextFlags.inboundMsgAddressedTo}
+                            </Badge>
+                            <Badge variant={
+                              generatedDraft.meta.contextFlags.urgencyLevel === 'critical' ? 'destructive' :
+                              generatedDraft.meta.contextFlags.urgencyLevel === 'high' ? 'default' :
+                              'secondary'
+                            } className="text-xs">
+                              Urgency: {generatedDraft.meta.contextFlags.urgencyLevel}
                             </Badge>
                           </div>
                         </div>

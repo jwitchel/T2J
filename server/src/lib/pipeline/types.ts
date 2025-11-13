@@ -3,6 +3,21 @@
 import { LLMMetadata } from '../llm-client';
 
 /**
+ * Simplified email metadata for LLM prompts
+ *
+ * Purpose: Lightweight email representation for passing to AI pipeline.
+ * Used by: Prompt formatters, template manager when constructing LLM requests.
+ */
+export interface SimplifiedEmailMetadata {
+  from: { address: string; name?: string }[];
+  to: { address: string; name?: string }[];
+  cc?: { address: string; name?: string }[];
+  subject: string;
+  date: Date;
+  fullMessage: string;
+}
+
+/**
  * Spam check result from spam detector
  *
  * Purpose: Standard structure for spam detection results across the system.
@@ -37,6 +52,7 @@ export interface ProcessedEmail {
   inReplyTo: string | null;
   date: Date;
   from: Array<{ address: string; name?: string }>;
+  replyTo: Array<{ address: string; name?: string }>;
   to: Array<{ address: string; name?: string }>;
   cc: Array<{ address: string; name?: string }>;
   bcc: Array<{ address: string; name?: string }>;
@@ -50,7 +66,7 @@ export interface ProcessedEmail {
     confidence: number;
     detectionMethod: string;
   };
-  rawMessage: string;       // Raw RFC 5322 message format (complete email with headers)
+  fullMessage: string;       // Raw RFC 5322 message format (complete email with headers)
 }
 
 /**

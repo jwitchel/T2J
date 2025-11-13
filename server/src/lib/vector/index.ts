@@ -1,3 +1,17 @@
+// Core embedding and vector search services (PostgreSQL + Vectra)
 export { EmbeddingService, embeddingService, type EmbeddingResult, type BatchEmbeddingResult } from './embedding-service';
-export { VectorStore, vectorStore, type EmailMetadata, type EmailVector, type VectorSearchParams, type UsageUpdate } from './qdrant-client';
-export { UsageTracker, type ExampleFeedback, type UsageStats } from './usage-tracker';
+export { StyleEmbeddingService, styleEmbeddingService } from './style-embedding-service';
+export { VectorSearchService } from './vector-search-service';
+export { StyleClusteringService } from './style-clustering-service';
+
+// Create singletons (requires pool from server.ts)
+import { pool } from '../db';
+import { VectorSearchService } from './vector-search-service';
+import { StyleClusteringService } from './style-clustering-service';
+import { styleEmbeddingService } from './style-embedding-service';
+
+export const vectorSearchService = new VectorSearchService(pool);
+export const styleClusteringService = new StyleClusteringService(pool, styleEmbeddingService);
+
+// Export all types from types.ts
+export * from './types';

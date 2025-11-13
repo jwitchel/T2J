@@ -1,15 +1,6 @@
 import { betterAuth } from 'better-auth';
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import { pool } from './db';
 import crypto from 'crypto';
-
-// Load environment variables
-dotenv.config();
-
-// Create PostgreSQL pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 const auth = betterAuth({
   database: pool,
@@ -41,7 +32,7 @@ const auth = betterAuth({
     afterSignIn: process.env.OAUTH_CALLBACK_URI!,
     afterError: process.env.OAUTH_ERROR_REDIRECT_URI!,
   },
-  trustedOrigins: process.env.TRUSTED_ORIGINS!.split(','),
+  trustedOrigins: (process.env.TRUSTED_ORIGINS || 'http://localhost:3001,http://localhost:3002').split(','),
 });
 
 // Named export

@@ -4,7 +4,7 @@
  * Extracted from imap-draft route to enable direct service-to-service calls
  */
 
-import { pool } from '../../server';
+import { pool } from '../db';
 import { ImapOperations } from '../imap-operations';
 import { withImapContext } from '../imap-context';
 import { v4 as uuidv4 } from 'uuid';
@@ -156,7 +156,8 @@ export class EmailMover {
       const folderPrefs = preferences.folderPreferences;
 
       // Determine saved Drafts folder path from user preferences
-      const draftsFolderPath = (folderPrefs as any).draftsFolderPath as string;
+      // Default to [Gmail]/Drafts for Gmail accounts if not configured
+      const draftsFolderPath = ((folderPrefs as any)?.draftsFolderPath as string) || '[Gmail]/Drafts';
 
       await withImapContext(emailAccountId, userId, async () => {
         // Create IMAP operations instance (connection managed by context)
@@ -188,7 +189,7 @@ export class EmailMover {
         action: recommendedAction
       };
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error uploading draft:', error);
       return {
         success: false,
@@ -246,7 +247,7 @@ export class EmailMover {
         removedFromInbox: !!(messageUid && sourceFolder)
       };
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error moving email:', error);
       return {
         success: false,

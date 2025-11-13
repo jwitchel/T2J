@@ -170,7 +170,7 @@ export class EmailActionRouter {
       try {
         await imapOps.createFolder(folder);
         created.push(folder);
-      } catch (error) {
+      } catch (error: unknown) {
         failed.push({
           folder,
           error: error instanceof Error ? error.message : 'Unknown error'

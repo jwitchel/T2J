@@ -1,14 +1,16 @@
-import { Pool } from 'pg';
+import { pool } from '../db';
 import { RelationshipProfile } from '../pipeline/types';
 import { StylePreferences, DEFAULT_STYLE_PREFERENCES } from './style-preferences';
 import { personService } from './person-service';
 import { PersonServiceError } from './person-service';
-import { AggregatedStyle } from '../style/style-aggregation-service';
+import {
+  AggregatedStyle,
+  PhraseFrequency,
+  EmojiFrequency
+} from '../style/style-aggregation-service';
 import { EnhancedRelationshipProfile } from '../pipeline/template-manager';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL!,
-});
+import { formalityScoreToString, PHRASE_FREQUENCY_THRESHOLDS, RELATIONSHIP_THRESHOLDS } from '../style/style-constants';
+import { RelationshipDetector, RelationshipType } from './relationship-detector';
 
 export interface VectorSearchContext {
   relationship: string;
@@ -21,11 +23,36 @@ export interface VectorSearchContext {
 }
 
 export class RelationshipService {
-  async initialize(): Promise<void> {
+  constructor() {}
+
+  public async initialize(): Promise<void> {
     await personService.initialize();
   }
 
-  async getRelationshipProfile(userId: string, relationship: string): Promise<RelationshipProfile | null> {
+  /**
+   * Get tone preference profile data for a user and relationship type
+   * Returns null if no preference exists
+   * @private
+   */
+  private async getTonePreference(
+    userId: string,
+    relationshipType: string
+  ): Promise<any | null> {
+    const result = await pool.query(
+      `SELECT profile_data
+       FROM tone_preferences
+       WHERE user_id = $1 AND preference_type = $2 AND target_identifier = $3`,
+      [userId, 'category', relationshipType]
+    );
+
+    if (result.rows.length > 0 && result.rows[0].profile_data) {
+      return result.rows[0].profile_data;
+    }
+
+    return null;
+  }
+
+  public async getRelationshipProfile(userId: string, relationship: string): Promise<RelationshipProfile | null> {
     // Get style preferences from database
     const stylePrefs = await this.getStylePreferences(userId, relationship);
     
@@ -35,7 +62,7 @@ export class RelationshipService {
     
     // Convert to RelationshipProfile format
     return {
-      typicalFormality: this.getFormalityLevel(stylePrefs.formality),
+      typicalFormality: formalityScoreToString(stylePrefs.formality),
       commonGreetings: stylePrefs.preferred_greetings,
       commonClosings: stylePrefs.preferred_closings,
       useEmojis: stylePrefs.common_emojis.length > 0,
@@ -43,7 +70,7 @@ export class RelationshipService {
     };
   }
   
-  async getEnhancedProfile(userId: string, recipientEmail: string): Promise<EnhancedRelationshipProfile | null> {
+  public async getEnhancedProfile(userId: string, recipientEmail: string): Promise<EnhancedRelationshipProfile | null> {
     // First get person and relationship info
     const person = await personService.findPersonByEmail(recipientEmail, userId);
     if (!person) {
@@ -77,17 +104,11 @@ export class RelationshipService {
     return enhancedProfile;
   }
   
-  async getStylePreferences(userId: string, relationshipType: string): Promise<StylePreferences | null> {
+  public async getStylePreferences(userId: string, relationshipType: string): Promise<StylePreferences | null> {
     // First check if user has custom preferences
-    const result = await pool.query(
-      `SELECT profile_data 
-       FROM tone_preferences 
-       WHERE user_id = $1 AND preference_type = $2 AND target_identifier = $3`,
-      [userId, 'category', relationshipType]
-    );
-    
-    if (result.rows.length > 0 && result.rows[0].profile_data) {
-      const profileData = result.rows[0].profile_data;
+    const profileData = await this.getTonePreference(userId, relationshipType);
+
+    if (profileData) {
       
       // Handle new format with meta block
       const storedData = profileData.aggregatedStyle || profileData;
@@ -107,16 +128,10 @@ export class RelationshipService {
     return DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
   }
   
-  async getAggregatedStyle(userId: string, relationshipType: string): Promise<AggregatedStyle | null> {
-    const result = await pool.query(
-      `SELECT profile_data 
-       FROM tone_preferences 
-       WHERE user_id = $1 AND preference_type = $2 AND target_identifier = $3`,
-      [userId, 'category', relationshipType]
-    );
-    
-    if (result.rows.length > 0 && result.rows[0].profile_data) {
-      const profileData = result.rows[0].profile_data;
+  public async getAggregatedStyle(userId: string, relationshipType: string): Promise<AggregatedStyle | null> {
+    const profileData = await this.getTonePreference(userId, relationshipType);
+
+    if (profileData) {
       
       // Handle new format with meta block
       const storedData = profileData.aggregatedStyle || profileData;
@@ -130,7 +145,7 @@ export class RelationshipService {
     return null;
   }
   
-  async getVectorSearchContext(userId: string, recipientEmail: string): Promise<VectorSearchContext> {
+  public async getVectorSearchContext(userId: string, recipientEmail: string): Promise<VectorSearchContext> {
     // Detect relationship
     const detection = await personService.findPersonByEmail(recipientEmail, userId);
     
@@ -151,9 +166,8 @@ export class RelationshipService {
     }
     
     // Calculate formality range for search
-    const formalityBuffer = 0.2;
-    const minFormality = Math.max(0, stylePrefs.formality - formalityBuffer);
-    const maxFormality = Math.min(1, stylePrefs.formality + formalityBuffer);
+    const minFormality = Math.max(0, stylePrefs.formality - RELATIONSHIP_THRESHOLDS.FORMALITY_BUFFER);
+    const maxFormality = Math.min(1, stylePrefs.formality + RELATIONSHIP_THRESHOLDS.FORMALITY_BUFFER);
     
     return {
       relationship: relationshipType,
@@ -166,31 +180,31 @@ export class RelationshipService {
     };
   }
   
-  formatStylePreferencesForPrompt(prefs: StylePreferences): string {
+  public formatStylePreferencesForPrompt(prefs: StylePreferences): string {
     const parts: string[] = [];
     
     // Formality
-    if (prefs.formality < 0.3) {
+    if (prefs.formality < RELATIONSHIP_THRESHOLDS.FORMALITY_LEVELS.CASUAL) {
       parts.push('Write in a very casual tone.');
-    } else if (prefs.formality < 0.7) {
+    } else if (prefs.formality < RELATIONSHIP_THRESHOLDS.FORMALITY_LEVELS.MODERATE) {
       parts.push('Write in a moderately formal tone.');
     } else {
       parts.push('Write in a formal tone.');
     }
-    
+
     // Enthusiasm
-    if (prefs.enthusiasm > 0.7) {
+    if (prefs.enthusiasm > RELATIONSHIP_THRESHOLDS.ENTHUSIASM_LEVELS.HIGH) {
       parts.push('Be very enthusiastic.');
-    } else if (prefs.enthusiasm > 0.4) {
+    } else if (prefs.enthusiasm > RELATIONSHIP_THRESHOLDS.ENTHUSIASM_LEVELS.LOW) {
       parts.push('Be moderately enthusiastic.');
     } else {
       parts.push('Keep a professional, measured tone.');
     }
-    
+
     // Brevity
-    if (prefs.brevity > 0.7) {
+    if (prefs.brevity > RELATIONSHIP_THRESHOLDS.BREVITY_LEVELS.HIGH) {
       parts.push('Keep responses very brief and to the point.');
-    } else if (prefs.brevity > 0.4) {
+    } else if (prefs.brevity > RELATIONSHIP_THRESHOLDS.BREVITY_LEVELS.LOW) {
       parts.push('Keep responses concise.');
     } else {
       parts.push('Provide thorough, detailed responses.');
@@ -227,7 +241,7 @@ export class RelationshipService {
     return parts.join(' ');
   }
   
-  async formatAggregatedStyleForPrompt(userId: string, relationshipType: string): Promise<string> {
+  public async formatAggregatedStyleForPrompt(userId: string, relationshipType: string): Promise<string> {
     const aggregated = await this.getAggregatedStyle(userId, relationshipType);
     if (!aggregated) {
       // Fall back to basic style preferences
@@ -248,41 +262,43 @@ export class RelationshipService {
     parts.push(`Write in a ${aggregated.sentimentProfile.primaryTone} tone.`);
     
     // Formality level
-    const formalityLevel = this.getFormalityLevel(aggregated.sentimentProfile.averageFormality);
+    const formalityLevel = formalityScoreToString(aggregated.sentimentProfile.averageFormality);
     parts.push(`Maintain a ${formalityLevel} level of formality.`);
     
     // Email length guidance
-    if (aggregated.structuralPatterns.averageEmailLength < 50) {
-      parts.push('Keep emails very brief (typically under 50 words).');
-    } else if (aggregated.structuralPatterns.averageEmailLength < 100) {
-      parts.push('Keep emails concise (typically 50-100 words).');
-    } else if (aggregated.structuralPatterns.averageEmailLength > 200) {
-      parts.push('Write detailed emails (typically over 200 words).');
+    if (aggregated.structuralPatterns.averageEmailLength < RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.VERY_BRIEF) {
+      parts.push(`Keep emails very brief (typically under ${RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.VERY_BRIEF} words).`);
+    } else if (aggregated.structuralPatterns.averageEmailLength < RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.BRIEF) {
+      parts.push(`Keep emails concise (typically ${RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.VERY_BRIEF}-${RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.BRIEF} words).`);
+    } else if (aggregated.structuralPatterns.averageEmailLength > RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.DETAILED) {
+      parts.push(`Write detailed emails (typically over ${RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.DETAILED} words).`);
     }
     
-    // Specific greetings if consistent
-    const topGreetings = aggregated.greetings.filter(g => g.percentage > 30);
+    // Specific greetings if consistent (optional field)
+    const topGreetings = aggregated.greetings?.filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD) || [];
     if (topGreetings.length > 0) {
       parts.push(`Preferred greetings: ${topGreetings.map(g => g.text).join(', ')}.`);
     }
-    
-    // Specific closings if consistent
-    const topClosings = aggregated.closings.filter(c => c.percentage > 30);
+
+    // Specific closings if consistent (optional field)
+    const topClosings = aggregated.closings?.filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD) || [];
     if (topClosings.length > 0) {
       parts.push(`Preferred closings: ${topClosings.map(c => c.text).join(', ')}.`);
     }
-    
-    // Common phrases if frequent
-    if (aggregated.vocabularyProfile.commonPhrases.length > 0) {
-      const topPhrases = aggregated.vocabularyProfile.commonPhrases
+
+    // Common phrases if frequent (optional field - not yet implemented)
+    const commonPhrases: PhraseFrequency[] = aggregated.commonPhrases || [];
+    if (commonPhrases.length > 0) {
+      const topPhrases = commonPhrases
         .slice(0, 5)
         .map(p => p.phrase);
       parts.push(`Common phrases to consider: ${topPhrases.join(', ')}.`);
     }
-    
-    // Emoji usage
-    if (aggregated.emojis.length > 0) {
-      const topEmojis = aggregated.emojis.slice(0, 5).map(e => e.emoji);
+
+    // Emoji usage (optional field)
+    const emojis: EmojiFrequency[] = aggregated.emojis || [];
+    if (emojis.length > 0) {
+      const topEmojis = emojis.slice(0, 5).map(e => e.emoji);
       parts.push(`Feel free to use emojis like: ${topEmojis.join(' ')}.`);
     } else {
       parts.push('Avoid using emojis.');
@@ -295,47 +311,41 @@ export class RelationshipService {
     
     return parts.join(' ');
   }
-  
-  private getFormalityLevel(score: number): 'casual' | 'professional' | 'formal' {
-    if (score < 0.3) return 'casual';
-    if (score < 0.7) return 'professional';
-    return 'formal';
-  }
-  
+
   private convertAggregatedToPreferences(aggregated: AggregatedStyle, relationshipType: string): StylePreferences {
     // Start with defaults as base
     const defaults = DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
     
-    // Extract top greetings and closings
-    const preferredGreetings = aggregated.greetings
-      .filter(g => g.percentage > 20) // Used in at least 20% of emails
+    // Extract top greetings and closings (optional fields)
+    const preferredGreetings = (aggregated.greetings || [])
+      .filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PREFERRED_THRESHOLD)
       .map(g => g.text)
       .slice(0, 5);
-    
-    const preferredClosings = aggregated.closings
-      .filter(c => c.percentage > 20)
+
+    const preferredClosings = (aggregated.closings || [])
+      .filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PREFERRED_THRESHOLD)
       .map(c => c.text)
       .slice(0, 5);
-    
-    // Extract common phrases (used frequently)
-    const commonPhrases = aggregated.vocabularyProfile.commonPhrases
-      .filter(p => p.frequency > 2)
+
+    // Extract common phrases (used frequently) - optional field not yet implemented
+    const commonPhrases: string[] = (aggregated.commonPhrases || [])
+      .filter(p => p.frequency > RELATIONSHIP_THRESHOLDS.MIN_PHRASE_FREQUENCY)
       .map(p => p.phrase)
       .slice(0, 10);
-    
-    // Extract emojis if used frequently enough
-    const commonEmojis = aggregated.emojis
-      .filter(e => e.frequency > 2)
+
+    // Extract emojis if used frequently enough (optional field)
+    const commonEmojis: string[] = (aggregated.emojis || [])
+      .filter(e => e.frequency > RELATIONSHIP_THRESHOLDS.MIN_PHRASE_FREQUENCY)
       .map(e => e.emoji)
       .slice(0, 10);
     
     // Calculate brevity based on average email length
     let brevity = 0.5; // default moderate
-    if (aggregated.structuralPatterns.averageEmailLength < 50) {
+    if (aggregated.structuralPatterns.averageEmailLength < RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.VERY_BRIEF) {
       brevity = 0.9; // very brief
-    } else if (aggregated.structuralPatterns.averageEmailLength < 100) {
+    } else if (aggregated.structuralPatterns.averageEmailLength < RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.BRIEF) {
       brevity = 0.7; // brief
-    } else if (aggregated.structuralPatterns.averageEmailLength > 200) {
+    } else if (aggregated.structuralPatterns.averageEmailLength > RELATIONSHIP_THRESHOLDS.EMAIL_LENGTH.DETAILED) {
       brevity = 0.2; // verbose
     }
     
@@ -354,6 +364,102 @@ export class RelationshipService {
       avoid_phrases: defaults.avoid_phrases, // Keep defaults as we don't track these
       common_emojis: commonEmojis,
       common_contractions: [] // No longer analyzed
+    };
+  }
+
+  /**
+   * Re-categorize all people for a user based on new relationship domain configuration
+   * Called after user updates their work domains, family emails, or spouse emails
+   *
+   * Uses RelationshipDetector.determineConfiguredRelationship() for consistent logic
+   *
+   * @param userId - User whose people should be re-categorized
+   * @param config - New relationship configuration (work domains, family/spouse emails)
+   * @returns Summary of changes made
+   */
+  async recategorizePeople(userId: string, config: {
+    workDomains: string[];
+    familyEmails: string[];
+    spouseEmails: string[];
+  }): Promise<{
+    updated: number;
+    spouse: number;
+    family: number;
+    colleague: number;
+  }> {
+    // Fetch all people and their emails for this user
+    const peopleResult = await pool.query(
+      `SELECT p.id, p.user_id, pe.email_address, ur.relationship_type, pr.confidence, pr.id as pr_id, pr.user_relationship_id
+       FROM people p
+       JOIN person_emails pe ON p.id = pe.person_id
+       LEFT JOIN person_relationships pr ON p.id = pr.person_id AND pr.is_primary = true
+       LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+       WHERE p.user_id = $1`,
+      [userId]
+    );
+
+    const updates: {personId: string; prId: string | null; newRelationship: RelationshipType}[] = [];
+    let spouseCount = 0;
+    let familyCount = 0;
+    let colleagueCount = 0;
+
+    for (const row of peopleResult.rows) {
+      const email = row.email_address;
+      const currentRelationship = row.relationship_type;
+
+      // Use shared logic from RelationshipDetector
+      const newRelationship = RelationshipDetector.determineConfiguredRelationship(email, config);
+
+      // Track counts and updates
+      if (newRelationship) {
+        if (newRelationship === RelationshipType.SPOUSE) spouseCount++;
+        else if (newRelationship === RelationshipType.FAMILY) familyCount++;
+        else if (newRelationship === RelationshipType.COLLEAGUE) colleagueCount++;
+
+        // Only update if relationship changed
+        if (newRelationship !== currentRelationship) {
+          updates.push({ personId: row.id, prId: row.pr_id, newRelationship });
+        }
+      }
+    }
+
+    // Batch update all changed relationships
+    if (updates.length > 0) {
+      for (const {personId, prId, newRelationship} of updates) {
+        // Get or create the user_relationship record for this relationship type
+        const urResult = await pool.query(
+          `INSERT INTO user_relationships (user_id, relationship_type, display_name, is_system_default)
+           VALUES ($1, $2, $3, true)
+           ON CONFLICT (user_id, relationship_type) DO UPDATE SET updated_at = NOW()
+           RETURNING id`,
+          [userId, newRelationship, newRelationship]
+        );
+        const userRelationshipId = urResult.rows[0].id;
+
+        if (prId) {
+          // Update existing person_relationship
+          await pool.query(
+            `UPDATE person_relationships
+             SET user_relationship_id = $1, confidence = 1.0, updated_at = NOW()
+             WHERE id = $2`,
+            [userRelationshipId, prId]
+          );
+        } else {
+          // Create new person_relationship
+          await pool.query(
+            `INSERT INTO person_relationships (user_id, person_id, user_relationship_id, is_primary, confidence, user_set)
+             VALUES ($1, $2, $3, true, 1.0, true)`,
+            [userId, personId, userRelationshipId]
+          );
+        }
+      }
+    }
+
+    return {
+      updated: updates.length,
+      spouse: spouseCount,
+      family: familyCount,
+      colleague: colleagueCount
     };
   }
 }

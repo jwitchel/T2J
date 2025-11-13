@@ -1,6 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 
 
 const router = express.Router();
@@ -51,10 +51,23 @@ router.get('/', requireAuth, async (req, res) => {
       };
     });
     
+    // Use aggregate profile's count (total unique emails) instead of summing all categories
+    // (which would count the same email multiple times if it appears in multiple relationship types)
+    const aggregateProfile = result.rows.find(row => row.target_identifier === 'aggregate');
+    const totalEmailsAnalyzed = aggregateProfile ? aggregateProfile.emails_analyzed : 0;
+
+    // Get total loaded emails (regardless of whether patterns have been analyzed)
+    const emailCountResult = await pool.query(
+      'SELECT COUNT(*) as total FROM email_sent WHERE user_id = $1',
+      [userId]
+    );
+    const totalEmailsLoaded = parseInt(emailCountResult.rows[0]?.total || '0');
+
     res.json({
       profiles,
-      totalEmailsAnalyzed: result.rows.reduce((sum, row) => sum + row.emails_analyzed, 0),
-      lastUpdated: result.rows.length > 0 
+      totalEmailsAnalyzed,
+      totalEmailsLoaded,
+      lastUpdated: result.rows.length > 0
         ? Math.max(...result.rows.map(row => new Date(row.last_updated).getTime()))
         : null,
     });

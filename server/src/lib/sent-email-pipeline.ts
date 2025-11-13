@@ -2,7 +2,7 @@ import _ from 'highland';
 import { ParsedMail } from 'mailparser';
 import { realTimeLogger } from './real-time-logger';
 import { EmailProcessor, ProcessedEmail, ProcessingContext } from './email-processor';
-import { pool } from '../server';
+import { pool } from './db';
 
 // Pipeline configuration from environment
 const PIPELINE_CONCURRENCY = parseInt(process.env.EMAIL_PIPELINE_CONCURRENCY || '1', 10);
@@ -140,7 +140,7 @@ export class SentEmailPipeline {
     try {
       const result = await this.emailProcessor.processEmail(email, this.context);
       return result;
-    } catch (error) {
+    } catch (error: unknown) {
       // Error is logged in the errors handler
       throw error;
     }

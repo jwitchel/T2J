@@ -2,7 +2,7 @@ import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { imapPool } from '../lib/imap-pool';
 import { withImapContext } from '../lib/imap-context';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 
 const router = express.Router();
 

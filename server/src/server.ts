@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
 import { toNodeHandler } from 'better-auth/node';
+import { pool } from './lib/db';
 import { auth } from './lib/auth';
 import { createServer } from 'http';
 import { createUnifiedWebSocketServer } from './websocket/unified-websocket';
@@ -23,11 +23,6 @@ if (!process.env.ENCRYPTION_KEY) {
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 // Test database connection and initialize schedulers
 async function initializeDatabase() {
@@ -260,13 +255,6 @@ process.on('SIGINT', async () => {
 if (process.env.SKIP_SERVER_START !== 'true') {
   server.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
-    console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth/*`);
-    console.log(`🔌 WebSocket endpoint: ws://localhost:${PORT}/ws/imap-logs`);
-    console.log(`📧 IMAP API: http://localhost:${PORT}/api/imap/*`);
-    console.log(`🤖 LLM Providers API: http://localhost:${PORT}/api/llm-providers/*`);
-    console.log(`✨ Generate API: http://localhost:${PORT}/api/generate/*`);
-    console.log(`🎯 Training API: http://localhost:${PORT}/api/training/*`);
   });
 }
 

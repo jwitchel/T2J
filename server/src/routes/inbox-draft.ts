@@ -8,18 +8,18 @@ const router = express.Router();
 router.post('/generate-draft', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    const { rawMessage, emailAccountId, providerId } = req.body;
+    const { fullMessage, emailAccountId, providerId } = req.body;
 
-    if (!rawMessage || !emailAccountId || !providerId) {
+    if (!fullMessage || !emailAccountId || !providerId) {
       res.status(400).json({
-        error: 'Missing required fields: rawMessage, emailAccountId, providerId'
+        error: 'Missing required fields: fullMessage, emailAccountId, providerId'
       });
       return;
     }
 
     // Use EmailProcessingService - handles parsing, context loading, spam check, and draft generation
     const result = await emailProcessingService.processEmail({
-      rawMessage,
+      fullMessage,
       emailAccountId,
       providerId,
       userId

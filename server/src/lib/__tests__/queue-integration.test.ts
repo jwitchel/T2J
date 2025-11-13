@@ -4,10 +4,10 @@
  */
 
 import {
-  emailProcessingQueue,
-  toneProfileQueue,
-  addEmailJob,
-  addToneProfileJob,
+  inboxQueue,
+  trainingQueue,
+  addInboxJob,
+  addTrainingJob,
   JobType,
   JobPriority
 } from '../queue';
@@ -20,17 +20,17 @@ describe('Queue Integration Tests', () => {
     // Clean up all jobs
     try {
       // BullMQ requires queues to be paused before obliteration
-      await emailProcessingQueue.pause();
-      await toneProfileQueue.pause();
-      await emailProcessingQueue.obliterate({ force: true });
-      await toneProfileQueue.obliterate({ force: true });
-    } catch (error) {
+      await inboxQueue.pause();
+      await trainingQueue.pause();
+      await inboxQueue.obliterate({ force: true });
+      await trainingQueue.obliterate({ force: true });
+    } catch (error: unknown) {
       // Ignore obliterate errors
     }
     
     // Close connections
-    await emailProcessingQueue.close();
-    await toneProfileQueue.close();
+    await inboxQueue.close();
+    await trainingQueue.close();
     
     // Give a moment for connections to close
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -38,9 +38,7 @@ describe('Queue Integration Tests', () => {
 
   it('should queue and retrieve jobs correctly', async () => {
     // Add a process inbox job
-    const emailJob = await addEmailJob(
-      JobType.PROCESS_INBOX,
-      {
+    const emailJob = await addInboxJob({
         userId: 'integration-test-user',
         accountId: 'integration-test-account',
         folderName: 'INBOX'
@@ -52,7 +50,7 @@ describe('Queue Integration Tests', () => {
     expect(emailJob.id).toBeDefined();
 
     // Retrieve the job
-    const retrievedJob = await emailProcessingQueue.getJob(emailJob.id!);
+    const retrievedJob = await inboxQueue.getJob(emailJob.id!);
     expect(retrievedJob).toBeDefined();
     expect(retrievedJob?.data.userId).toBe('integration-test-user');
     
@@ -64,7 +62,7 @@ describe('Queue Integration Tests', () => {
 
   it('should queue tone profile jobs correctly', async () => {
     // Add a tone profile job
-    const toneJob = await addToneProfileJob(
+    const toneJob = await addTrainingJob(JobType.BUILD_TONE_PROFILE,
       {
         userId: 'integration-test-user',
         accountId: 'integration-test-account',
@@ -77,7 +75,7 @@ describe('Queue Integration Tests', () => {
     expect(toneJob.id).toBeDefined();
 
     // Retrieve the job
-    const retrievedJob = await toneProfileQueue.getJob(toneJob.id!);
+    const retrievedJob = await trainingQueue.getJob(toneJob.id!);
     expect(retrievedJob).toBeDefined();
     expect(retrievedJob?.data.historyDays).toBe(30);
     
@@ -89,9 +87,7 @@ describe('Queue Integration Tests', () => {
 
   it('should handle different job priorities', async () => {
     // Add jobs with different priorities
-    const criticalJob = await addEmailJob(
-      JobType.PROCESS_INBOX,
-      {
+    const criticalJob = await addInboxJob({
         userId: 'test',
         accountId: 'test',
         folderName: 'INBOX'
@@ -99,9 +95,7 @@ describe('Queue Integration Tests', () => {
       JobPriority.CRITICAL
     );
 
-    const lowJob = await addEmailJob(
-      JobType.PROCESS_INBOX,
-      {
+    const lowJob = await addInboxJob({
         userId: 'test',
         accountId: 'test',
         folderName: 'INBOX'
@@ -115,8 +109,8 @@ describe('Queue Integration Tests', () => {
 
   it('should get queue statistics', async () => {
     // Get job counts from queues
-    const emailCounts = await emailProcessingQueue.getJobCounts();
-    const toneCounts = await toneProfileQueue.getJobCounts();
+    const emailCounts = await inboxQueue.getJobCounts();
+    const toneCounts = await trainingQueue.getJobCounts();
 
     expect(emailCounts).toBeDefined();
     expect(emailCounts).toHaveProperty('waiting');
@@ -130,12 +124,12 @@ describe('Queue Integration Tests', () => {
 
   it('should check queue health', async () => {
     // Ensure queues are resumed before checking (in case previous test paused them)
-    await emailProcessingQueue.resume();
-    await toneProfileQueue.resume();
+    await inboxQueue.resume();
+    await trainingQueue.resume();
     
     // Check if queues are paused
-    const emailPaused = await emailProcessingQueue.isPaused();
-    const tonePaused = await toneProfileQueue.isPaused();
+    const emailPaused = await inboxQueue.isPaused();
+    const tonePaused = await trainingQueue.isPaused();
 
     expect(typeof emailPaused).toBe('boolean');
     expect(typeof tonePaused).toBe('boolean');
@@ -145,7 +139,7 @@ describe('Queue Integration Tests', () => {
 
   it('should handle job with no retry', async () => {
     // Add a job
-    const job = await addEmailJob(
+    const job = await addTrainingJob(
       JobType.LEARN_FROM_EDIT,
       {
         userId: 'test',
@@ -160,7 +154,7 @@ describe('Queue Integration Tests', () => {
   });
 
   it('should handle tone profile job configuration', async () => {
-    const job = await addToneProfileJob(
+    const job = await addTrainingJob(JobType.BUILD_TONE_PROFILE,
       {
         userId: 'test',
         accountId: 'test',
@@ -177,9 +171,7 @@ describe('Queue Integration Tests', () => {
 
   it('should handle job types correctly', async () => {
     // Test process inbox job
-    const processJob = await addEmailJob(
-      JobType.PROCESS_INBOX,
-      {
+    const processJob = await addInboxJob({
         userId: 'test',
         accountId: 'test',
         folderName: 'INBOX'
@@ -189,7 +181,7 @@ describe('Queue Integration Tests', () => {
     expect(processJob.name).toBe(JobType.PROCESS_INBOX);
 
     // Test learn from edit job
-    const learnJob = await addEmailJob(
+    const learnJob = await addTrainingJob(
       JobType.LEARN_FROM_EDIT,
       {
         userId: 'test',
@@ -203,33 +195,31 @@ describe('Queue Integration Tests', () => {
 
   it('should clean jobs from queue', async () => {
     // Add some test jobs
-    await addEmailJob(
-      JobType.PROCESS_INBOX,
-      { userId: 'test', accountId: 'test', folderName: 'INBOX' },
+    await addInboxJob({ userId: 'test', accountId: 'test', folderName: 'INBOX' },
       JobPriority.NORMAL
     );
 
     // Pause then clean the queue (required by BullMQ)
-    await emailProcessingQueue.pause();
+    await inboxQueue.pause();
     
     // Wait a moment to ensure pause is effective
     await new Promise(resolve => setTimeout(resolve, 200));
     
     // Verify the queue is actually paused
-    const isPaused = await emailProcessingQueue.isPaused();
+    const isPaused = await inboxQueue.isPaused();
     if (!isPaused) {
       console.warn('Queue not paused, attempting pause again');
-      await emailProcessingQueue.pause();
+      await inboxQueue.pause();
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     
-    await emailProcessingQueue.obliterate({ force: true });
+    await inboxQueue.obliterate({ force: true });
 
     // Resume the queue after obliteration
-    await emailProcessingQueue.resume();
+    await inboxQueue.resume();
 
     // Check that queue is empty
-    const counts = await emailProcessingQueue.getJobCounts();
+    const counts = await inboxQueue.getJobCounts();
     expect(counts.waiting).toBe(0);
   });
 });

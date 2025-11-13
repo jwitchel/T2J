@@ -36,7 +36,6 @@ An AI-powered email assistant that generates email reply drafts matching your pe
    FRONTEND_URL=http://localhost:3001
    NODE_ENV=development
    EMAIL_PIPELINE_CONCURRENCY=1
-   QDRANT_URL=http://localhost:6333
    EOF
    
    # Create .env.local for frontend (Next.js)
@@ -58,7 +57,6 @@ An AI-powered email assistant that generates email reply drafts matching your pe
    This starts:
    - PostgreSQL on port 5434 (non-standard to avoid conflicts)
    - Redis on port 6380 (non-standard to avoid conflicts)
-   - Qdrant on ports 6333/6334 (vector database for tone learning)
    - Test mail server on ports 1143/1993 (IMAP testing)
 
 5. **Initialize the database**
@@ -106,7 +104,7 @@ test-repo/
 │   ├── src/              # Server source code
 │   │   ├── routes/       # API routes
 │   │   └── lib/          # Server utilities
-│   │       └── vector/   # Vector services (embeddings, Qdrant)
+│   │       └── vector/   # Vector services (embeddings, PostgreSQL + Vectra)
 │   └── tsconfig.json     # Server TypeScript config
 ├── scripts/               # Utility scripts
 ├── docker-compose.yml     # Docker services config
@@ -137,12 +135,6 @@ npm run redis:down      # Stop Redis
 npm run redis:reset     # Reset Redis
 npm run redis:logs      # View Redis logs
 
-# Qdrant Vector Database
-npm run qdrant:up       # Start Qdrant
-npm run qdrant:down     # Stop Qdrant
-npm run qdrant:reset    # Reset Qdrant (removes data)
-npm run qdrant:logs     # View Qdrant logs
-
 # Mail Server (IMAP Testing)
 npm run mail:up         # Start test mail server
 npm run mail:down       # Stop test mail server
@@ -151,7 +143,7 @@ npm run mail:logs       # View mail server logs
 npm run mail:seed       # Create test email accounts
 
 # All Docker Services
-npm run docker:up       # Start ALL services (PostgreSQL, Redis, Qdrant, Mail)
+npm run docker:up       # Start ALL services (PostgreSQL, Redis, Mail)
 npm run docker:down     # Stop ALL services
 npm run docker:reset    # Reset ALL services
 npm run docker:logs     # View logs for all docker-compose services
@@ -287,7 +279,7 @@ View all components at http://localhost:3001/components-test
 - **Queue system**: BullMQ with Redis for background jobs
 - **Email parsing**: Uses [email-reply-parser](https://github.com/crisp-oss/email-reply-parser) for extracting user content
 - **HTML conversion**: Uses [html-to-text](https://www.npmjs.com/package/html-to-text) for reliable HTML parsing
-- **Vector storage**: Qdrant database with relationship-aware search - see [Vector Services Documentation](server/src/lib/vector/README.md)
+- **Vector storage**: PostgreSQL with Vectra in-memory search, dual embeddings (semantic + style) - see [Vector Services Documentation](server/src/lib/vector/README.md)
 
 ## 🔌 Real-time Features
 

@@ -12,9 +12,8 @@ import { withImapContext } from '../imap-context';
 import { emailStorageService } from '../email-storage-service';
 import { emailLockManager } from '../email-lock-manager';
 import { DraftEmail } from '../pipeline/types';
-import { pool } from '../../server';
+import { pool } from '../db';
 import { ActionHelpers } from '../email-actions';
-import { getSpamDetector } from './spam-detector';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -55,7 +54,7 @@ export interface ProcessEmailParams {
     messageId?: string;
     subject?: string;
     from?: string;
-    rawMessage: string;
+    fullMessage: string;
   };
   accountId: string;
   userId: string;
@@ -134,7 +133,7 @@ export class InboxProcessor {
         [accountId]
       );
       accountEmail = result.rows[0]?.email_address;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[InboxProcessor] Failed to fetch account email:', error);
     }
 
@@ -161,7 +160,7 @@ export class InboxProcessor {
     }
 
     const processingResult = await emailProcessingService.processEmail({
-      rawMessage: context.message.rawMessage,
+      fullMessage: context.message.fullMessage,
       emailAccountId: context.accountId,
       providerId: context.providerId,
       userId: context.userId
@@ -294,45 +293,16 @@ export class InboxProcessor {
   private async _rollbackTracking(context: ProcessingContext): Promise<void> {
     try {
       await EmailActionTracker.resetAction(context.accountId, context.messageKey);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[InboxProcessor] Rollback failed:', error);
     }
   }
 
   /**
-   * Update sender response statistics if this was a draft action (user engagement)
+   * Save email to database (best effort - doesn't throw on error)
    * @private
    */
-  private async _updateSenderResponseStats(
-    context: ProcessingContext,
-    draft: DraftEmail
-  ): Promise<void> {
-    // Only track draft actions (reply, reply-all, forward, forward-with-comment)
-    if (!ActionHelpers.isDraftAction(draft.meta.recommendedAction)) {
-      return;
-    }
-
-    try {
-      const senderEmail = draft.draftMetadata.originalFrom!.toLowerCase();
-
-      // Get SpamDetector instance and update stats
-      const spamDetector = await getSpamDetector(context.providerId);
-      await spamDetector.updateResponseStats({
-        userId: context.userId,
-        emailAccountId: context.accountId,
-        senderEmail
-      });
-    } catch (error) {
-      // Log but don't throw - this is best-effort tracking
-      console.error('[InboxProcessor] Failed to update sender response stats:', error);
-    }
-  }
-
-  /**
-   * Save email to Qdrant (best effort - doesn't throw on error)
-   * @private
-   */
-  private async _saveToQdrant(
+  private async _saveToDatabase(
     context: ProcessingContext,
     draft: DraftEmail
   ): Promise<void> {
@@ -342,12 +312,12 @@ export class InboxProcessor {
         messageId: context.message.messageId,
         subject: context.message.subject,
         from: context.message.from,
-        rawMessage: context.message.rawMessage,
+        fullMessage: context.message.fullMessage,
         to: [],
         cc: [],
         date: new Date(),
         flags: [],
-        size: context.message.rawMessage.length
+        size: context.message.fullMessage.length
       };
 
       const llmResponse = {
@@ -361,7 +331,8 @@ export class InboxProcessor {
           confidence: 0.5,
           detectionMethod: 'default'
         },
-        spamAnalysis: draft.draftMetadata.spamAnalysis
+        spamAnalysis: draft.draftMetadata.spamAnalysis,
+        generatedContent: draft.body
       };
 
       await emailStorageService.saveEmail({
@@ -372,10 +343,10 @@ export class InboxProcessor {
         folderName: DEFAULT_SOURCE_FOLDER,
         llmResponse
       });
-    } catch (error) {
-      console.error(`[InboxProcessor] ⚠️ QDRANT SAVE FAILED for ${context.message.messageId}:`, error);
+    } catch (error: unknown) {
+      console.error(`[InboxProcessor] ⚠️ DATABASE SAVE FAILED for ${context.message.messageId}:`, error);
       console.error(`[InboxProcessor] This email will not be viewable in history!`);
-      // Don't throw - Qdrant is best-effort
+      // Don't throw - database save is best-effort
     }
   }
 
@@ -485,11 +456,8 @@ export class InboxProcessor {
       // 7. UPDATE ACTION TRACKING WITH FINAL DESTINATION
       await this._updateTracking(context, draft, imapResult.destination);
 
-      // 7b. UPDATE SENDER RESPONSE STATS (if reply action)
-      await this._updateSenderResponseStats(context, draft);
-
-      // 8. SAVE TO QDRANT (best effort - doesn't fail on error)
-      await this._saveToQdrant(context, draft);
+      // 8. SAVE TO DATABASE (best effort - doesn't fail on error)
+      await this._saveToDatabase(context, draft);
 
       // 9. BUILD SUCCESS RESULT AND LOG SUMMARY
       const result = this._buildResult(context, {
@@ -502,7 +470,7 @@ export class InboxProcessor {
       this._logProcessingSummary(context, result, isSpam);
       return result;
 
-    } catch (error) {
+    } catch (error: unknown) {
       const result = this._buildResult(context, undefined, error as Error);
       this._logProcessingSummary(context, result, false);
       return result;
@@ -584,7 +552,7 @@ export class InboxProcessor {
         });
 
         // Process emails in parallel for better throughput
-        // Note: processEmail now handles Qdrant storage internally (DRY)
+        // Note: processEmail now handles database storage internally (DRY)
         const processingPromises = toProcess.map(msg =>
           this.processEmail({
             message: {
@@ -592,7 +560,7 @@ export class InboxProcessor {
               messageId: msg.messageId,
               subject: msg.subject,
               from: msg.from,
-              rawMessage: msg.rawMessage
+              fullMessage: msg.fullMessage
             },
             accountId,
             userId,
@@ -615,7 +583,7 @@ export class InboxProcessor {
           elapsed: Date.now() - startTime
         };
 
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[InboxProcessor] Batch processing error:', error);
         throw error;
       }

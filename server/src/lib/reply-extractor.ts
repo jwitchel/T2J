@@ -54,7 +54,7 @@ export class ReplyExtractor {
         .join('\n');
       
       return visibleFragments.trim();
-    } catch (error) {
+    } catch (error: unknown) {
       // If parsing fails, return the original text
       console.error('Failed to parse email for reply extraction:', error);
       return emailBody.trim();
@@ -94,7 +94,7 @@ export class ReplyExtractor {
       return {
         userReply: visibleFragments
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to parse email for reply extraction:', error);
       return {
         userReply: emailBody.trim()
@@ -296,7 +296,7 @@ export class ReplyExtractor {
         userReply,
         respondedTo
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to split email:', error);
       // Fallback: try to split on common patterns
       return this.fallbackSplit(emailBody);

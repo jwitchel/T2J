@@ -16,11 +16,12 @@ import PostalMime from 'postal-mime';
 function formatDuration(ms: number): string {
   return (ms / 1000).toFixed(1) + 's';
 }
-import { pool } from '../../server';
+import { pool } from '../db';
 import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
+import { stripAttachments } from '../email-attachment-stripper';
 
 /**
  * User context needed for email processing
@@ -45,7 +46,7 @@ export interface ParsedEmailData {
 }
 
 export interface ProcessEmailParams {
-  rawMessage: string;
+  fullMessage: string;
   emailAccountId: string;
   providerId: string;
   userId: string;
@@ -79,19 +80,21 @@ export class EmailProcessingService {
     return emailBody;
   }
 
+
   /**
    * Parse email exactly once
    * @private
    */
-  private async parseEmail(rawMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
+  private async parseEmail(fullMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
     const parser = new PostalMime();
-    const parsed = await parser.parse(rawMessage);
+    const parsed = await parser.parse(fullMessage);
 
     const fromAddress = parsed.from?.address || '';
     const fromName = parsed.from?.name || parsed.from?.address || '';
     const subject = parsed.subject || '';
     const to = (parsed.to || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
     const cc = (parsed.cc || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
+    const replyTo = (parsed.replyTo || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
     const messageId = parsed.messageId || `<${Date.now()}@${emailAccountId}>`;
     const messageDate = parsed.date ? new Date(parsed.date) : new Date();
     const inReplyTo = parsed.inReplyTo || null;
@@ -99,12 +102,17 @@ export class EmailProcessingService {
     // Extract email body
     const emailBody = await this.extractEmailBody(parsed);
 
+    // Strip attachments from fullMessage before passing to LLM
+    // This prevents massive DocuSign PDFs, etc from bloating token count
+    const cleanFullMessage = await stripAttachments(fullMessage, parsed);
+
     const processedEmail: ProcessedEmail = {
       uid: messageId,
       messageId: messageId,
       inReplyTo: inReplyTo,
       date: messageDate,
       from: [{ address: fromAddress, name: fromName }],
+      replyTo,
       to,
       cc,
       bcc: [],
@@ -113,7 +121,7 @@ export class EmailProcessingService {
       htmlContent: parsed.html || null,
       userReply: emailBody,
       respondedTo: '', // Set by reply extractor when content is split into user text vs quoted text
-      rawMessage: rawMessage
+      fullMessage: cleanFullMessage
     };
 
     return { parsed, processedEmail, emailBody };
@@ -206,12 +214,12 @@ export class EmailProcessingService {
    * This is the single entry point for processing an email
    */
   async processEmail(params: ProcessEmailParams): Promise<EmailProcessingResult> {
-    const { rawMessage, emailAccountId, providerId, userId } = params;
+    const { fullMessage, emailAccountId, providerId, userId } = params;
     const totalStartTime = Date.now();
 
     try {
       // Step 1: Parse email
-      const parsedData = await this.parseEmail(rawMessage, emailAccountId);
+      const parsedData = await this.parseEmail(fullMessage, emailAccountId);
 
       // Step 2: Load user context
       const userContext = await this.loadUserContext(userId, emailAccountId);
@@ -219,10 +227,13 @@ export class EmailProcessingService {
       // Step 3: Check for spam
       const spamCheckStartTime = Date.now();
       const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase() || '';
+      const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
       const spamDetector = await getSpamDetector(providerId);
       const spamCheckResult = await spamDetector.checkSpam({
         senderEmail,
-        rawMessage,
+        replyTo,
+        fullMessage: parsedData.processedEmail.fullMessage, // Use stripped version
+        subject: parsedData.processedEmail.subject,
         userNames: userContext.userNames,
         userId
       });
@@ -261,7 +272,7 @@ export class EmailProcessingService {
 
       return result;
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[EmailProcessingService] Error processing email:', error);
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error processing email';

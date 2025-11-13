@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { pool as serverPool } from '../../server';
+import { pool as serverPool } from '../db';
 
 // Custom error classes
 export class PersonServiceError extends Error {
@@ -122,7 +122,7 @@ export class PersonService {
       if (!this.suppressLogs) {
         console.log('PersonService: Database connection verified');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('PersonService: Failed to connect to database', error);
       throw new PersonServiceError('Failed to connect to database', 'DB_CONNECTION_ERROR');
     }
@@ -273,7 +273,7 @@ export class PersonService {
       }
       
       return result;
-    } catch (error) {
+    } catch (error: unknown) {
       await this._rollbackTransaction(client);
       
       // Re-throw our custom errors as-is
@@ -360,7 +360,7 @@ export class PersonService {
       }
       
       return result;
-    } catch (error) {
+    } catch (error: unknown) {
       await this._rollbackTransaction(client);
       
       if (error instanceof PersonServiceError) {
@@ -478,11 +478,11 @@ export class PersonService {
         // Return the person details
         return await this.getPersonById(personId, params.userId) || 
           (() => { throw new PersonServiceError('Failed to retrieve person after creation'); })();
-      } catch (error) {
+      } catch (error: unknown) {
         await this._rollbackTransaction(client);
         throw error;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
         throw error;
       }
@@ -579,7 +579,7 @@ export class PersonService {
         emails: Array.from(emailsMap.values()),
         relationships: Array.from(relationshipsMap.values())
       };
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
         throw error;
       }
@@ -595,10 +595,8 @@ export class PersonService {
     }
     
     this.validateUUID(personId, 'person ID');
-    
+
     try {
-      this.logOperation('getPersonById', userId, { personId });
-      
       // Get person details
       const personResult = await this.pool.query(
         `SELECT id, user_id, name, created_at, updated_at
@@ -639,7 +637,7 @@ export class PersonService {
         emails: emailsResult.rows,
         relationships: relationshipsResult.rows
       };
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
         throw error;
       }
@@ -694,7 +692,7 @@ export class PersonService {
       }
       
       return people;
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
         throw error;
       }
@@ -835,7 +833,7 @@ export class PersonService {
       }
       
       return mergedPerson;
-    } catch (error) {
+    } catch (error: unknown) {
       await this._rollbackTransaction(client);
       
       if (error instanceof PersonServiceError) {
@@ -892,5 +890,19 @@ export class PersonService {
   }
 }
 
-// Create and export singleton instance
-export const personService = new PersonService();
+// Lazy singleton instance to avoid circular dependency issues
+let _personService: PersonService | null = null;
+
+export function getPersonService(): PersonService {
+  if (!_personService) {
+    _personService = new PersonService();
+  }
+  return _personService;
+}
+
+// Export singleton for backwards compatibility
+export const personService = new Proxy({} as PersonService, {
+  get(_, prop) {
+    return (getPersonService() as any)[prop];
+  }
+});

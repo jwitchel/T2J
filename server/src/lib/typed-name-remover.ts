@@ -84,7 +84,7 @@ export class TypedNameRemover {
         removedText: null,
         matchedPattern: null
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error removing typed name:', error);
       // On error, return text as-is
       return {
@@ -113,7 +113,7 @@ export class TypedNameRemover {
 
       // Remove quotes from JSON string value
       return result.rows[0].append_string.replace(/^"|"$/g, '');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error getting typed name append:', error);
       return null;
     }

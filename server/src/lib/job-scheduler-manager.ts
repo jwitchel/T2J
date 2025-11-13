@@ -172,7 +172,7 @@ export class JobSchedulerManager {
         if (scheduler && scheduler.next) {
           nextRun = new Date(scheduler.next);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`Error getting scheduler details for ${jobSchedulerId}:`, error);
       }
     }
@@ -221,7 +221,7 @@ export class JobSchedulerManager {
           if (status) {
             statuses.push(status);
           }
-        } catch (error) {
+        } catch (error: unknown) {
           console.error(`Error getting status for scheduler ${schedulerId} account ${accountId}:`, error);
         }
       }
@@ -304,7 +304,7 @@ export class JobSchedulerManager {
     for (const row of result.rows) {
       try {
         await this.enableScheduler(schedulerId, userId, row.id);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`[JobSchedulerManager] Failed to enable ${schedulerId} for ${row.email_address}:`, error);
       }
     }
@@ -337,7 +337,7 @@ export class JobSchedulerManager {
           await this.disableScheduler(schedulerId, userId, row.id);
           disabledCount++;
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`[JobSchedulerManager] Failed to disable ${schedulerId} for ${row.email_address}:`, error);
       }
     }
@@ -384,7 +384,7 @@ export class JobSchedulerManager {
             await this.disableScheduler(SchedulerId.CHECK_MAIL, userId, accountId);
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`[JobSchedulerManager] Failed to sync scheduler for ${emailAddress}:`, error);
       }
     }
@@ -418,7 +418,7 @@ export class JobSchedulerManager {
 
       try {
         await this.disableScheduler(schedulerId, userId, accountId);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`[JobSchedulerManager] Error disabling scheduler ${schedulerId} for account ${accountId}:`, error);
       }
     }

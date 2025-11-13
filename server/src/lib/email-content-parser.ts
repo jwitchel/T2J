@@ -18,7 +18,7 @@ export class EmailContentParser {
     try {
       const parsed = await simpleParser(rawEmail);
       return this.parseFromMailparser(parsed);
-    } catch (error) {
+    } catch (error: unknown) {
       throw new Error(`Failed to parse email: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

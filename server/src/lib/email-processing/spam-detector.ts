@@ -5,12 +5,14 @@
 
 import { PromptFormatterV2 } from '../pipeline/prompt-formatter-v2';
 import { LLMClient } from '../llm-client';
-import { pool } from '../../server';
+import { pool } from '../db';
 import { SpamCheckResult } from '../pipeline/types';
 
 export interface SpamCheckParams {
   senderEmail: string;
-  rawMessage: string;
+  replyTo?: string;  // Optional: Reply-To header address (checked first for response count)
+  fullMessage: string;
+  subject?: string;
   userNames: {
     name: string;
     nicknames?: string;
@@ -19,12 +21,6 @@ export interface SpamCheckParams {
 }
 
 export type { SpamCheckResult };
-
-interface UpdateResponseStatsParams {
-  userId: string;
-  emailAccountId: string;
-  senderEmail: string;
-}
 
 export class SpamDetector {
   private promptFormatter: PromptFormatterV2;
@@ -75,40 +71,13 @@ export class SpamDetector {
    */
   private async getResponseCount(userId: string, senderEmail: string): Promise<number> {
     const result = await pool.query(
-      `SELECT COALESCE(SUM(response_count), 0)::int as total
-       FROM sender_response_stats
-       WHERE user_id = $1 AND sender_email = $2`,
+      `SELECT COUNT(*)::int as total
+       FROM email_sent
+       WHERE user_id = $1 AND recipient_email = $2`,
       [userId, senderEmail.toLowerCase()]
     );
 
     return result.rows[0]?.total || 0;
-  }
-
-  /**
-   * Update response statistics after user replies to sender
-   * @param params - User, account, and sender
-   */
-  async updateResponseStats(params: UpdateResponseStatsParams): Promise<void> {
-    const { userId, emailAccountId, senderEmail } = params;
-
-    await pool.query(
-      `INSERT INTO sender_response_stats (
-        user_id,
-        email_account_id,
-        sender_email,
-        response_count,
-        first_response_at,
-        last_response_at,
-        last_updated_at
-      )
-      VALUES ($1, $2, $3, 1, NOW(), NOW(), NOW())
-      ON CONFLICT (user_id, email_account_id, sender_email)
-      DO UPDATE SET
-        response_count = sender_response_stats.response_count + 1,
-        last_response_at = NOW(),
-        last_updated_at = NOW()`,
-      [userId, emailAccountId, senderEmail.toLowerCase()]
-    );
   }
 
   /**
@@ -121,12 +90,20 @@ export class SpamDetector {
       throw new Error('SpamDetector not initialized. Call initialize() first.');
     }
 
-    const { senderEmail, rawMessage, userNames, userId } = params;
+    const { senderEmail, replyTo, fullMessage, userNames, userId } = params;
 
-    // Step 1: Get response count across ALL user's accounts
-    const responseCount = await this.getResponseCount(userId, senderEmail);
+    // Check response count for BOTH Reply-To and From addresses
+    // Use the maximum count (if user replied to either address, it's not spam)
+    // For Google Docs: From=noreply@google.com (0 replies), Reply-To=workmate@foo.com (5 replies)
+    // We want to use the 5 replies from the actual person
+    let responseCount = await this.getResponseCount(userId, senderEmail);
 
-    // Step 2: Auto-whitelist if user has replied 2+ times
+    if (replyTo && replyTo !== senderEmail) {
+      const replyToResponseCount = await this.getResponseCount(userId, replyTo);
+      responseCount = Math.max(responseCount, replyToResponseCount);
+    }
+
+    // Step 2: Auto-whitelist if user has replied 2+ times to either address
     if (responseCount >= 2) {
       const result: SpamCheckResult = {
         isSpam: false,
@@ -145,14 +122,14 @@ export class SpamDetector {
     };
 
     // Step 4: Format prompt for spam check with response history
-    // Note: LLMClient automatically strips attachments to prevent token limit errors
+    // Note: Truncation happens in LLMClient right before sending to LLM
     const spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
-      rawEmail: rawMessage,
+      rawEmail: fullMessage,
       userNames,
       responseHistory
     });
 
-    // Step 5: Perform spam check (retry logic is handled in LLMClient.generate())
+    // Step 5: Perform spam check (with retry logic)
     const spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
 
     const isSpam = spamCheckResult.meta.isSpam;

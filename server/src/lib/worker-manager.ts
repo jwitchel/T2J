@@ -73,7 +73,7 @@ export class WorkerManager {
 
       // Start periodic cleanup to handle runtime stalls (OS sleep/wake scenarios)
       this.startPeriodicCleanup();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[WorkerManager] Error during initialization:', error);
       // Default to paused state on error for safety
       this.isPaused = true;
@@ -135,7 +135,7 @@ export class WorkerManager {
       } else {
         console.log('[WorkerManager] No stale jobs found');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[WorkerManager] Error cleaning up stale jobs:', error);
       // Don't throw - we want initialization to continue even if cleanup fails
     }
@@ -173,7 +173,7 @@ export class WorkerManager {
             console.log(`[WorkerManager] Runtime cleanup: Removed ${trainingCleaned.length} stale active jobs from training queue`);
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[WorkerManager] Error in periodic cleanup:', error);
       }
     }, cleanupInterval);

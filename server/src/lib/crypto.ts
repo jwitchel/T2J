@@ -71,7 +71,7 @@ export function decryptPassword(encryptedData: string): string {
     ]);
     
     return decrypted.toString('utf8');
-  } catch (error) {
+  } catch (error: unknown) {
     throw new Error('Failed to decrypt password');
   }
 }

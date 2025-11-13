@@ -5,14 +5,61 @@
  */
 
 import { ToneLearningOrchestrator } from '../pipeline/tone-learning-orchestrator';
-import { ProcessedEmail, EmailProcessingResult, DraftEmail, SpamCheckResult } from '../pipeline/types';
+import { ProcessedEmail, EmailProcessingResult, DraftEmail, SpamCheckResult, SimplifiedEmailMetadata } from '../pipeline/types';
 import { LLMMetadata } from '../llm-client';
 import { realTimeLogger } from '../real-time-logger';
 import { TypedNameRemover } from '../typed-name-remover';
-import { pool } from '../../server';
+import { pool } from '../db';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
 import { ActionHelpers } from '../email-actions';
+import { StyleAggregationService } from '../style/style-aggregation-service';
+import type { Email as PostalMimeEmail, Address } from 'postal-mime';
+
+/**
+ * Simplified email address format
+ */
+interface EmailAddress {
+  address: string;
+  name?: string;
+}
+
+/**
+ * Relationship detection result
+ */
+interface RelationshipResult {
+  type: string;
+  confidence: number;
+  detectionMethod: string;
+}
+
+/**
+ * Extract email addresses from Address array
+ * Handles PostalMime's Address[] type
+ */
+function extractAddresses(field: Address[] | undefined): EmailAddress[] {
+  if (!field) return [];
+
+  return field.map(addr => ({
+    address: addr.address || '',
+    name: addr.name
+  }));
+}
+
+/**
+ * Extract single email address (for from field)
+ * Handles PostalMime's Address type: { name: string; address?: string }
+ */
+function extractSingleAddress(field: Address | undefined): EmailAddress | undefined {
+  if (!field || !field.address) {
+    return undefined;
+  }
+
+  return {
+    address: field.address,
+    name: field.name
+  };
+}
 
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
@@ -44,21 +91,28 @@ export class DraftGenerator {
   ): Promise<EmailProcessingResult> {
     const { parsed, processedEmail } = parsedData;
     const recipientEmail = processedEmail.from[0].address;
-    const maxExamples = parseInt(process.env.EXAMPLE_COUNT || '25');
+    const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
 
     try {
       // Step 1: Get provider-specific orchestrator (cached, already initialized)
       const orchestrator = await getOrchestrator(providerId);
 
-      // Initialize constants - pass complete raw email for LLM analysis
-      // Note: LLMClient automatically strips attachments to prevent token limit errors
+      // Validate required fields for draft generation (fail fast)
+      if (!parsed.messageId) {
+        throw new Error('Email missing message-id, cannot generate draft');
+      }
+      if (!parsed.subject) {
+        throw new Error('Email missing subject, cannot generate draft');
+      }
+
+      // Initialize constants
       const incomingEmailMetadata = {
         from: processedEmail.from,
         to: processedEmail.to,
         cc: processedEmail.cc,
         subject: processedEmail.subject,
         date: processedEmail.date,
-        rawMessage: processedEmail.rawMessage
+        fullMessage: processedEmail.fullMessage
       };
 
       // Step 2: Run AI pipeline with timeout protection
@@ -94,7 +148,7 @@ export class DraftGenerator {
         draft: formattedDraft
       };
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[DraftGenerator] Error generating draft:', error);
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -120,10 +174,10 @@ export class DraftGenerator {
     userId: string,
     userContext: UserContext,
     maxExamples: number,
-    incomingEmailMetadata: any,
+    incomingEmailMetadata: SimplifiedEmailMetadata,
     spamCheckResult: SpamCheckResult,
     timeoutMs: number
-  ): Promise<{ body: string; meta: LLMMetadata; relationship: { type: string; confidence: number; detectionMethod: string } }> {
+  ): Promise<{ body: string; meta: LLMMetadata; relationship: RelationshipResult }> {
     // Validate LLM client is available (should be already checked, but for type safety)
     const llmClient = orchestrator['patternAnalyzer']['llmClient'];
     if (!llmClient) {
@@ -131,6 +185,8 @@ export class DraftGenerator {
     }
 
     const pipelinePromise = (async () => {
+      const t0 = Date.now();
+
       // Step 1: Select relevant examples
       const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
         userId,
@@ -138,69 +194,69 @@ export class DraftGenerator {
         recipientEmail,
         desiredCount: maxExamples
       });
+      console.log(`[DraftGenerator] ⏱️  selectExamples: ${Date.now() - t0}ms`);
 
-      // Get the detected relationship
-      const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
-        userId,
-        recipientEmail
+      // Log selected examples for draft generation
+      const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
+      const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;
+      console.log(`[DraftGenerator] 📧 Selected ${exampleSelection.examples.length} examples for ${exampleSelection.relationship} relationship: ${directCount} direct, ${categoryCount} category`);
+      exampleSelection.examples.forEach((example, idx) => {
+        const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
+        const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
+        const subject = example.metadata?.subject || 'No subject';
+        const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
+        const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
+        console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
       });
 
-      // Get enhanced profile with aggregated style
-      const enhancedProfile = await orchestrator['relationshipService'].getEnhancedProfile(
+      // Get the detected relationship
+      const t1 = Date.now();
+      const replyToEmail = processedEmail.replyTo[0]?.address;
+      const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
         userId,
-        recipientEmail
-      );
+        recipientEmail,
+        replyToEmail
+      });
+      console.log(`[DraftGenerator] ⏱️  detectRelationship: ${Date.now() - t1}ms`);
 
-      // Step 2: Analyze writing patterns
-      let writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
+      // Get enhanced profile with aggregated style from PostgreSQL
+      const t2 = Date.now();
+      const styleService = new StyleAggregationService(pool);
+      const aggregatedStyle = await styleService.getAggregatedStyle(userId, exampleSelection.relationship);
+      console.log(`[DraftGenerator] ⏱️  getAggregatedStyle: ${Date.now() - t2}ms`);
+
+      // Wrap aggregated style in enhanced profile structure
+      const enhancedProfile = aggregatedStyle ? {
+        // Basic relationship profile fields (all optional for now)
+        typicalFormality: aggregatedStyle.sentimentProfile.averageFormality.toFixed(2),
+        commonGreetings: aggregatedStyle.greetings?.map(g => g.text) || [],
+        commonClosings: aggregatedStyle.closings?.map(c => c.text) || [],
+        useEmojis: (aggregatedStyle.emojis?.length || 0) > 0,
+        useHumor: false,  // Not detected in current system
+        preferredTopics: [],
+        avoidTopics: [],
+        aggregatedStyle
+      } : null;
+
+      // Step 2: Load writing patterns (pre-computed during training)
+      const t3 = Date.now();
+      const writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
         userId,
         exampleSelection.relationship
       );
+      console.log(`[DraftGenerator] ⏱️  loadPatterns: ${Date.now() - t3}ms`);
 
-      // If no patterns exist, analyze from available examples
-      if (!writingPatterns && exampleSelection.examples.length > 0) {
-        const emailsForAnalysis: ProcessedEmail[] = exampleSelection.examples.map(ex => ({
-          uid: ex.id,
-          messageId: ex.id,
-          inReplyTo: null,
-          date: new Date(ex.metadata.sentAt || Date.now()),
-          from: [{ address: ex.metadata.senderEmail || '', name: '' }],
-          to: [{ address: ex.metadata.recipientEmail || recipientEmail, name: '' }],
-          cc: [],
-          bcc: [],
-          subject: ex.metadata.subject || '',
-          textContent: ex.text,
-          htmlContent: null,
-          userReply: ex.text,
-          respondedTo: '',
-          rawMessage: '' // Not needed for pattern analysis
-        }));
-
-        writingPatterns = await orchestrator['patternAnalyzer'].analyzeWritingPatterns(
-          userId,
-          emailsForAnalysis,
-          exampleSelection.relationship
-        );
-
-        await orchestrator['patternAnalyzer'].savePatterns(
-          userId,
-          writingPatterns,
-          exampleSelection.relationship,
-          emailsForAnalysis.length
-        );
+      // Note: If no patterns exist, we should NOT analyze on-demand during draft generation
+      // Pattern analysis is expensive (LLM calls + sentence stats calculation)
+      // Instead: Background jobs should pre-compute patterns periodically
+      // For now: If patterns don't exist, we'll use aggregatedStyle alone
+      if (!writingPatterns) {
+        console.log(`[DraftGenerator] No writing patterns for ${exampleSelection.relationship} - using aggregatedStyle only`);
       }
 
-      // Step 3: Meta-Context Analysis (First LLM Call)
-      const metaContextPrompt = await orchestrator['promptFormatter'].formatMetaContextAnalysis({
-        incomingEmail: processedEmail.userReply,
-        recipientEmail,
-        userNames: userContext.userNames,
-        incomingEmailMetadata
-      });
-
-      const metaContextAnalysis = await llmClient.generateMetaContextAnalysis(metaContextPrompt);
-
-      // Step 4: Action Analysis (Second LLM Call)
+      // Step 3: Action Analysis (First LLM Call)
+      // Single source of truth for email classification and action determination
+      const t4 = Date.now();
       const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
@@ -210,18 +266,18 @@ export class DraftGenerator {
       });
 
       const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
+      console.log(`[DraftGenerator] ⏱️  actionAnalysis (LLM 1): ${Date.now() - t4}ms`);
 
-      // Combine meta-context and action into full metadata
-      const combinedMeta: LLMMetadata = {
-        ...metaContextAnalysis.meta,
-        ...actionAnalysis.meta
-      };
+      // Use action analysis as complete metadata (no merging needed)
+      const combinedMeta: LLMMetadata = actionAnalysis.meta;
 
-      // Step 5: Response Generation (Third LLM Call - conditional)
+      // Step 4: Response Generation (Second LLM Call - conditional)
       const needsResponse = !ActionHelpers.isSilentAction(combinedMeta.recommendedAction);
       let responseMessage = '';
 
       if (needsResponse) {
+        console.log(`[DraftGenerator] Generating response: action=${combinedMeta.recommendedAction}, examples=${exampleSelection.examples?.length || 0}, relationship=${exampleSelection.relationship}, patterns=${!!writingPatterns}`);
+
         const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
           incomingEmail: processedEmail.userReply,
           recipientEmail,
@@ -235,6 +291,8 @@ export class DraftGenerator {
         });
 
         responseMessage = await llmClient.generateResponseMessage(responsePrompt);
+      } else {
+        console.log('[DraftGenerator] Skipping response generation for silent action');
       }
 
       // Build final relationship
@@ -280,24 +338,24 @@ export class DraftGenerator {
    * @private
    */
   private buildBaseDraft(
-    parsed: any,
+    parsed: PostalMimeEmail,
     meta: LLMMetadata,
-    relationship: { type: string; confidence: number; detectionMethod: string },
+    relationship: RelationshipResult,
     userContext: UserContext,
     spamCheckResult: SpamCheckResult
   ): Omit<DraftEmail, 'to' | 'cc' | 'subject' | 'body' | 'bodyHtml'> {
     return {
       id: `draft-${Date.now()}`,
       from: userContext.userEmail,
-      inReplyTo: parsed.messageId || `<${Date.now()}>`,
-      references: parsed.messageId || `<${Date.now()}>`,
+      inReplyTo: parsed.messageId!,  // Validated at entry point
+      references: parsed.messageId!,  // Validated at entry point
       meta,
       relationship,
       draftMetadata: {
         exampleCount: 0, // Will be overridden if needed
         timestamp: new Date().toISOString(),
         originalSubject: parsed.subject,
-        originalFrom: parsed.from?.address,
+        originalFrom: extractSingleAddress(parsed.from)?.address,
         spamAnalysis: {
           isSpam: spamCheckResult.isSpam,
           indicators: spamCheckResult.indicators,
@@ -312,17 +370,18 @@ export class DraftGenerator {
    * @private
    */
   private buildSilentDraft(
-    parsed: any,
+    parsed: PostalMimeEmail,
     meta: LLMMetadata,
-    relationship: { type: string; confidence: number; detectionMethod: string },
+    relationship: RelationshipResult,
     userContext: UserContext,
     spamCheckResult: SpamCheckResult
   ): DraftEmail {
+    const fromAddress = extractSingleAddress(parsed.from);
     return {
       ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
-      to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address),
+      to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''),
       cc: '',
-      subject: parsed.subject || '',
+      subject: parsed.subject!,  // Validated at entry point
       body: ''
     };
   }
@@ -332,17 +391,18 @@ export class DraftGenerator {
    * @private
    */
   private buildReplyDraft(
-    parsed: any,
+    parsed: PostalMimeEmail,
     emailBody: string,
     cleanedBody: string,
     meta: LLMMetadata,
-    relationship: { type: string; confidence: number; detectionMethod: string },
+    relationship: RelationshipResult,
     userContext: UserContext,
     spamCheckResult: SpamCheckResult
   ): DraftEmail {
+    const fromAddress = extractSingleAddress(parsed.from);
     const formattedReply = this.formatReplyEmail(
-      parsed.from?.name || parsed.from?.address,
-      parsed.from?.address,
+      fromAddress?.name || fromAddress?.address || '',
+      fromAddress?.address || '',
       parsed.date ? new Date(parsed.date) : new Date(),
       emailBody,
       cleanedBody,
@@ -351,14 +411,14 @@ export class DraftGenerator {
       userContext.signatureBlock
     );
 
-    const replySubject = (parsed.subject || '').toLowerCase().startsWith('re:')
-      ? parsed.subject
-      : `Re: ${parsed.subject}`;
+    const replySubject = parsed.subject!.toLowerCase().startsWith('re:')  // Validated at entry point
+      ? parsed.subject!
+      : `Re: ${parsed.subject!}`;
 
     const isReplyAll = ActionHelpers.isReplyAll(meta.recommendedAction);
     const { to, cc } = isReplyAll
       ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
-      : { to: this.formatEmailAddress(parsed.from?.name, parsed.from?.address), cc: '' };
+      : { to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''), cc: '' };
 
     return {
       ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
@@ -448,19 +508,27 @@ ${originalHtml}
    * Calculate recipients for reply-all
    * @private
    */
-  private calculateReplyAllRecipients(parsed: any, userEmail: string): { to: string; cc: string } {
-    const allTo: string[] = [this.formatEmailAddress(parsed.from?.name, parsed.from?.address)];
+  private calculateReplyAllRecipients(parsed: PostalMimeEmail, userEmail: string): { to: string; cc: string } {
+    const allTo: string[] = [];
     const allCc: string[] = [];
 
+    // Add sender to TO
+    const from = extractSingleAddress(parsed.from);
+    if (from) {
+      allTo.push(this.formatEmailAddress(from.name, from.address));
+    }
+
     // Add all TO recipients (except the user)
-    (parsed.to || []).forEach((addr: any) => {
+    const toAddresses = extractAddresses(parsed.to);
+    toAddresses.forEach(addr => {
       if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
         allTo.push(this.formatEmailAddress(addr.name, addr.address));
       }
     });
 
     // Add all CC recipients (except the user)
-    (parsed.cc || []).forEach((addr: any) => {
+    const ccAddresses = extractAddresses(parsed.cc);
+    ccAddresses.forEach(addr => {
       if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
         allCc.push(this.formatEmailAddress(addr.name, addr.address));
       }
@@ -513,7 +581,7 @@ ${originalHtml}
    */
   private logDraftCompletion(
     userId: string,
-    aiResult: { body: string; meta: LLMMetadata; relationship: { type: string; confidence: number; detectionMethod: string } }
+    aiResult: { body: string; meta: LLMMetadata; relationship: RelationshipResult }
   ): void {
     realTimeLogger.log(userId, {
       userId,

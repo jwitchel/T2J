@@ -19,7 +19,14 @@ CRITICAL: You must return a JSON object with this exact structure:
 {
   "meta": {
     "recommendedAction": "<{{availableActions}}>",
-    "keyConsiderations": ["<consideration1>", "<consideration2>", ...]
+    "keyConsiderations": ["<consideration1>", "<consideration2>", ...],
+    "contextFlags": {
+      "isThreaded": <true|false>,
+      "hasAttachments": <true|false>,
+      "isGroupEmail": <true|false>,
+      "inboundMsgAddressedTo": "<{{addressedToOptions}}>",
+      "urgencyLevel": "<{{urgencyOptions}}>"
+    }
   }
 }
 
@@ -29,6 +36,38 @@ CRITICAL: You must return a JSON object with this exact structure:
 You are an email classification system. Analyze the provided email and return a structured evaluation following the logic below.
 
 **IMPORTANT**: In your response, include in the `meta.keyConsiderations` field comma separated which specific numbered criterion led to your classification and response type determination (e.g., "1.6. Sender address doesn't match sender name or organization"). Include the whole line, not just the number.
+
+## Context Flags Analysis
+
+Before determining the action, analyze these context flags:
+
+### contextFlags.isThreaded
+Determine if this is part of an ongoing conversation:
+- `true`: Subject contains "Re:", "Fwd:", references previous emails, has quoted text with ">", or similar conversation markers
+- `false`: Appears to be a new, standalone email
+
+### contextFlags.hasAttachments
+Check if the email mentions or includes attachments:
+- `true`: Email mentions "attached", "see attachment", lists files, or similar attachment indicators
+- `false`: No attachments mentioned or included
+
+### contextFlags.isGroupEmail
+Determine if multiple people are addressed:
+- `true`: More than one person in TO field, any CC recipients, addresses group ("Hi team"), or similar multiple recipient indicators
+- `false`: Email is addressed to you alone
+
+### contextFlags.inboundMsgAddressedTo
+Determine who the email is primarily addressed to based on TO field and email content:
+- `"you"` - You are the sole or primary intended recipient
+- `"group"` - You are part of a group being addressed collectively
+- `"someone-else"` - Another person is the primary recipient, you're secondary (CC/BCC or mentioned for visibility)
+
+### contextFlags.urgencyLevel
+Assess urgency based on explicit and implicit indicators:
+- `"critical"` - "URGENT", "ASAP", "911", "Emergency", "Immediately", deadline within 4 hours, or similar crisis language
+- `"high"` - "Today", "EOD", "By end of day", "This afternoon", "In the next few hours", or similar same-day deadlines
+- `"medium"` - "Tomorrow", "In the next day or two", "This week", "Soon", moderate pressure, or similar near-term timelines
+- `"low"` - "When you get a chance", "No rush", "FYI", no deadline mentioned, or similar relaxed timeframes
 
 ## Main Classification Logic
 Using step-by-step logic, evaluate the email through these steps in cascade order (stop at the first matching condition and return that action):
@@ -208,4 +247,4 @@ If no response type is specified, the default response type is "reply-all".
 **CRITICAL**: If your action is "reply" add to the `meta.keyConsiderations` field the reason you chose to reply.
 
 === EMAIL TO ANALYZE ===
-{{incomingEmailMetadata.rawMessage}}
+{{incomingEmailMetadata.fullMessage}}

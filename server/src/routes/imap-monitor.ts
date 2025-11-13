@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { imapMonitor } from '../lib/imap-monitor';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 
 const router = express.Router();
 

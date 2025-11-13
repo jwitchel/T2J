@@ -15,7 +15,6 @@ async function testVercelAISDK() {
     });
 
     const localResult = await localClient.generate('Say hello in exactly 3 words.', {
-      maxTokens: 10,
       temperature: 0
     });
     console.log('✅ Local model response:', localResult);

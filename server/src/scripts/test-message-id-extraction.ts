@@ -67,14 +67,14 @@ async function testMessageIdExtraction() {
       console.log(`  Date: ${msg.date ? msg.date.toISOString() : 'UNDEFINED'}`);
       console.log(`  Flags: ${msg.flags ? msg.flags.join(', ') : 'UNDEFINED'}`);
       console.log(`  Size: ${msg.size || 'UNDEFINED'}`);
-      console.log(`  Has rawMessage: ${!!msg.rawMessage ? 'YES ✅' : 'NO ❌'}`);
+      console.log(`  Has fullMessage: ${!!msg.fullMessage ? 'YES ✅' : 'NO ❌'}`);
       console.log(`  Has bodystructure: ${!!msg.bodystructure ? 'YES ✅' : 'NO ❌'}`);
     }
 
     console.log('\n' + '='.repeat(80));
 
-    // Test saving to Qdrant
-    console.log(`\n💾 Testing save to Qdrant...`);
+    // Test saving to database
+    console.log(`\n💾 Testing save to database...`);
     const firstMessage = fullMessages[0];
 
     if (firstMessage.messageId) {
@@ -87,7 +87,7 @@ async function testMessageIdExtraction() {
       });
 
       if (saveResult.success) {
-        console.log(`✅ Successfully saved email to Qdrant!`);
+        console.log(`✅ Successfully saved email to database!`);
         console.log(`   Skipped: ${saveResult.skipped}`);
         console.log(`   Saved count: ${saveResult.saved}`);
       } else {

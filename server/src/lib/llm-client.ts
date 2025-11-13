@@ -5,34 +5,43 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType } from '../types/llm-provider';
 import { RecommendedAction } from './email-actions';
+import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
 
-export interface MetaContext {
+/**
+ * Context flags for email classification
+ * Includes both structural info and semantic analysis
+ */
+export interface ContextFlags {
+  // Structural flags
+  isThreaded: boolean;
+  hasAttachments: boolean;
+  isGroupEmail: boolean;
+  // Semantic flags (from LLM analysis)
   inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
-  inboundMsgIsRequesting: 'meeting-request' | 'answer-questions' | 'acknowledge-receipt' | 'acknowledge-emotional' | 'request-for-info' | 'fyi-only' | 'task-assignment' | 'approval-needed' | 'none';
   urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
-  contextFlags: {
-    isThreaded: boolean;
-    hasAttachments: boolean;
-    isGroupEmail: boolean;
-  };
 }
 
+/**
+ * Action analysis result from LLM
+ * Single source of truth for email classification and action determination
+ */
 export interface ActionData {
   recommendedAction: RecommendedAction;
   keyConsiderations: string[]; // Includes spam screening reasons for transparency (e.g., "Not spam - legitimate domain")
+  contextFlags: ContextFlags;
 }
 
-export interface LLMMetadata extends MetaContext, ActionData {}
+/**
+ * Complete metadata for email draft generation
+ * Combines action analysis with context flags
+ */
+export interface LLMMetadata extends ActionData {}
 
 export interface SpamCheckResponse {
   meta: {
     isSpam: boolean;
     spamIndicators: string[];
   };
-}
-
-export interface MetaContextAnalysisResponse {
-  meta: MetaContext;
 }
 
 export interface ActionAnalysisResponse {
@@ -113,53 +122,16 @@ export class LLMClient {
     return 'https://' + endpoint;
   }
 
-  /**
-   * Strip large base64-encoded content (attachments) from prompts
-   * Prevents token limit errors when emails have large attachments
-   * @private
-   */
-  private stripAttachmentsFromPrompt(prompt: string): string {
-    // Match base64 content blocks that are typically from email attachments
-    // Look for patterns like: Content-Transfer-Encoding: base64 followed by large base64 strings
-    const base64Pattern = /Content-Transfer-Encoding:\s*base64[\r\n]+([A-Za-z0-9+\/=\r\n]{500,})/gi;
-
-    let strippedPrompt = prompt;
-    let matchCount = 0;
-    let totalBytesRemoved = 0;
-
-    strippedPrompt = strippedPrompt.replace(base64Pattern, (match) => {
-      matchCount++;
-      totalBytesRemoved += match.length;
-      return 'Content-Transfer-Encoding: base64\n[Large attachment content removed to prevent token limit]';
-    });
-
-    // Also strip inline base64 images (data URIs)
-    const dataUriPattern = /data:image\/[^;]+;base64,[A-Za-z0-9+\/=]{500,}/gi;
-    strippedPrompt = strippedPrompt.replace(dataUriPattern, (match) => {
-      matchCount++;
-      totalBytesRemoved += match.length;
-      return '[Inline image removed to prevent token limit]';
-    });
-
-    // Attachment stripping is silent - only log errors
-
-    return strippedPrompt;
-  }
 
   /**
    * Generic generation method for direct API calls with built-in retry logic
    */
   async generate(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<string> {
     const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
     const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
     let lastError: any;
-
-    // Strip attachments from prompt to prevent token limit errors
-    const cleanedPrompt = this.stripAttachmentsFromPrompt(prompt);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Create AbortController for this attempt with timeout
@@ -170,35 +142,28 @@ export class LLMClient {
       }, llmTimeout);
 
       try {
-        const messages = options?.systemPrompt
-          ? [
-              { role: 'system' as const, content: options.systemPrompt },
-              { role: 'user' as const, content: cleanedPrompt }
-            ]
-          : cleanedPrompt;
-
         const { text } = await generateText({
           model: this.model,
-          messages: typeof messages === 'string' ? undefined : messages,
-          prompt: typeof messages === 'string' ? messages : undefined,
+          prompt,
           temperature: options?.temperature ?? 0.7,
-          maxTokens: options?.maxTokens ?? 1000,
           abortSignal: controller.signal,
         });
 
         clearTimeout(timeoutId);
         return text;
-      } catch (error: any) {
+      } catch (error: unknown) {
         clearTimeout(timeoutId);
         lastError = error;
 
         // Check if this was an abort (timeout)
-        const isAborted = error.name === 'AbortError' || error.message?.includes('aborted');
+        const errorName = error instanceof Error ? error.name : '';
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isAborted = errorName === 'AbortError' || errorMessage.includes('aborted');
 
         // Only retry on JSON parsing errors, temporary failures, or timeouts
-        const shouldRetry = error.message?.includes('JSON') ||
-                           error.message?.includes('rate limit') ||
-                           error.message?.includes('timeout') ||
+        const shouldRetry = errorMessage.includes('JSON') ||
+                           errorMessage.includes('rate limit') ||
+                           errorMessage.includes('timeout') ||
                            isAborted;
 
         if (shouldRetry && attempt < maxRetries) {
@@ -218,14 +183,9 @@ export class LLMClient {
    */
   async generateSpamCheck(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<SpamCheckResponse> {
     try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 300,
-      });
+      const text = await this.generate(prompt, options);
 
       const parsed = this.extractJSON(text, 'spam check');
 
@@ -237,53 +197,20 @@ export class LLMClient {
       );
 
       return { meta: parsed.meta };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleJSONError(error, 'Spam check');
     }
   }
 
   /**
-   * Generate meta-context analysis for email (urgency, request type, context flags)
-   */
-  async generateMetaContextAnalysis(prompt: string, options?: {
-    temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
-  }): Promise<MetaContextAnalysisResponse> {
-    try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 500,
-      });
-
-      const parsed = this.extractJSON(text, 'meta-context analysis');
-
-      this.validateJSON(
-        parsed,
-        (p) => p.meta,
-        'missing meta field',
-        'meta-context analysis'
-      );
-
-      return { meta: parsed.meta };
-    } catch (error: any) {
-      this.handleJSONError(error, 'Meta-context analysis');
-    }
-  }
-
-  /**
    * Generate action analysis for email (what action to take)
+   * Single source of truth for email classification and action determination
    */
   async generateActionAnalysis(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<ActionAnalysisResponse> {
     try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 1000,
-      });
+      const text = await this.generate(prompt, options);
 
       const parsed = this.extractJSON(text, 'action analysis');
 
@@ -295,7 +222,7 @@ export class LLMClient {
       );
 
       return { meta: parsed.meta };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.handleJSONError(error, 'Action analysis');
     }
   }
@@ -305,14 +232,9 @@ export class LLMClient {
    */
   async generateResponseMessage(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<string> {
     try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 2000,
-      });
+      const text = await this.generate(prompt, options);
 
       const parsed = this.extractJSON(text, 'response generation');
 
@@ -324,7 +246,8 @@ export class LLMClient {
       );
 
       return parsed.message;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('[LLMClient] Error in generateResponseMessage:', error);
       this.handleJSONError(error, 'Response generation');
     }
   }
@@ -334,9 +257,9 @@ export class LLMClient {
    */
   async testConnection(): Promise<boolean> {
     try {
-      await this.generate('Say "test"', { maxTokens: 5 });
+      await this.generate('Say "test"');
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Connection test failed:', error);
       return false;
     }
@@ -441,6 +364,63 @@ export class LLMClient {
         'UNKNOWN'
       );
     }
+  }
+
+  /**
+   * Auto-refresh OAuth token with retry logic
+   * Handles token refresh failures gracefully with automatic retry
+   * Retries on transient errors, but immediately fails on REFRESH_TOKEN_INVALID
+   * This method should be used when OAuth token refresh fails to automatically retry
+   */
+  static async autoRefreshOAuthToken(
+    refreshToken: string,
+    provider: string,
+    emailAccountId: string,
+    maxRetries: number = 2
+  ): Promise<OAuthTokens> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const tokens = await OAuthTokenService.refreshTokens(
+          refreshToken,
+          provider,
+          emailAccountId
+        );
+        
+        // Success - return the refreshed tokens
+        return tokens;
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Check if this is a REFRESH_TOKEN_INVALID error
+        const errorMessage = lastError.message || '';
+        if (errorMessage.includes('REFRESH_TOKEN_INVALID')) {
+          // Refresh token is invalid or expired - cannot retry
+          // Log and re-throw immediately
+          console.error(`[LLMClient] OAuth refresh token invalid for account ${emailAccountId}. Re-authentication required.`);
+          throw lastError;
+        }
+
+        // For other errors, retry with exponential backoff
+        if (attempt < maxRetries) {
+          const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
+          console.warn(
+            `[LLMClient] OAuth token refresh failed (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${backoffMs}ms...`,
+            errorMessage
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+
+        // Final attempt failed
+        break;
+      }
+    }
+
+    // All retries exhausted
+    console.error(`[LLMClient] OAuth token refresh failed after ${maxRetries + 1} attempts for account ${emailAccountId}`);
+    throw lastError || new Error('OAuth token refresh failed');
   }
 
   /**

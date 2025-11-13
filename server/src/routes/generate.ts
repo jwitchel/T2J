@@ -1,6 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 
 import { decryptPassword } from '../lib/crypto';
 import {
@@ -83,8 +83,7 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
     
     // Generate response
     const reply = await client.generate(data.prompt, {
-      temperature: data.temperature,
-      maxTokens: data.max_tokens
+      temperature: data.temperature
     });
     
     // Get model info for response

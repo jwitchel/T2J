@@ -103,6 +103,7 @@ interface ToneProfile extends Partial<WritingPatterns> {
 interface ToneData {
   profiles: Record<string, ToneProfile>
   totalEmailsAnalyzed: number
+  totalEmailsLoaded: number
   lastUpdated: string | null
 }
 
@@ -154,6 +155,13 @@ export default function TonePage() {
   const [isWiping, setIsWiping] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
+  // User preferences state
+  const [userPreferences, setUserPreferences] = useState<{
+    name: string
+    nicknames: string
+    signatureBlock: string
+  } | null>(null)
+
   const { success, error } = useToast()
   const apiUrl = process.env.NEXT_PUBLIC_API_URL!
 
@@ -203,12 +211,27 @@ export default function TonePage() {
     }
   }, [apiUrl])
 
+  const fetchUserPreferences = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/settings/profile`, {
+        credentials: 'include'
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setUserPreferences(data.preferences)
+      }
+    } catch (err) {
+      console.error('Error fetching user preferences:', err)
+    }
+  }, [apiUrl])
+
   useEffect(() => {
     if (user) {
       fetchToneData()
       fetchEmailAccounts()
+      fetchUserPreferences()
     }
-  }, [user, fetchToneData, fetchEmailAccounts])
+  }, [user, fetchToneData, fetchEmailAccounts, fetchUserPreferences])
 
   const handleLoadEmails = async () => {
     if (!selectedAccountId) {
@@ -301,45 +324,16 @@ export default function TonePage() {
 
   if (!user) return null
 
-  if (!toneData || Object.keys(toneData.profiles).length === 0) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 p-8">
-        <div className="max-w-4xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>No Tone Profile Found</CardTitle>
-              <CardDescription>
-                Get started by loading sent emails from your account and analyzing your writing patterns.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-sm text-zinc-600">
-                <p className="mb-2">To build your tone profile:</p>
-                <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>Select an email account</li>
-                  <li>Click &ldquo;Load Emails&rdquo; to import your sent messages</li>
-                  <li>Click &ldquo;Analyze Patterns&rdquo; to build your tone profile</li>
-                </ol>
-              </div>
-              <Button onClick={() => setMainTab('training')} className="bg-indigo-600 hover:bg-indigo-700">
-                Start Training
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
-
-  const currentProfile = toneData.profiles[selectedRelationship]
+  const hasProfiles = toneData && Object.keys(toneData.profiles).length > 0
+  const currentProfile = hasProfiles ? toneData.profiles[selectedRelationship] : null
   const patterns = currentProfile as WritingPatterns
 
   // Sort profiles with 'aggregate' (Overall) first
-  const sortedProfiles = Object.entries(toneData.profiles).sort(([keyA], [keyB]) => {
+  const sortedProfiles = hasProfiles ? Object.entries(toneData.profiles).sort(([keyA], [keyB]) => {
     if (keyA === 'aggregate') return -1
     if (keyB === 'aggregate') return 1
     return keyA.localeCompare(keyB)
-  })
+  }) : []
 
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 flex flex-col" style={{ height: 'calc(100vh - 64px)' }}>
@@ -348,7 +342,10 @@ export default function TonePage() {
         <div className="mb-4">
           <h1 className="text-3xl font-bold text-zinc-900">Tone Analysis</h1>
           <p className="text-zinc-600 mt-1">
-            Analyze your writing style from {toneData.totalEmailsAnalyzed} emails
+            {toneData && toneData.totalEmailsLoaded > 0
+              ? `Analyze your writing style from ${toneData.totalEmailsLoaded} emails`
+              : 'Build your tone profile by loading and analyzing emails'
+            }
           </p>
         </div>
       </div>
@@ -488,6 +485,31 @@ export default function TonePage() {
 
           {/* Results Tab */}
           <TabsContent value="results" className="mt-0 overflow-y-auto">
+            {!hasProfiles ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>No Results Yet</CardTitle>
+                  <CardDescription>Load and analyze emails from the Training tab to see your tone profile</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {emailAccounts.length === 0 ? (
+                    <>
+                      <p className="text-sm text-zinc-600 mb-4">You need to add an email account first.</p>
+                      <Button asChild className="bg-indigo-600 hover:bg-indigo-700">
+                        <a href="/settings/email-accounts">Add Email Account</a>
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-zinc-600 mb-4">Switch to the Training tab to get started.</p>
+                      <Button onClick={() => setMainTab('training')} className="bg-indigo-600 hover:bg-indigo-700">
+                        Go to Training
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
             <div className="space-y-6">
               {/* Sentence Patterns */}
               <Card>
@@ -681,12 +703,41 @@ export default function TonePage() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Name Signature</CardTitle>
-                      <CardDescription>Configure email signature</CardDescription>
+                      <CardDescription>How you sign your emails</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                      <Button variant="outline" size="sm" asChild>
-                        <a href="/settings">Configure Settings</a>
-                      </Button>
+                    <CardContent className="space-y-3">
+                      {userPreferences && (userPreferences.name || userPreferences.nicknames || userPreferences.signatureBlock) ? (
+                        <>
+                          {userPreferences.name && (
+                            <div>
+                              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Name</p>
+                              <p className="text-sm">{userPreferences.name}</p>
+                            </div>
+                          )}
+                          {userPreferences.nicknames && (
+                            <div>
+                              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Nicknames</p>
+                              <p className="text-sm">{userPreferences.nicknames}</p>
+                            </div>
+                          )}
+                          {userPreferences.signatureBlock && (
+                            <div>
+                              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Signature Block</p>
+                              <pre className="text-xs bg-zinc-50 dark:bg-zinc-800 p-2 rounded whitespace-pre-wrap">{userPreferences.signatureBlock}</pre>
+                            </div>
+                          )}
+                          <Button variant="outline" size="sm" asChild className="mt-2">
+                            <a href="/settings">Edit Settings</a>
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-zinc-500">No signature configured</p>
+                          <Button variant="outline" size="sm" asChild>
+                            <a href="/settings">Configure Settings</a>
+                          </Button>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -759,6 +810,7 @@ export default function TonePage() {
                 )}
 
                 {/* Analysis Details */}
+                {currentProfile && (
                 <Card>
                   <CardHeader>
                     <CardTitle>Analysis Details</CardTitle>
@@ -797,7 +849,9 @@ export default function TonePage() {
                     </div>
                   </CardContent>
                 </Card>
+                )}
               </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>

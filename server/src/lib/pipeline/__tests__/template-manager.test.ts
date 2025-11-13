@@ -43,7 +43,7 @@ describe('TemplateManager', () => {
       recipientEmail: 'test@example.com',
       relationship: 'friend',
       incomingEmail: 'How are you doing?',
-      exactExamples: [
+      directExamples: [
         {
           text: 'Hey! I am doing great, thanks for asking!',
           relationship: 'friend',
@@ -95,7 +95,7 @@ describe('TemplateManager', () => {
       const longText = 'a'.repeat(1100); // Create text longer than 1000 chars
       const data = {
         ...mockData,
-        exactExamples: [{
+        directExamples: [{
           text: longText,
           relationship: 'friend'
         }]
@@ -135,7 +135,7 @@ describe('TemplateManager', () => {
         {
           id: '1',
           text: 'Hello there!',
-          score: 0.9,
+          scores: { semantic: 0.9, style: 0, combined: 0.9 },
           metadata: {
             relationship: { type: 'friend', confidence: 0.9, detectionMethod: 'auto' },
             features: {
@@ -156,6 +156,9 @@ describe('TemplateManager', () => {
         text: 'Hello there!',
         relationship: 'friend',
         score: 0.9,
+        semanticScore: 0.9,
+        styleScore: 0,
+        combinedScore: 0.9,
         subject: 'Greeting',
         formalityScore: 0.3,
         sentiment: 'positive',
@@ -167,30 +170,32 @@ describe('TemplateManager', () => {
   });
 
   describe('prepareTemplateData', () => {
-    it('should prepare data with exact and other matches', () => {
+    it('should prepare data with direct and category matches', () => {
       const examples: SelectedExample[] = [
         {
           id: '1',
           text: 'Hey friend!',
-          score: 0.95,
+          scores: { semantic: 0.95, style: 0, combined: 0.95 },
           metadata: {
             relationship: { type: 'friend', confidence: 0.9, detectionMethod: 'auto' },
             features: {
               stats: { formalityScore: 0.2, wordCount: 2 }
             },
-            wordCount: 2
+            wordCount: 2,
+            isDirectCorrespondence: true
           }
         },
         {
           id: '2',
           text: 'Hello colleague',
-          score: 0.8,
+          scores: { semantic: 0.8, style: 0, combined: 0.8 },
           metadata: {
             relationship: { type: 'colleague', confidence: 0.85, detectionMethod: 'auto' },
             features: {
               stats: { formalityScore: 0.7, wordCount: 2 }
             },
-            wordCount: 2
+            wordCount: 2,
+            isDirectCorrespondence: false
           }
         }
       ];
@@ -209,8 +214,8 @@ describe('TemplateManager', () => {
         }
       });
       
-      expect(data.exactExamples).toHaveLength(1);
-      expect(data.otherExamples).toHaveLength(1);
+      expect(data.directExamples).toHaveLength(1);
+      expect(data.categoryExamples).toHaveLength(1);
       expect(data.meta.relationshipMatchCount).toBe(1);
       expect(data.meta.avgWordCount).toBe(2);
       expect(data.profile).toBeDefined();
@@ -222,7 +227,7 @@ const mockData = {
   recipientEmail: 'test@example.com',
   relationship: 'friend',
   incomingEmail: 'How are you doing?',
-  exactExamples: [
+  directExamples: [
     {
       text: 'Hey! I am doing great, thanks for asking!',
       relationship: 'friend',

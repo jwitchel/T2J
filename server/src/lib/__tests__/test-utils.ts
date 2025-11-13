@@ -1,19 +1,19 @@
 import { ProcessedEmail } from '../pipeline/types';
-import { VectorStore } from '../vector/qdrant-client';
 
 /**
  * Test data manager for integration tests
+ * Note: This class is a stub for future test infrastructure
  */
 export class TestDataManager {
-  private vectorStore: VectorStore;
   private activeUsers: Set<string> = new Set();
-  
+
   constructor() {
-    this.vectorStore = new VectorStore();
+    // No longer uses VectorStore - migrated to PostgreSQL
   }
-  
+
   async initialize(): Promise<void> {
-    await this.vectorStore.initialize();
+    // Future: Initialize with PostgreSQL pool for test data isolation
+    console.warn('[TestDataManager] Test data management not yet implemented');
   }
   
   /**
@@ -47,10 +47,11 @@ export class TestDataManager {
    * Clean up all test data for a user
    */
   async cleanupTestData(userId: string): Promise<void> {
-    await this.vectorStore.deleteUserData(userId);
+    // Future: Delete test user data from PostgreSQL tables (email_sent, email_received, etc.)
+    console.warn('[TestDataManager] Test data cleanup not yet implemented');
     this.activeUsers.delete(userId);
   }
-  
+
   /**
    * Clean up all active test users
    */
@@ -60,17 +61,14 @@ export class TestDataManager {
     }
     this.activeUsers.clear();
   }
-  
+
   /**
    * Verify data integrity for a test user
    */
-  async verifyDataIntegrity(userId: string): Promise<boolean> {
-    try {
-      const stats = await this.vectorStore.getRelationshipStats(userId);
-      return Object.keys(stats).length > 0;
-    } catch (error) {
-      return false;
-    }
+  async verifyDataIntegrity(_userId: string): Promise<boolean> {
+    // Future: Query PostgreSQL to verify test data consistency
+    console.warn('[TestDataManager] Data integrity verification not yet implemented');
+    return false;
   }
   
   /**
@@ -161,7 +159,7 @@ export class TestDataManager {
       htmlContent: null,
       userReply: body,
       respondedTo: '',
-      rawMessage: `From: test@sender.com\r\nTo: ${recipient}\r\nSubject: ${subject}\r\n\r\n${body}`
+      fullMessage: `From: test@sender.com\r\nTo: ${recipient}\r\nSubject: ${subject}\r\n\r\n${body}`
     };
   }
 }
@@ -273,7 +271,7 @@ export class MockDataGenerator {
       htmlContent: null,
       userReply: body,
       respondedTo: '',
-      rawMessage: `From: john@example.com\r\nTo: ${recipientAddr}\r\nSubject: ${subject}\r\n\r\n${body}`
+      fullMessage: `From: john@example.com\r\nTo: ${recipientAddr}\r\nSubject: ${subject}\r\n\r\n${body}`
     };
   }
   

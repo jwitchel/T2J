@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { pool } from '../server';
+import { pool } from '../lib/db';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();

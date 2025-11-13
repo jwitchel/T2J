@@ -47,7 +47,6 @@ export interface LLMGenerateRequest {
   prompt: string;
   provider_id?: string;
   temperature?: number;
-  max_tokens?: number;
   stream?: boolean;
 }
 
@@ -58,7 +57,6 @@ export interface LLMGenerateFromPipelineRequest {
   enhanced_profile: any;
   provider_id?: string;
   temperature?: number;
-  max_tokens?: number;
 }
 
 export interface LLMGenerateResponse {
@@ -82,14 +80,11 @@ export interface LLMProviderConfig {
 
 export interface GenerateOptions {
   temperature?: number;
-  maxTokens?: number;
   stream?: boolean;
-  systemPrompt?: string;
 }
 
 export interface StreamOptions {
   temperature?: number;
-  maxTokens?: number;
   onToken?: (token: string) => void;
 }
 

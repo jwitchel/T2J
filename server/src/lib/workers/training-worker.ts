@@ -53,7 +53,7 @@ async function buildToneProfile(job: Job<BuildToneProfileJobData>) {
         accountsProcessed: result.rows.length,
         childJobs
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[TrainingWorker] Fan-out job ${job.id} failed:`, error);
       throw error;
     }
@@ -92,7 +92,7 @@ async function buildToneProfile(job: Job<BuildToneProfileJobData>) {
       relationships: result.relationships,
       durationSeconds: result.durationSeconds
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[TrainingWorker] Job ${job.id} failed:`, error);
     throw error;
   }
@@ -121,7 +121,7 @@ async function learnFromEdit(job: Job<LearnFromEditJobData>) {
     }
   });
 
-  // TODO: When implemented, this would:
+  // Future implementation plan:
   // 1. Call POST /api/training/learn-from-edit endpoint
   // 2. Analyze differences between original and edited drafts
   // 3. Update user's tone profile based on changes
