@@ -595,10 +595,8 @@ export class PersonService {
     }
     
     this.validateUUID(personId, 'person ID');
-    
+
     try {
-      this.logOperation('getPersonById', userId, { personId });
-      
       // Get person details
       const personResult = await this.pool.query(
         `SELECT id, user_id, name, created_at, updated_at
