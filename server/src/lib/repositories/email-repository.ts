@@ -18,6 +18,7 @@ export interface SentEmailInsertParams {
   wordCount: number;
   sentDate: Date;
   semanticVector: number[];
+  styleVector: number[];
   fullMessage: string;
 }
 
@@ -38,14 +39,16 @@ export interface ReceivedEmailInsertParams {
 export class EmailRepository {
   constructor(private pool: Pool) {}
 
-  async insertSentEmail(params: SentEmailInsertParams): Promise<void> {
-    await this.pool.query(`
+  async insertSentEmail(params: SentEmailInsertParams): Promise<string> {
+    const result = await this.pool.query(`
       INSERT INTO email_sent (
         email_id, user_id, email_account_id, user_reply, raw_text,
         subject, recipient_email, relationship_type, word_count, sent_date,
-        semantic_vector, full_message, created_at, updated_at
+        semantic_vector, style_vector, full_message,
+        vector_generated_at, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+      RETURNING id
     `, [
       params.emailId,
       params.userId,
@@ -58,8 +61,10 @@ export class EmailRepository {
       params.wordCount,
       params.sentDate,
       params.semanticVector,
+      params.styleVector,
       params.fullMessage
     ]);
+    return result.rows[0].id;
   }
 
   async insertReceivedEmail(params: ReceivedEmailInsertParams): Promise<void> {

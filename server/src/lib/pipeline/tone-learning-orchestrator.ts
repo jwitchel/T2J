@@ -1,5 +1,6 @@
 import { vectorSearchService } from '../vector';
 import { EmbeddingService } from '../vector/embedding-service';
+import { StyleEmbeddingService } from '../vector/style-embedding-service';
 import { ExampleSelector } from './example-selector';
 import { PromptFormatterV2 } from './prompt-formatter-v2';
 import { EmailIngestPipeline } from './email-ingest-pipeline';
@@ -22,6 +23,7 @@ export interface ToneLearningConfig {
 
 export class ToneLearningOrchestrator {
   private embeddingService: EmbeddingService;
+  private styleEmbeddingService: StyleEmbeddingService;
   // relationshipService no longer needed - ExampleSelector uses VectorSearchService internally
   // private relationshipService: RelationshipService;
   private relationshipDetector: RelationshipDetector;
@@ -34,6 +36,7 @@ export class ToneLearningOrchestrator {
 
   constructor(
     embeddingService?: EmbeddingService,
+    styleEmbeddingService?: StyleEmbeddingService,
     relationshipDetector?: RelationshipDetector,
     styleAggregationService?: StyleAggregationService,
     patternAnalyzer?: WritingPatternAnalyzer,
@@ -42,6 +45,7 @@ export class ToneLearningOrchestrator {
     ingestionPipeline?: EmailIngestPipeline
   ) {
     this.embeddingService = embeddingService || new EmbeddingService();
+    this.styleEmbeddingService = styleEmbeddingService || new StyleEmbeddingService();
     this.relationshipDetector = relationshipDetector || new RelationshipDetector();
     this.styleAggregationService = styleAggregationService || new StyleAggregationService();
     this.patternAnalyzer = patternAnalyzer || new WritingPatternAnalyzer();
@@ -49,6 +53,7 @@ export class ToneLearningOrchestrator {
     this.promptFormatter = promptFormatter || new PromptFormatterV2();
     this.ingestionPipeline = ingestionPipeline || new EmailIngestPipeline(
       this.embeddingService,
+      this.styleEmbeddingService,
       this.relationshipDetector,
       this.styleAggregationService,
       {
@@ -62,6 +67,7 @@ export class ToneLearningOrchestrator {
   async initialize(): Promise<void> {
     await vectorSearchService.initialize();
     await this.embeddingService.initialize();
+    await this.styleEmbeddingService.initialize();
     await this.promptFormatter.initialize();
     await this.patternAnalyzer.initialize();
   }

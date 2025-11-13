@@ -1,5 +1,6 @@
 import { extractEmailFeatures, ProcessedEmail } from './types';
 import { EmbeddingService } from '../vector/embedding-service';
+import { StyleEmbeddingService } from '../vector/style-embedding-service';
 import { RelationshipDetector } from '../relationships/relationship-detector';
 import { withRetry } from './retry-utils';
 import { StyleAggregationService } from '../style/style-aggregation-service';
@@ -19,6 +20,7 @@ export class EmailIngestPipeline {
 
   constructor(
     private embeddingService: EmbeddingService,
+    private styleEmbeddingService: StyleEmbeddingService,
     private relationshipDetector: RelationshipDetector,
     private styleAggregation: StyleAggregationService,
     private config: {
@@ -232,17 +234,27 @@ Email Details:
       }
     }
     
-    // Generate embedding with retry - use the redacted user reply ONLY
+    // Generate semantic embedding with retry - use the redacted user reply ONLY
     // We embed only what the user wrote, not any quoted content
-    const { vector } = await withRetry(
+    const { vector: semanticVector } = await withRetry(
       () => this.embeddingService.embedText(redactedUserReply),
       {
         onRetry: (error, attempt) => {
-          console.warn(`Embedding generation failed (attempt ${attempt}):`, error.message);
+          console.warn(`Semantic embedding generation failed (attempt ${attempt}):`, error.message);
         }
       }
     );
-    
+
+    // Generate style embedding with retry - use the redacted user reply ONLY
+    const { vector: styleVector } = await withRetry(
+      () => this.styleEmbeddingService.embedText(redactedUserReply),
+      {
+        onRetry: (error, attempt) => {
+          console.warn(`Style embedding generation failed (attempt ${attempt}):`, error.message);
+        }
+      }
+    );
+
     // Store in PostgreSQL with retry
     await withRetry(
       async () => {
@@ -270,7 +282,8 @@ Email Details:
           relationshipType: relationship.relationship,
           wordCount: features.stats.wordCount,
           sentDate: email.date,
-          semanticVector: vector,
+          semanticVector,
+          styleVector,
           fullMessage: email.fullMessage  // Validated above - cannot be empty
         });
       },

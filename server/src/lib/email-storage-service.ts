@@ -7,6 +7,7 @@
 
 import { vectorSearchService } from './vector';
 import { EmbeddingService } from './vector/embedding-service';
+import { StyleEmbeddingService } from './vector/style-embedding-service';
 import { EmailProcessor } from './email-processor';
 import { RelationshipDetector } from './relationships/relationship-detector';
 import { nameRedactor } from './name-redactor';
@@ -66,17 +67,20 @@ export interface SaveEmailResult {
 
 export class EmailStorageService {
   private embeddingService: EmbeddingService;
+  private styleEmbeddingService: StyleEmbeddingService;
   private emailProcessor: EmailProcessor;
   private relationshipDetector: RelationshipDetector;
   private emailRepository: EmailRepository;
 
   constructor(
     embeddingService?: EmbeddingService,
+    styleEmbeddingService?: StyleEmbeddingService,
     emailProcessor?: EmailProcessor,
     relationshipDetector?: RelationshipDetector,
     emailRepository?: EmailRepository
   ) {
     this.embeddingService = embeddingService || new EmbeddingService();
+    this.styleEmbeddingService = styleEmbeddingService || new StyleEmbeddingService();
     this.emailProcessor = emailProcessor || new EmailProcessor(pool);
     this.relationshipDetector = relationshipDetector || new RelationshipDetector();
     this.emailRepository = emailRepository || new EmailRepository(pool);
@@ -84,6 +88,7 @@ export class EmailStorageService {
 
   public async initialize(): Promise<void> {
     await this.embeddingService.initialize();
+    await this.styleEmbeddingService.initialize();
     await vectorSearchService.initialize();
   }
 
@@ -158,8 +163,13 @@ export class EmailStorageService {
         name: ''
       });
 
-      // Generate embedding from redacted user reply
-      const { vector } = await this.embeddingService.embedText(redactedUserReply);
+      // Generate semantic embedding from redacted user reply
+      const { vector: semanticVector } = await this.embeddingService.embedText(redactedUserReply);
+
+      // Generate style embedding (only for sent emails)
+      const styleVector: number[] = emailType === 'sent'
+        ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
+        : new Array(768).fill(0);  // Incoming emails don't need style vectors
 
       // Determine recipients/senders based on email type
       let savedCount = 0;
@@ -205,7 +215,8 @@ export class EmailStorageService {
             parsedEmail,
             redactedUserReply,
             features,
-            vector,
+            semanticVector,
+            styleVector,
             emailType,
             otherPartyEmail: recipient.address,
             otherPartyName: recipient.name
@@ -234,7 +245,8 @@ export class EmailStorageService {
           parsedEmail,
           redactedUserReply,
           features,
-          vector,
+          semanticVector,
+          styleVector,
           emailType,
           otherPartyEmail: senderEmail,
           otherPartyName: senderName
@@ -302,7 +314,8 @@ export class EmailStorageService {
     parsedEmail: ParsedMail;
     redactedUserReply: string;
     features: EmailFeatures;
-    vector: number[];
+    semanticVector: number[];
+    styleVector: number[];
     emailType: 'incoming' | 'sent';
     otherPartyEmail: string;
     otherPartyName?: string;
@@ -314,7 +327,8 @@ export class EmailStorageService {
       parsedEmail,
       redactedUserReply,
       features,
-      vector,
+      semanticVector,
+      styleVector,
       emailType,
       otherPartyEmail,
       otherPartyName
@@ -362,7 +376,8 @@ export class EmailStorageService {
           relationshipType: relationshipDetection.relationship,
           wordCount: features.stats.wordCount,
           sentDate: emailData.date!,  // Validated above at line 89
-          semanticVector: vector,
+          semanticVector,
+          styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
         });
       } else {
@@ -381,7 +396,7 @@ export class EmailStorageService {
           senderName: finalSenderName,  // Use email as fallback if name missing
           wordCount: features.stats.wordCount,
           receivedDate: emailData.date!,  // Validated above at line 89
-          semanticVector: vector,
+          semanticVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
         });
       }

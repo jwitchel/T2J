@@ -59,9 +59,23 @@ class MockEmbeddingService {
   }
 
   async embedText(text: string) {
-    // Return a mock embedding
+    // Return a mock embedding (384d for semantic)
     return {
       vector: Array(384).fill(0).map(() => Math.random()),
+      text
+    };
+  }
+}
+
+class MockStyleEmbeddingService {
+  async initialize() {
+    console.log('   MockStyleEmbeddingService initialized');
+  }
+
+  async embedText(text: string) {
+    // Return a mock style embedding (768d for style)
+    return {
+      vector: Array(768).fill(0).map(() => Math.random()),
       text
     };
   }
@@ -73,6 +87,7 @@ async function testPipelineWithMocks() {
   // Create mock services
   const mockVectorStore = new MockVectorStore() as any;
   const mockEmbeddingService = new MockEmbeddingService() as any;
+  const mockStyleEmbeddingService = new MockStyleEmbeddingService() as any;
   const mockRelationshipDetector = {
     initialize: async () => console.log('   MockRelationshipDetector initialized'),
     detectRelationship: async (params: any) => ({
@@ -107,6 +122,7 @@ async function testPipelineWithMocks() {
     console.log('1️⃣ Initializing mock services...');
     await mockVectorStore.initialize();
     await mockEmbeddingService.initialize();
+    await mockStyleEmbeddingService.initialize();
     await mockRelationshipDetector.initialize();
     await mockRelationshipService.initialize();
     console.log('✅ Mock services initialized\n');
@@ -115,6 +131,7 @@ async function testPipelineWithMocks() {
     console.log('2️⃣ Testing individual email processing...');
     const ingestPipeline = new EmailIngestPipeline(
       mockEmbeddingService,
+      mockStyleEmbeddingService,
       mockRelationshipDetector,
       mockStyleAggregationService,
       {
