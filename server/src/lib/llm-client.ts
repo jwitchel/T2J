@@ -122,53 +122,16 @@ export class LLMClient {
     return 'https://' + endpoint;
   }
 
-  /**
-   * Strip large base64-encoded content (attachments) from prompts
-   * Prevents token limit errors when emails have large attachments
-   * @private
-   */
-  private stripAttachmentsFromPrompt(prompt: string): string {
-    // Match base64 content blocks that are typically from email attachments
-    // Look for patterns like: Content-Transfer-Encoding: base64 followed by large base64 strings
-    const base64Pattern = /Content-Transfer-Encoding:\s*base64[\r\n]+([A-Za-z0-9+\/=\r\n]{500,})/gi;
-
-    let strippedPrompt = prompt;
-    let matchCount = 0;
-    let totalBytesRemoved = 0;
-
-    strippedPrompt = strippedPrompt.replace(base64Pattern, (match) => {
-      matchCount++;
-      totalBytesRemoved += match.length;
-      return 'Content-Transfer-Encoding: base64\n[Large attachment content removed to prevent token limit]';
-    });
-
-    // Also strip inline base64 images (data URIs)
-    const dataUriPattern = /data:image\/[^;]+;base64,[A-Za-z0-9+\/=]{500,}/gi;
-    strippedPrompt = strippedPrompt.replace(dataUriPattern, (match) => {
-      matchCount++;
-      totalBytesRemoved += match.length;
-      return '[Inline image removed to prevent token limit]';
-    });
-
-    // Attachment stripping is silent - only log errors
-
-    return strippedPrompt;
-  }
 
   /**
    * Generic generation method for direct API calls with built-in retry logic
    */
   async generate(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<string> {
     const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
     const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
     let lastError: any;
-
-    // Strip attachments from prompt to prevent token limit errors
-    const cleanedPrompt = this.stripAttachmentsFromPrompt(prompt);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Create AbortController for this attempt with timeout
@@ -179,19 +142,10 @@ export class LLMClient {
       }, llmTimeout);
 
       try {
-        const messages = options?.systemPrompt
-          ? [
-              { role: 'system' as const, content: options.systemPrompt },
-              { role: 'user' as const, content: cleanedPrompt }
-            ]
-          : cleanedPrompt;
-
         const { text } = await generateText({
           model: this.model,
-          messages: typeof messages === 'string' ? undefined : messages,
-          prompt: typeof messages === 'string' ? messages : undefined,
+          prompt,
           temperature: options?.temperature ?? 0.7,
-          maxTokens: options?.maxTokens ?? 1000,
           abortSignal: controller.signal,
         });
 
@@ -229,14 +183,9 @@ export class LLMClient {
    */
   async generateSpamCheck(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<SpamCheckResponse> {
     try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 300,
-      });
+      const text = await this.generate(prompt, options);
 
       const parsed = this.extractJSON(text, 'spam check');
 
@@ -259,14 +208,9 @@ export class LLMClient {
    */
   async generateActionAnalysis(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<ActionAnalysisResponse> {
     try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 1000,
-      });
+      const text = await this.generate(prompt, options);
 
       const parsed = this.extractJSON(text, 'action analysis');
 
@@ -288,14 +232,9 @@ export class LLMClient {
    */
   async generateResponseMessage(prompt: string, options?: {
     temperature?: number;
-    maxTokens?: number;
-    systemPrompt?: string;
   }): Promise<string> {
     try {
-      const text = await this.generate(prompt, {
-        ...options,
-        maxTokens: options?.maxTokens ?? 2000,
-      });
+      const text = await this.generate(prompt, options);
 
       const parsed = this.extractJSON(text, 'response generation');
 
@@ -318,7 +257,7 @@ export class LLMClient {
    */
   async testConnection(): Promise<boolean> {
     try {
-      await this.generate('Say "test"', { maxTokens: 5 });
+      await this.generate('Say "test"');
       return true;
     } catch (error: unknown) {
       console.error('Connection test failed:', error);

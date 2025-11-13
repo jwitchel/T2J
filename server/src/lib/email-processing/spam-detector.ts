@@ -11,6 +11,7 @@ import { SpamCheckResult } from '../pipeline/types';
 export interface SpamCheckParams {
   senderEmail: string;
   fullMessage: string;
+  subject?: string;
   userNames: {
     name: string;
     nicknames?: string;
@@ -112,14 +113,14 @@ export class SpamDetector {
     };
 
     // Step 4: Format prompt for spam check with response history
-    // Note: LLMClient automatically strips attachments to prevent token limit errors
+    // Note: Truncation happens in LLMClient right before sending to LLM
     const spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
       rawEmail: fullMessage,
       userNames,
       responseHistory
     });
 
-    // Step 5: Perform spam check (retry logic is handled in LLMClient.generate())
+    // Step 5: Perform spam check (with retry logic)
     const spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
 
     const isSpam = spamCheckResult.meta.isSpam;

@@ -689,36 +689,12 @@ export class WritingPatternAnalyzer {
       emails: emailTexts
     };
 
-    // Generate prompts using templates
-    const [systemPrompt, userPrompt] = await Promise.all([
-      this.templateManager.renderSystemPrompt('pattern-analysis'),
-      this.templateManager.renderPrompt('pattern-analysis', templateData as any)
-    ]);
-    
+    // Generate prompt using template (includes all instructions)
+    const prompt = await this.templateManager.renderPrompt('pattern-analysis', templateData as any);
+
     // Call LLM with structured output expectation
-    // Adjust max tokens based on model limits
-    const requestedMaxTokens = parseInt(process.env.PATTERN_ANALYSIS_MAX_TOKENS || '20000');
-    const modelNameLower = this.modelName.toLowerCase();
-    
-    // Known model limits for completion tokens
-    let maxTokens = requestedMaxTokens;
-    if (modelNameLower.includes('gpt-4-turbo-preview') || modelNameLower.includes('gpt-4-0125-preview')) {
-      maxTokens = Math.min(requestedMaxTokens, 4096);
-    } else if (modelNameLower.includes('gpt-3.5')) {
-      maxTokens = Math.min(requestedMaxTokens, 4096);
-    } else if (modelNameLower.includes('claude-3')) {
-      maxTokens = Math.min(requestedMaxTokens, 4096);
-    } else if (modelNameLower.includes('gpt-4o')) {
-      maxTokens = Math.min(requestedMaxTokens, 16384);
-    }
-    // For other models, use the requested amount
-    
-    console.log(`Pattern analysis using ${maxTokens} max tokens for model: ${this.modelName}`);
-    
-    const response = await this.llmClient.generate(userPrompt, {
-      temperature: 0.3, // Lower temperature for more consistent analysis
-      maxTokens,
-      systemPrompt
+    const response = await this.llmClient.generate(prompt, {
+      temperature: 0.3 // Lower temperature for more consistent analysis
     });
 
     // Parse the response
