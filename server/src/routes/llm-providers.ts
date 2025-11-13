@@ -3,12 +3,13 @@ import { requireAuth } from '../middleware/auth';
 import { pool } from '../lib/db';
 
 import { encryptPassword } from '../lib/crypto';
-import { 
-  CreateLLMProviderRequest, 
+import {
+  CreateLLMProviderRequest,
   UpdateLLMProviderRequest,
   LLMProviderResponse,
   LLMProviderError,
-  LLMProviderConfig
+  LLMProviderConfig,
+  getModelInfo
 } from '../types/llm-provider';
 import { LLMClient } from '../lib/llm-client';
 
@@ -54,11 +55,11 @@ router.post('/test', requireAuth, validateLLMProvider, async (req, res): Promise
     
     const client = new LLMClient(config);
     const success = await client.testConnection();
-    
+
     if (success) {
-      const modelInfo = client.getModelInfo();
-      res.json({ 
-        success: true, 
+      const modelInfo = getModelInfo(config.modelName);
+      res.json({
+        success: true,
         message: 'Connection successful',
         model_info: modelInfo
       });

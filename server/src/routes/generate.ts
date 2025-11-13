@@ -6,7 +6,8 @@ import { decryptPassword } from '../lib/crypto';
 import {
   LLMGenerateRequest,
   LLMGenerateResponse,
-  LLMProviderConfig
+  LLMProviderConfig,
+  getModelInfo
 } from '../types/llm-provider';
 import { LLMClient } from '../lib/llm-client';
 
@@ -80,14 +81,14 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
     
     // Create LLM client
     const client = new LLMClient(providerConfig);
-    
+
     // Generate response
     const reply = await client.generate(data.prompt, {
       temperature: data.temperature
     });
-    
+
     // Get model info for response
-    const modelInfo = client.getModelInfo();
+    const modelInfo = getModelInfo(providerConfig.modelName);
     
     const response: LLMGenerateResponse = {
       reply,

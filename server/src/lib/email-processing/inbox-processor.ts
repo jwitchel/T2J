@@ -180,7 +180,10 @@ export class InboxProcessor {
       throw new Error(processingResult.error || 'Failed to process email');
     }
 
-    return { shouldSkip: false, draft: processingResult.draft as DraftEmail };
+    return {
+      shouldSkip: false,
+      draft: processingResult.draft as DraftEmail
+    };
   }
 
   /**
@@ -307,12 +310,14 @@ export class InboxProcessor {
     draft: DraftEmail
   ): Promise<void> {
     try {
+      // Always store the ORIGINAL fullMessage (complete, unedited, with all attachments)
+      // This preserves the complete email for drafts, replies, and future processing
       const emailData = {
         uid: context.message.uid,
         messageId: context.message.messageId,
         subject: context.message.subject,
         from: context.message.from,
-        fullMessage: context.message.fullMessage,
+        fullMessage: context.message.fullMessage, // ORIGINAL - complete with all attachments
         to: [],
         cc: [],
         date: new Date(),

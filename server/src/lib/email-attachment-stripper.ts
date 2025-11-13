@@ -21,43 +21,140 @@ export async function stripAttachments(fullMessage: string, parsed?: any): Promi
     parsed = await parser.parse(fullMessage);
   }
 
-  // If no attachments, return original
-  if (!parsed.attachments || parsed.attachments.length === 0) {
-    return fullMessage;
-  }
+  // Log what attachments we found (for debugging)
+  if (parsed.attachments && parsed.attachments.length > 0) {
+    const regularAttachments = parsed.attachments.filter((att: any) =>
+      att.disposition === 'attachment'
+    );
 
-  // Filter attachments to strip: disposition="attachment" or "inline", but keep related=true (embedded images)
-  const attachmentsToStrip = parsed.attachments.filter((att: any) => {
-    // Keep embedded images (related=true)
-    if (att.related === true) {
-      return false;
+    if (regularAttachments.length > 0) {
+      const attachmentInfo = regularAttachments.map((att: any) =>
+        `${att.filename || 'unnamed'} (${att.mimeType}, ${(att.content?.length || 0).toLocaleString()} bytes)`
+      ).join(', ');
+      console.log(`[EmailAttachmentStripper] Stripping ${regularAttachments.length} attachment(s): ${attachmentInfo}`);
     }
-    // Strip if disposition is "attachment" or "inline"
-    return att.disposition === 'attachment' || att.disposition === 'inline';
-  });
-
-  if (attachmentsToStrip.length === 0) {
-    return fullMessage; // No attachments to strip
   }
 
-  // Log what we're stripping
-  const attachmentInfo = attachmentsToStrip.map((att: any) =>
-    `${att.filename || 'unnamed'} (${att.mimeType}, ${att.disposition || 'no-disposition'}, ${(att.content?.length || 0).toLocaleString()} bytes)`
-  ).join(', ');
+  // Rebuild RFC 5322 message with all headers but without attachment binary data
+  const messageParts: string[] = [];
 
-  console.log(`[EmailAttachmentStripper] Stripping ${attachmentsToStrip.length} attachments: ${attachmentInfo}`);
+  // 1. Add message-level headers (skip MIME body headers that we'll regenerate)
+  const skipHeaders = new Set([
+    'content-type',
+    'content-transfer-encoding',
+    'content-disposition',
+    'content-id',
+    'mime-version'
+  ]);
 
-  // Postal-mime has already parsed and excluded attachment content from text/html
-  // Build clean message from parsed content (postal-mime already excluded attachments)
-  const parts: string[] = [];
-  
-  if (parsed.text) {
-    parts.push(parsed.text);
+  if (parsed.headers && Array.isArray(parsed.headers)) {
+    parsed.headers.forEach((header: any) => {
+      const key = header.key || '';
+      const keyLower = key.toLowerCase();
+
+      // Skip body-related headers - we'll add our own
+      if (!skipHeaders.has(keyLower)) {
+        const value = header.value || '';
+        messageParts.push(`${key}: ${value}`);
+      }
+    });
   }
-  
-  if (parsed.html) {
-    parts.push('\n\n--- HTML Version ---\n' + parsed.html);
+
+  // Add MIME-Version header
+  messageParts.push('MIME-Version: 1.0');
+
+  // 2. Blank line separating headers from body
+  messageParts.push('');
+
+  // 3. Build message body
+  const hasText = parsed.text && parsed.text.trim().length > 0;
+  const hasHtml = parsed.html && parsed.html.trim().length > 0;
+
+  if (hasText && hasHtml) {
+    // Multipart/alternative message
+    const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    messageParts.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    messageParts.push('');
+    messageParts.push(`--${boundary}`);
+    messageParts.push('Content-Type: text/plain; charset="UTF-8"');
+    messageParts.push('');
+    messageParts.push(parsed.text);
+    messageParts.push('');
+    messageParts.push(`--${boundary}`);
+    messageParts.push('Content-Type: text/html; charset="UTF-8"');
+    messageParts.push('');
+
+    // Replace embedded image CIDs with placeholder
+    let cleanHtml = parsed.html;
+    const embeddedImageCids = new Set<string>();
+
+    if (parsed.attachments) {
+      parsed.attachments.forEach((att: any) => {
+        const isImage = att.mimeType?.startsWith('image/');
+        const isEmbedded = att.related === true || att.disposition === 'inline';
+
+        if (isImage && isEmbedded && att.contentId) {
+          const cid = att.contentId.replace(/^<|>$/g, '');
+          embeddedImageCids.add(cid);
+        }
+      });
+
+      embeddedImageCids.forEach((cid) => {
+        const escapedCid = cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cidPattern = new RegExp(`src=["']cid:${escapedCid}["']`, 'gi');
+        cleanHtml = cleanHtml.replace(cidPattern, 'src="[image removed]"');
+      });
+
+      if (embeddedImageCids.size > 0) {
+        console.log(`[EmailAttachmentStripper] Stripped ${embeddedImageCids.size} embedded image(s) from HTML`);
+      }
+    }
+
+    messageParts.push(cleanHtml);
+    messageParts.push('');
+    messageParts.push(`--${boundary}--`);
+  } else if (hasHtml) {
+    // HTML only
+    messageParts.push('Content-Type: text/html; charset="UTF-8"');
+    messageParts.push('');
+
+    let cleanHtml = parsed.html;
+    const embeddedImageCids = new Set<string>();
+
+    if (parsed.attachments) {
+      parsed.attachments.forEach((att: any) => {
+        const isImage = att.mimeType?.startsWith('image/');
+        const isEmbedded = att.related === true || att.disposition === 'inline';
+
+        if (isImage && isEmbedded && att.contentId) {
+          const cid = att.contentId.replace(/^<|>$/g, '');
+          embeddedImageCids.add(cid);
+        }
+      });
+
+      embeddedImageCids.forEach((cid) => {
+        const escapedCid = cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cidPattern = new RegExp(`src=["']cid:${escapedCid}["']`, 'gi');
+        cleanHtml = cleanHtml.replace(cidPattern, 'src="[image removed]"');
+      });
+
+      if (embeddedImageCids.size > 0) {
+        console.log(`[EmailAttachmentStripper] Stripped ${embeddedImageCids.size} embedded image(s) from HTML`);
+      }
+    }
+
+    messageParts.push(cleanHtml);
+  } else if (hasText) {
+    // Text only
+    messageParts.push('Content-Type: text/plain; charset="UTF-8"');
+    messageParts.push('');
+    messageParts.push(parsed.text);
+  } else {
+    // No content
+    messageParts.push('Content-Type: text/plain; charset="UTF-8"');
+    messageParts.push('');
+    messageParts.push('(No content)');
   }
 
-  return parts.length > 0 ? parts.join('') : '(No content)';
+  return messageParts.join('\r\n');
 }

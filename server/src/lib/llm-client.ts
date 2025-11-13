@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { LLMProviderConfig, LLMProviderError, LLMProviderType } from '../types/llm-provider';
+import { LLMProviderConfig, LLMProviderError, LLMProviderType, getModelInfo } from '../types/llm-provider';
 import { RecommendedAction } from './email-actions';
 import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
 
@@ -133,6 +133,9 @@ export class LLMClient {
     const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
     let lastError: any;
 
+    // Truncate prompt if it exceeds model's context window
+    const truncatedPrompt = this.truncatePromptToFit(prompt);
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Create AbortController for this attempt with timeout
       const controller = new AbortController();
@@ -144,7 +147,7 @@ export class LLMClient {
       try {
         const { text } = await generateText({
           model: this.model,
-          prompt,
+          prompt: truncatedPrompt,
           temperature: options?.temperature ?? 0.7,
           abortSignal: controller.signal,
         });
@@ -265,36 +268,35 @@ export class LLMClient {
     }
   }
 
-  /**
-   * Get model information
-   */
-  getModelInfo() {
-    // Model info based on provider and model name
-    const modelInfo: Record<string, { contextWindow: number; maxOutput: number }> = {
-      // OpenAI
-      'gpt-4-turbo-preview': { contextWindow: 128000, maxOutput: 4096 },
-      'gpt-4-turbo': { contextWindow: 128000, maxOutput: 4096 },
-      'gpt-4': { contextWindow: 8192, maxOutput: 4096 },
-      'gpt-3.5-turbo': { contextWindow: 16384, maxOutput: 4096 },
-      // Anthropic
-      'claude-3-opus-20240229': { contextWindow: 200000, maxOutput: 4096 },
-      'claude-3-sonnet-20240229': { contextWindow: 200000, maxOutput: 4096 },
-      'claude-3-haiku-20240307': { contextWindow: 200000, maxOutput: 4096 },
-      'claude-3-5-sonnet-20241022': { contextWindow: 200000, maxOutput: 8192 },
-      // Google
-      'gemini-1.5-pro': { contextWindow: 1048576, maxOutput: 8192 },
-      'gemini-1.5-flash': { contextWindow: 1048576, maxOutput: 8192 },
-      'gemini-pro': { contextWindow: 30720, maxOutput: 2048 },
-      // Default for unknown models
-      'default': { contextWindow: 4096, maxOutput: 2048 }
-    };
 
-    const info = modelInfo[this.modelName] || modelInfo['default'];
-    
-    return {
-      name: this.modelName,
-      ...info
-    };
+  /**
+   * Truncate prompt to fit within model's context window
+   * Uses conservative character-based token estimation (1 token ≈ 2 chars)
+   * This is conservative to handle worst-case tokenization
+   * @private
+   */
+  private truncatePromptToFit(prompt: string): string {
+    const modelInfo = getModelInfo(this.modelName);
+    const maxInputTokens = modelInfo.contextWindow - modelInfo.maxOutput;
+
+    // Conservative estimate: 1 token ≈ 2 characters
+    // This accounts for worst-case tokenization (actual is typically 2-4 chars/token)
+    const estimatedTokens = Math.ceil(prompt.length / 2);
+
+    if (estimatedTokens <= maxInputTokens) {
+      return prompt; // No truncation needed
+    }
+
+    // Calculate how many characters we can keep (use conservative ratio)
+    const maxChars = maxInputTokens * 2;
+    const truncatedPrompt = prompt.substring(0, maxChars);
+
+    console.warn(
+      `[LLMClient] Prompt truncated from ${estimatedTokens.toLocaleString()} to ${maxInputTokens.toLocaleString()} estimated tokens ` +
+      `(${prompt.length.toLocaleString()} → ${truncatedPrompt.length.toLocaleString()} chars) for model ${this.modelName}`
+    );
+
+    return truncatedPrompt;
   }
 
   /**

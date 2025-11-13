@@ -102,10 +102,8 @@ export class EmailProcessingService {
     // Extract email body
     const emailBody = await this.extractEmailBody(parsed);
 
-    // Strip attachments from fullMessage before passing to LLM
-    // This prevents massive DocuSign PDFs, etc from bloating token count
-    const cleanFullMessage = await stripAttachments(fullMessage, parsed);
-
+    // Create ProcessedEmail with ORIGINAL fullMessage (unmodified, with all attachments)
+    // This will be stored in the database and used for draft generation
     const processedEmail: ProcessedEmail = {
       uid: messageId,
       messageId: messageId,
@@ -121,7 +119,7 @@ export class EmailProcessingService {
       htmlContent: parsed.html || null,
       userReply: emailBody,
       respondedTo: '', // Set by reply extractor when content is split into user text vs quoted text
-      fullMessage: cleanFullMessage
+      fullMessage: fullMessage // ORIGINAL - unmodified, includes all attachments
     };
 
     return { parsed, processedEmail, emailBody };
@@ -224,7 +222,12 @@ export class EmailProcessingService {
       // Step 2: Load user context
       const userContext = await this.loadUserContext(userId, emailAccountId);
 
-      // Step 3: Check for spam
+      // Step 3: Create LLM-safe version (strip ALL attachments for LLM processing)
+      // This prevents massive PDFs, images, etc. from bloating token count
+      // Note: parsedData.processedEmail.fullMessage contains ORIGINAL with all attachments
+      const llmSafeMessage = await stripAttachments(fullMessage, parsedData.parsed);
+
+      // Step 4: Check for spam (using stripped version for LLM)
       const spamCheckStartTime = Date.now();
       const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase() || '';
       const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
@@ -232,14 +235,14 @@ export class EmailProcessingService {
       const spamCheckResult = await spamDetector.checkSpam({
         senderEmail,
         replyTo,
-        fullMessage: parsedData.processedEmail.fullMessage, // Use stripped version
+        fullMessage: llmSafeMessage, // Use stripped version for LLM
         subject: parsedData.processedEmail.subject,
         userNames: userContext.userNames,
         userId
       });
       const spamCheckDuration = Date.now() - spamCheckStartTime;
 
-      // Step 4: Generate draft (or create spam draft)
+      // Step 5: Generate draft (or create spam draft)
       const draftStartTime = Date.now();
       let draftDuration = 0;
       let llmCalls = 1; // Spam check is always 1 LLM call
@@ -260,7 +263,16 @@ export class EmailProcessingService {
       }
 
       // Not spam - generate full draft (pass spam check results for transparency)
-      const result = await draftGenerator.generateDraft(userId, providerId, parsedData, userContext, spamCheckResult);
+      // Create a modified parsedData with llmSafeMessage for LLM prompts
+      const llmParsedData = {
+        ...parsedData,
+        processedEmail: {
+          ...parsedData.processedEmail,
+          fullMessage: llmSafeMessage // Use stripped version for LLM prompts
+        }
+      };
+
+      const result = await draftGenerator.generateDraft(userId, providerId, llmParsedData, userContext, spamCheckResult);
       draftDuration = Date.now() - draftStartTime;
 
       // Draft generation includes 2-3 LLM calls (meta-context, action, optional response)
