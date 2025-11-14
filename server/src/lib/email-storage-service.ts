@@ -54,6 +54,7 @@ export interface SaveEmailParams {
       confidence: number;
       detectionMethod: string;
     };
+    spamAnalysis: any;
     generatedContent: string;
   };
 }
@@ -145,31 +146,41 @@ export class EmailStorageService {
         emailAccountId
       });
 
-      // Validate that we have content to store
-      if (!processedContent.userReply || processedContent.userReply.trim() === '') {
-        return {
-          success: true,
-          skipped: true
-        };
+      // Check if we have user content to generate vectors
+      const hasUserContent = processedContent.userReply && processedContent.userReply.trim() !== '';
+
+      let redactedUserReply = '';
+      let features: EmailFeatures | null = null;
+      let semanticVector: number[] = [];
+      let styleVector: number[] = [];
+
+      if (hasUserContent) {
+        // Redact names from user reply
+        const redactionResult = nameRedactor.redactNames(processedContent.userReply);
+        redactedUserReply = redactionResult.text;
+
+        // Extract features from redacted text
+        features = extractEmailFeatures(redactedUserReply, {
+          email: emailData.from || '',
+          name: ''
+        });
+
+        // Generate semantic embedding from redacted user reply
+        const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
+        semanticVector = embeddingResult.vector;
+
+        // Generate style embedding (only for sent emails)
+        styleVector = emailType === 'sent'
+          ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
+          : new Array(768).fill(0);  // Incoming emails don't need style vectors
+      } else {
+        // No user content - use zero vectors but still save the email
+        // This allows viewing emails in history even if they have no extractable content
+        redactedUserReply = parsedEmail.text?.trim() || '';
+        features = null;
+        semanticVector = new Array(384).fill(0);  // Semantic embedding dimension
+        styleVector = new Array(768).fill(0);     // Style embedding dimension
       }
-
-      // Redact names from user reply
-      const redactionResult = nameRedactor.redactNames(processedContent.userReply);
-      const redactedUserReply = redactionResult.text;
-
-      // Extract features from redacted text
-      const features = extractEmailFeatures(redactedUserReply, {
-        email: emailData.from || '',
-        name: ''
-      });
-
-      // Generate semantic embedding from redacted user reply
-      const { vector: semanticVector } = await this.embeddingService.embedText(redactedUserReply);
-
-      // Generate style embedding (only for sent emails)
-      const styleVector: number[] = emailType === 'sent'
-        ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
-        : new Array(768).fill(0);  // Incoming emails don't need style vectors
 
       // Determine recipients/senders based on email type
       let savedCount = 0;
@@ -269,19 +280,21 @@ export class EmailStorageService {
                 userId,
                 emailAccountId,
                 emailData.messageId,
-                params.llmResponse.draftId,
-                params.llmResponse.generatedContent,
+                params.llmResponse.draftId || null,  // Allow null for silent actions
+                params.llmResponse.generatedContent || null,  // Allow null for silent actions
                 params.llmResponse.relationship.type,
                 JSON.stringify({
                   meta: params.llmResponse.meta,
                   providerId: params.llmResponse.providerId,
                   modelName: params.llmResponse.modelName,
-                  relationship: params.llmResponse.relationship
+                  relationship: params.llmResponse.relationship,
+                  spamAnalysis: params.llmResponse.spamAnalysis  // Include spam analysis
                 })
               ]);
             } catch (draftError) {
               // Log but don't fail - draft tracking is supplementary data
               console.error('[EmailStorage] Failed to save draft tracking:', draftError);
+              console.error('[EmailStorage] llmResponse data:', JSON.stringify(params.llmResponse, null, 2));
             }
           }
         }
@@ -313,7 +326,7 @@ export class EmailStorageService {
     emailData: EmailMessageWithRaw;
     parsedEmail: ParsedMail;
     redactedUserReply: string;
-    features: EmailFeatures;
+    features: EmailFeatures | null;
     semanticVector: number[];
     styleVector: number[];
     emailType: 'incoming' | 'sent';
@@ -351,15 +364,21 @@ export class EmailStorageService {
       }
 
       // Detect relationship (fail fast - throws on error)
+      // Use default values if features are not available (emails without user content)
       const relationshipDetection = await this.relationshipDetector.detectRelationship({
         userId,
         recipientEmail: otherPartyEmail,
         subject: parsedEmail.subject,
-        historicalContext: {
+        historicalContext: features ? {
           familiarityLevel: features.relationshipHints.familiarityLevel,
           hasIntimacyMarkers: features.relationshipHints.intimacyMarkers.length > 0,
           hasProfessionalMarkers: features.relationshipHints.professionalMarkers.length > 0,
           formalityScore: features.stats.formalityScore
+        } : {
+          familiarityLevel: 'unknown',
+          hasIntimacyMarkers: false,
+          hasProfessionalMarkers: false,
+          formalityScore: 0.5
         }
       });
 
@@ -374,7 +393,7 @@ export class EmailStorageService {
           subject: parsedEmail.subject!,  // Validated above at line 111
           recipientEmail: otherPartyEmail,
           relationshipType: relationshipDetection.relationship,
-          wordCount: features.stats.wordCount,
+          wordCount: features?.stats.wordCount || 0,
           sentDate: emailData.date!,  // Validated above at line 89
           semanticVector,
           styleVector,
@@ -394,9 +413,10 @@ export class EmailStorageService {
           subject: parsedEmail.subject!,  // Validated above at line 111
           senderEmail: otherPartyEmail,
           senderName: finalSenderName,  // Use email as fallback if name missing
-          wordCount: features.stats.wordCount,
+          wordCount: features?.stats.wordCount || 0,
           receivedDate: emailData.date!,  // Validated above at line 89
           semanticVector,
+          styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
         });
       }

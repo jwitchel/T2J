@@ -41,7 +41,8 @@ async function buildToneProfile(job: Job<BuildToneProfileJobData>) {
             accountId: row.id,
             historyDays: job.data.historyDays || 30
           },
-          JobPriority.HIGH
+          JobPriority.HIGH,
+          { isFanOut: false }  // Child jobs are specific account jobs, not fan-outs
         );
         childJobs.push(childJob.id);
         console.log(`[TrainingWorker] Created child job ${childJob.id} for ${row.email_address}`);
