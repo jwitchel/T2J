@@ -47,8 +47,6 @@ async function initializeSchedulers() {
       'SELECT DISTINCT user_id FROM email_accounts'
     );
 
-    console.log(`🔄 Initializing schedulers for ${result.rows.length} users...`);
-
     for (const row of result.rows) {
       try {
         await jobSchedulerManager.initializeUserSchedulers(row.user_id);
@@ -56,8 +54,6 @@ async function initializeSchedulers() {
         console.error(`Failed to initialize schedulers for user ${row.user_id}:`, error);
       }
     }
-
-    console.log('✅ Schedulers initialized');
   } catch (error) {
     console.error('❌ Scheduler initialization error:', error);
   }

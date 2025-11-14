@@ -110,7 +110,11 @@ export class InboxProcessor {
       );
 
       if (alreadyProcessed) {
-        console.log(`[InboxProcessor] Email ${message.messageId} already processed - skipping`);
+        // Shorten message ID for cleaner logs: first 8 chars + "..." + last 22 chars
+        const shortId = message.messageId.length > 30
+          ? `${message.messageId.substring(0, 8)}...${message.messageId.substring(message.messageId.length - 22)}`
+          : message.messageId;
+        console.log(`[InboxProcessor] Email ${shortId} already processed - skipping`);
         return this._createSkippedResult(message, 'already_processed_in_database');
       }
     }
