@@ -16,7 +16,7 @@ const router = express.Router();
 router.post('/queue', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    const { type, data, priority = 'normal' } = req.body;
+    const { type, data, priority = 'normal', force = false } = req.body;
 
     if (!type || !data) {
       res.status(400).json({ error: 'Type and data are required' });
@@ -40,7 +40,8 @@ router.post('/queue', requireAuth, async (req, res): Promise<void> => {
       case JobType.PROCESS_INBOX:
         job = await addInboxJob(
           { ...data, userId },
-          jobPriority
+          jobPriority,
+          { force }
         );
         break;
 
@@ -49,10 +50,11 @@ router.post('/queue', requireAuth, async (req, res): Promise<void> => {
         job = await addTrainingJob(
           type as JobType.BUILD_TONE_PROFILE | JobType.LEARN_FROM_EDIT,
           { ...data, userId },
-          jobPriority
+          jobPriority,
+          { force }
         );
         break;
-        
+
       default:
         res.status(400).json({ error: 'Invalid job type' });
         return;
@@ -60,13 +62,14 @@ router.post('/queue', requireAuth, async (req, res): Promise<void> => {
 
     // Determine which queue the job was added to
     const queueName = type === JobType.BUILD_TONE_PROFILE ? 'tone-profile' : 'email-processing';
-    
+
     res.json({
       jobId: job.id,
       queueName,
       type,
       status: await job.getState(),
       priority,
+      forced: force,
       createdAt: new Date(job.timestamp).toISOString()
     });
   } catch (error) {
@@ -270,19 +273,22 @@ router.post('/:queueName/:jobId/retry', requireAuth, async (req, res): Promise<v
     }
 
     // Create a new job with the same data and type
+    // Use force: true to ensure old failed job is removed and new one created
     let newJob;
     // Check if it's an inbox job (PROCESS_INBOX)
     if (job.name === JobType.PROCESS_INBOX) {
       newJob = await addInboxJob(
         job.data,
-        JobPriority.NORMAL
+        JobPriority.NORMAL,
+        { force: true }
       );
     } else {
       // It's a training job (BUILD_TONE_PROFILE or LEARN_FROM_EDIT)
       newJob = await addTrainingJob(
         job.name as JobType.BUILD_TONE_PROFILE | JobType.LEARN_FROM_EDIT,
         job.data,
-        JobPriority.NORMAL
+        JobPriority.NORMAL,
+        { force: true }
       );
     }
 

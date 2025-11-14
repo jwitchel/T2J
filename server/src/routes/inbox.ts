@@ -275,7 +275,7 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
         dt.generated_content as "draftBody"
       FROM email_received er
       LEFT JOIN email_action_tracking eat
-        ON eat.message_id = er.email_id
+        ON eat.message_id = TRIM(BOTH '<>' FROM er.email_id)
         AND eat.email_account_id = er.email_account_id
       LEFT JOIN draft_tracking dt
         ON dt.original_message_id = er.email_id
@@ -288,10 +288,16 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
 
     // Validate that actionTaken exists (must exist if email was processed)
     if (email && !email.actionTaken) {
-      console.error('[inbox-get-email] Email exists but actionTaken is missing:', { emailId: email.emailId });
+      console.error('[inbox-get-email] Email exists but actionTaken is missing:', {
+        emailId: email.emailId,
+        accountId,
+        userId,
+        draftId: email.draftId,
+        hasContextData: !!email.contextData
+      });
       res.status(500).json({
-        error: 'Data integrity error - email exists without action tracking',
-        message: 'This email was processed but action tracking is missing. Please contact support.'
+        error: 'Data integrity error',
+        message: `Email exists but action tracking is missing. Email ID: ${email.emailId.substring(0, 20)}...`
       });
       return;
     }
@@ -300,23 +306,54 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
     if (!email) {
       // Check if this email exists in the action tracking table with a UID
       const actionRecord = await pool.query(
-        `SELECT eat.message_id, eat.uid, eat.subject, eat.created_at
+        `SELECT eat.message_id, eat.uid, eat.subject, eat.created_at, eat.action_taken, eat.destination_folder
          FROM email_action_tracking eat
-         WHERE eat.email_account_id = $1 AND eat.message_id = $2
+         WHERE eat.email_account_id = $1 AND eat.message_id = TRIM(BOTH '<>' FROM $2)
          LIMIT 1`,
         [accountId, messageId]
       );
 
       if (actionRecord.rows.length > 0 && actionRecord.rows[0].uid) {
         const uid = actionRecord.rows[0].uid;
+        const folder = actionRecord.rows[0].destination_folder || 'INBOX';
 
-        // Fetch from IMAP using the UID
+        // Fetch from IMAP using the UID (check destination folder first, fallback to INBOX)
         try {
           const imapOps = await ImapOperations.fromAccountId(accountId, userId);
-          const messages = await imapOps.getMessagesRaw('INBOX', [uid]);
+          let messages = await imapOps.getMessagesRaw(folder, [uid]);
+
+          // If not found in destination folder, try INBOX as fallback
+          if (messages.length === 0 && folder !== 'INBOX') {
+            messages = await imapOps.getMessagesRaw('INBOX', [uid]);
+          }
 
           if (messages.length > 0) {
             const msg = messages[0];
+
+            // Try to fetch LLM response from draft_tracking
+            let llmResponse = undefined;
+            const draftResult = await pool.query(
+              `SELECT id, context_data, created_at, generated_content
+               FROM draft_tracking
+               WHERE user_id = $1 AND original_message_id = $2
+               LIMIT 1`,
+              [userId, messageId]
+            );
+
+            if (draftResult.rows.length > 0) {
+              const draft = draftResult.rows[0];
+              const contextData = draft.context_data;
+              llmResponse = {
+                meta: contextData.meta || {},
+                generatedAt: draft.created_at?.toISOString() || new Date().toISOString(),
+                providerId: contextData.providerId || 'unknown',
+                modelName: contextData.modelName || 'unknown',
+                draftId: draft.id || '',
+                relationship: contextData.relationship || { type: 'unknown', confidence: 0, detectionMethod: 'none' },
+                spamAnalysis: contextData.spamAnalysis || { isSpam: false, indicators: [], senderResponseCount: 0 },
+                body: draft.generated_content || ''  // Can be null for silent actions
+              };
+            }
 
             // Return the email in the same format as PostgreSQL would
             res.json({
@@ -329,13 +366,13 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
                 to: msg.to || [],
                 cc: [], // CC not available from IMAP basic fetch
                 date: msg.date?.toISOString() || actionRecord.rows[0].created_at,
-                fullMessage: msg.fullMessage || '',
+                rawMessage: msg.fullMessage || '',
                 uid: msg.uid,
                 flags: msg.flags || [],
                 size: msg.size || 0,
-                // No LLM response available when fetching from IMAP directly
-                llmResponse: undefined,
-                relationship: undefined
+                actionTaken: actionRecord.rows[0].action_taken,
+                llmResponse,
+                relationship: llmResponse?.relationship
               }
             });
             return;
@@ -352,19 +389,19 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
       return;
     }
 
-    // Build llmResponse if draft context exists
+    // Build llmResponse if draft context exists (draftId can be null for silent actions)
     let llmResponse = undefined;
-    if (email.contextData && email.draftId) {
+    if (email.contextData) {
       const contextData = email.contextData;
       llmResponse = {
         meta: contextData.meta || {},
         generatedAt: email.draftCreatedAt?.toISOString() || new Date().toISOString(),
         providerId: contextData.providerId || 'unknown',
         modelName: contextData.modelName || 'unknown',
-        draftId: email.draftId,
+        draftId: email.draftId || '',  // Can be empty for silent actions
         relationship: contextData.relationship || { type: 'unknown', confidence: 0, detectionMethod: 'none' },
         spamAnalysis: contextData.spamAnalysis || { isSpam: false, indicators: [], senderResponseCount: 0 },
-        body: email.draftBody
+        body: email.draftBody || ''  // Can be empty for silent actions
       };
     }
 

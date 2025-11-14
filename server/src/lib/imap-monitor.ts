@@ -307,6 +307,8 @@ class MonitorInstance {
       );
 
       // Queue each message for processing
+      // Note: Job ID deduplication means if scheduler already queued this account,
+      // we'll get the existing job back instead of creating a duplicate
       for (const message of messages) {
         const job = await addInboxJob(
           {
@@ -314,11 +316,17 @@ class MonitorInstance {
             accountId: this.accountId,
             folderName: 'INBOX'
           },
-          JobPriority.HIGH
+          JobPriority.HIGH,
+          { force: false }  // Don't override existing jobs
         );
 
-        console.log(`Queued email UID ${message.uid} for processing (job ${job.id})`);
-        
+        const jobState = await job.getState();
+        if (jobState === 'waiting' || jobState === 'active') {
+          console.log(`[IMAP] Email UID ${message.uid} - job ${job.id} already ${jobState}`);
+        } else {
+          console.log(`[IMAP] Queued email UID ${message.uid} for processing (job ${job.id})`);
+        }
+
         // Emit queued event
         this.parent.emit('email:queued', this.accountId, job.id!);
       }

@@ -19,7 +19,6 @@ export class WorkerManager {
   private queues: Map<string, any> = new Map();
   private redis = sharedConnection;
   private isPaused: boolean = false;
-  private cleanupInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
 
@@ -71,8 +70,7 @@ export class WorkerManager {
         await this.resumeAllWorkers();
       }
 
-      // Start periodic cleanup to handle runtime stalls (OS sleep/wake scenarios)
-      this.startPeriodicCleanup();
+      // No periodic cleanup - BullMQ's stalledInterval handles runtime stalls automatically
     } catch (error: unknown) {
       console.error('[WorkerManager] Error during initialization:', error);
       // Default to paused state on error for safety
@@ -82,8 +80,9 @@ export class WorkerManager {
   }
 
   /**
-   * Clean up stale jobs and locks from previous worker crashes
-   * This prevents "could not renew lock" errors on startup
+   * Clean up stale jobs ONLY from previous crashes/kills
+   * This runs ONCE at startup, not periodically
+   * Grace periods are longer than lock durations to only catch truly abandoned jobs
    */
   private async cleanupStaleJobs(): Promise<void> {
     console.log('[WorkerManager] Cleaning up stale jobs from previous runs...');
@@ -91,18 +90,20 @@ export class WorkerManager {
     try {
       let totalCleaned = 0;
 
-      // Clean up stale jobs in each queue
+      // Clean up stale jobs in each queue with queue-specific thresholds
       for (const [name, queue] of this.queues.entries()) {
-        // Clean up jobs with stale locks (active jobs that haven't been touched in 30 seconds)
-        // This is the key fix for "could not renew lock" errors
+        // Grace period significantly longer than lock duration
+        // Only catches jobs abandoned by crashes, not jobs actively processing
+        const gracePeriod = name === 'inbox' ? 300000 : 900000; // 5min inbox, 15min training
+
         try {
-          const staleLocks = await queue.clean(30000, 1000, 'active');
+          const staleLocks = await queue.clean(gracePeriod, 1000, 'active');
           if (staleLocks && staleLocks.length > 0) {
-            console.log(`[WorkerManager] Cleaned ${staleLocks.length} jobs with stale locks from ${name} queue`);
+            console.log(`[WorkerManager] Cleaned ${staleLocks.length} abandoned jobs from ${name} queue`);
             totalCleaned += staleLocks.length;
           }
         } catch (err) {
-          console.warn(`[WorkerManager] Could not clean stale active jobs in ${name}:`, err);
+          console.warn(`[WorkerManager] Could not clean abandoned jobs in ${name}:`, err);
         }
 
         // ALSO clean delayed jobs that are stale (repeatable job scheduling artifacts)
@@ -141,43 +142,6 @@ export class WorkerManager {
     }
   }
 
-  /**
-   * CRITICAL: Periodic cleanup to handle jobs that stall during runtime
-   * This catches the OS sleep scenario where jobs get stuck with expired locks
-   * Uses queue-specific thresholds to account for different lock durations
-   */
-  private startPeriodicCleanup(): void {
-    const cleanupInterval = parseInt(process.env.BULLMQ_CLEANUP_INTERVAL!);
-    const inboxStaleAge = parseInt(process.env.BULLMQ_INBOX_CLEANUP_STALE_AGE!);
-    const trainingStaleAge = parseInt(process.env.BULLMQ_TRAINING_CLEANUP_STALE_AGE!);
-
-    console.log(`[WorkerManager] Starting periodic cleanup (interval: ${cleanupInterval}ms)`);
-    console.log(`[WorkerManager] Inbox cleanup threshold: ${inboxStaleAge}ms, Training cleanup threshold: ${trainingStaleAge}ms`);
-
-    this.cleanupInterval = setInterval(async () => {
-      try {
-        // Clean inbox queue with shorter threshold (2 min lock + 1 min buffer = 3 min)
-        const inboxQueue = this.queues.get('inbox');
-        if (inboxQueue) {
-          const inboxCleaned = await inboxQueue.clean(inboxStaleAge, 100, 'active');
-          if (inboxCleaned && inboxCleaned.length > 0) {
-            console.log(`[WorkerManager] Runtime cleanup: Removed ${inboxCleaned.length} stale active jobs from inbox queue`);
-          }
-        }
-
-        // Clean training queue with longer threshold (10 min lock + 1 min buffer = 11 min)
-        const trainingQueue = this.queues.get('training');
-        if (trainingQueue) {
-          const trainingCleaned = await trainingQueue.clean(trainingStaleAge, 100, 'active');
-          if (trainingCleaned && trainingCleaned.length > 0) {
-            console.log(`[WorkerManager] Runtime cleanup: Removed ${trainingCleaned.length} stale active jobs from training queue`);
-          }
-        }
-      } catch (error: unknown) {
-        console.error('[WorkerManager] Error in periodic cleanup:', error);
-      }
-    }, cleanupInterval);
-  }
 
   /**
    * Pause all workers
@@ -333,13 +297,6 @@ export class WorkerManager {
    */
   async shutdown(): Promise<void> {
     console.log('[WorkerManager] Shutting down...');
-
-    // Stop periodic cleanup
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      console.log('[WorkerManager] Stopped periodic cleanup');
-    }
 
     // Pause all workers first
     await this.pauseAllWorkers(false);

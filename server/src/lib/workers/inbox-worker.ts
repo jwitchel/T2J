@@ -39,7 +39,8 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
             folderName: folderName || 'INBOX',
             since: since ? new Date(since) : undefined  // Convert ISO string to Date
           },
-          JobPriority.HIGH
+          JobPriority.HIGH,
+          { isFanOut: false }  // Child jobs are specific account jobs, not fan-outs
         );
         childJobs.push(childJob.id);
         console.log(`[InboxWorker] Created child job ${childJob.id} for ${row.email_address}`);

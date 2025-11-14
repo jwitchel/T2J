@@ -10,7 +10,6 @@ import { emailProcessingService } from './email-processing-service';
 import { emailMover } from './email-mover';
 import { withImapContext } from '../imap-context';
 import { emailStorageService } from '../email-storage-service';
-import { emailLockManager } from '../email-lock-manager';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../db';
 import { ActionHelpers } from '../email-actions';
@@ -96,26 +95,32 @@ export interface BatchProcessResult {
 
 export class InboxProcessor {
   /**
-   * Process a single email with distributed lock protection
-   * Prevents duplicate drafts when same email is processed concurrently
+   * Process a single email
+   * Uses action tracking for deduplication after BullMQ's job ID deduplication
    */
   async processEmail(params: ProcessEmailParams): Promise<ProcessEmailResult> {
-    const { message, accountId } = params;
-    const emailId = message.messageId || `${message.uid}@${accountId}`;
+    const { message, accountId, userId } = params;
 
-    // Acquire distributed lock - prevents concurrent processing of same email
-    const lockResult = await emailLockManager.processWithLock(
-      emailId,
-      accountId,
-      (signal) => this._executeProcessing(params, signal)
-    );
+    // Check action tracking - second layer of defense after job deduplication
+    if (message.messageId) {
+      const alreadyProcessed = await EmailActionTracker.hasEmailBeenProcessed(
+        userId,
+        accountId,
+        message.messageId
+      );
 
-    // Lock already held by another process - skip to avoid duplicate
-    if (!lockResult.acquired) {
-      return this._createSkippedResult(message, lockResult.reason);
+      if (alreadyProcessed) {
+        // Shorten message ID for cleaner logs: first 8 chars + "..." + last 22 chars
+        const shortId = message.messageId.length > 30
+          ? `${message.messageId.substring(0, 8)}...${message.messageId.substring(message.messageId.length - 22)}`
+          : message.messageId;
+        console.log(`[InboxProcessor] Email ${shortId} already processed - skipping`);
+        return this._createSkippedResult(message, 'already_processed_in_database');
+      }
     }
 
-    return lockResult.result!;
+    // Process email directly - no locking needed (BullMQ handles job-level deduplication)
+    return this._executeProcessing(params);
   }
 
   /**
@@ -186,15 +191,6 @@ export class InboxProcessor {
     };
   }
 
-  /**
-   * Check if lock has expired
-   * @private
-   */
-  private _checkLockExpired(signal: AbortSignal, stage: string): void {
-    if (signal.aborted) {
-      throw new Error(`Lock expired during ${stage} - aborting to prevent duplicate`);
-    }
-  }
 
   /**
    * Perform IMAP operation (move or upload draft)
@@ -416,12 +412,11 @@ export class InboxProcessor {
   }
 
   /**
-   * Execute email processing with lock held
+   * Execute email processing (called after deduplication checks)
    * @private
    */
   private async _executeProcessing(
-    params: ProcessEmailParams,
-    signal: AbortSignal
+    params: ProcessEmailParams
   ): Promise<ProcessEmailResult> {
     // 1. INITIALIZE CONTEXT (fetch account email for logging)
     const context = await this._buildContext(params);
@@ -440,14 +435,8 @@ export class InboxProcessor {
       const draft = draftResult.draft!;
       const isSpam = ActionHelpers.isSpamAction(draft.meta.recommendedAction);
 
-      // 3. CHECK LOCK AFTER DRAFT GENERATION
-      this._checkLockExpired(signal, 'draft generation');
-
-      // 4. RECORD INITIAL ACTION TRACKING (optimistic locking)
+      // 3. RECORD INITIAL ACTION TRACKING
       await this._recordInitialTracking(context, draft);
-
-      // 5. CHECK LOCK BEFORE IMAP OPERATIONS
-      this._checkLockExpired(signal, 'IMAP operations');
 
       // 6. PERFORM IMAP OPERATIONS (move or upload) - throws on failure
       let imapResult: ImapOperationResult;

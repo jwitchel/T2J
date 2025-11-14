@@ -351,7 +351,18 @@ export class ImapOperations {
           const lookbackMinutes = parseInt(process.env.NEXT_PUBLIC_LOOK_BACK_DEFAULT_MINUTES || '15', 10);
           const since = new Date(Date.now() - lookbackMinutes * 60 * 1000);
           uids = await conn.search([['SINCE', since]]);
-          console.log(`[ImapOperations] First run with ${lookbackMinutes}min lookback returned ${uids.length} UIDs`);
+
+          // Only log if we found new emails
+          if (uids.length > 0) {
+            console.log(`[ImapOperations] First run with ${lookbackMinutes}min lookback returned ${uids.length} UIDs from ${this.account.email}`);
+          } else {
+            // No emails in lookback period - get highest UID to mark first run complete
+            const allUids = await conn.search([['ALL']]);
+            if (allUids.length > 0) {
+              const highestUid = Math.max(...allUids);
+              await this.updateLastProcessedUid(folderName, highestUid);
+            }
+          }
         } else {
           // Use UID range - server-side filtering!
           uids = await conn.search([['UID', `${lastUid + 1}:*`]]);
