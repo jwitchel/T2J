@@ -16,7 +16,7 @@
 - `npm run dev:all`: Frontend + server + workers (kills ports 3001/3002)
 - `npm run build` / `npm run server:build`: Build frontend/backend
 - `npm test`: All tests. `test:unit` (no services), `test:integration` (services)
-- Docker services: `docker:up|down|reset|logs` or per service `postgres:*`, `redis:*`, `qdrant:*`, `mail:*`
+- Docker services: `docker:up|down|reset|logs` or per service `postgres:*`, `redis:*`, `mail:*`
 - Data setup: `db:migrate`, `seed`
 
 Example: initialize stack for local dev
@@ -36,7 +36,7 @@ npm run dev:all
 ## Testing Guidelines
 - Framework: Jest (`jest.config.unit.js`, `jest.config.integration.js`)
 - Naming: unit → `*.unit.test.ts`; integration → `*.integration.test.ts`
-- Coverage: keep meaningful assertions; prefer unit tests for logic, integration for DB/Redis/Qdrant/mail flows
+- Coverage: keep meaningful assertions; prefer unit tests for logic, integration for DB/Redis/mail flows
 - Run: `npm run test:unit` locally; for integration tests start services first: `npm run docker:up && npm run test:integration`
 
 ## Commit & Pull Request Guidelines
@@ -45,7 +45,7 @@ npm run dev:all
 
 ## Security & Configuration Tips
 - Env files: `.env` (backend) and `.env.local` (frontend); use `.env.example` as reference; never commit secrets
-- Local ports: web 3001, API 3002, Postgres 5434, Redis 6380, Qdrant 6333/6334
+- Local ports: web 3001, API 3002, Postgres 5434, Redis 6380
 - Resets: `npm run docker:reset` to wipe services and reseed for a clean slate
 
 ## Agent-Specific Instructions (.claude)
@@ -65,4 +65,4 @@ npm run dev:all
 ## Related Docs & Tools
 - Training UI: `http://localhost:3001/tone` (click Training tab for training panel + live logs)
 - WebSocket logs: `ws://localhost:3002/ws/imap-logs`
-- Deep dives: `server/src/lib/imap/README.md`, `server/src/websocket/README.md`, `server/src/websocket/INTEGRATION.md`, `server/src/lib/pipeline/README.md`, `server/src/lib/pipeline/TONE_LEARNING_E2E.md`, `server/src/lib/vector/README.md`, `server/src/scripts/README.md`, `docs/roundcube-setup.md`
+- Deep dives: `server/src/lib/imap/README.md`, `server/src/websocket/README.md`, `server/src/websocket/INTEGRATION.md`, `server/src/lib/pipeline/README.md`, `server/src/lib/pipeline/TONE_LEARNING_E2E.md`, `server/src/lib/vector/README.md`, `server/src/scripts/README.md`

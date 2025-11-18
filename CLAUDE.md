@@ -3,7 +3,7 @@
 ## Project Overview
 This is an AI Email Assistant application that generates email reply drafts matching the user's personal writing tone. The project is managed through GitHub Issues and Projects.
 
-## Current Project State (End of Sprint 1)
+## Current Project State
 
 ### ✅ What's Working
 - **Authentication System**: Full auth flow with better-auth
@@ -51,11 +51,8 @@ gh issue list --repo jwitchel/test-repo --limit 100
 # View specific issue details
 gh issue view ISSUE_NUMBER --repo jwitchel/test-repo
 
-# Search for specific tasks
-gh issue list --repo jwitchel/test-repo --search "Sprint 1"
-
 # List all issues with specific label
-gh issue list --repo jwitchel/test-repo --label "Sprint 3"
+gh issue list --repo jwitchel/test-repo --label "bug"
 
 # Export issues to JSON
 gh issue list --repo jwitchel/test-repo --json number,title,body,labels --limit 100 > issues.json
@@ -91,18 +88,6 @@ gh project item-edit --owner jwitchel --id ITEM_ID --field-id STATUS_FIELD_ID --
 gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 ```
 
-## Project Structure
-
-### Sprints and Milestones
-The project is organized into 7 sprints indicated by the first number in the Task name (e.g. 1.3 is Sprint 1 Task 3).  Issue # is not an indicator of what sprint it's in:
-- **Sprint 1**: Foundation Setup ✅ COMPLETED
-- **Sprint 2**: Email Integration
-- **Sprint 3**: Tone Analysis Engine
-- **Sprint 4**: Draft Generation 
-- **Sprint 5**: Testing & Error Handling
-- **Sprint 6**: Polish & Optimization 
-- **Sprint 7**: Production Readiness
-
 ## Important Configuration Notes
 - **Docker Ports** (non-standard to avoid conflicts):
   - PostgreSQL: 5434 (instead of 5432)
@@ -122,12 +107,13 @@ The project is organized into 7 sprints indicated by the first number in the Tas
 ## Key Architecture Decisions
 
 ### Technology Stack
-- **Frontend**: Next.js with shadcn/ui components
-- **Backend**: Express.js API with better-auth
-- **WebSocket**: Real-time updates
-- **Database**: PostgreSQL (Docker)
-- **Queue**: BullMQ with Redis (Docker)
-- **Email**: IMAP integration with node-imap (Docker)
+- **Frontend**: Next.js (port 3001) with shadcn/ui
+- **Backend**: Express (port 3002) with better-auth
+- **Database**: PostgreSQL (port 5434) - includes vector columns
+- **Cache/Queue**: Redis (port 6380) - sessions + BullMQ
+- **Vector Search**: Vectra in-memory
+- **LLM**: Multi-provider via Vercel AI SDK (OpenAI, Anthropic, Google, Ollama)
+- **Email**: IMAP with connection pooling, OAuth support, 60s polling
 
 ### Development Setup
 - Docker runs PostgreSQL, Redis, and the test mail server (node-imap) only
@@ -136,27 +122,403 @@ The project is organized into 7 sprints indicated by the first number in the Tas
 - Frontend and backend communicate via CORS-enabled API
 
 ### Important Architecture Notes
-1. **Authentication**: 
-   - All auth handled by Express API using better-auth
-   - Uses scrypt password hashing (from @noble/hashes)
-   - Session table requires: id, userId, expiresAt, token, createdAt, updatedAt, ipAddress, userAgent
-   - httpOnly cookies for security (no JWT)
-2. **Database**: 
-   - PostgreSQL with better-auth tables (user, account, session)
-   - Account table stores hashed passwords
-   - User table stores profile information
-3. **API Communication**:
-   - Frontend uses better-auth client library
-   - Automatic cookie handling for sessions
-   - CORS configured for localhost:3001 ↔ localhost:3002
-4. **Real-time Logging**: WebSocket connections for debugging IMAP, parsing, tone analysis
-5. **Relationship System**: Category-based (not individual-based) with user-defined mappings
-6. **UI Components**: Always use shadcn/ui for consistency
-7. **IMAP Implementation**: 
-   - Production-ready IMAP client with connection pooling
-   - Real-time operation logging via WebSocket
-   - Support for all major email providers
-   - Comprehensive error handling and retry logic
+1. **Authentication**: better-auth with scrypt password hashing, httpOnly cookies, OAuth support
+2. **Database**: PostgreSQL stores all data including dual vectors (semantic 384d + style 768d)
+3. **Email Processing**: BullMQ job IDs + database action tracking prevent duplicates (no external locking)
+4. **Vector Storage**: PostgreSQL + Vectra in-memory search (no external vector database)
+5. **LLM Integration**: Multi-provider with timeout protection (40s default) and retry logic (3 attempts)
+6. **Background Jobs**: Worker pause/resume, deterministic job IDs, stalled job cleanup
+7. **IMAP Monitoring**: Polling-based (60s interval) for reliability across providers
+
+## Development Best Practices
+
+### Fail-Fast Patterns
+
+**Trust your callers. Type your parameters. Let runtime errors throw naturally.**
+
+**Principles:**
+- **Assume good parameters** - The caller passed you valid data
+- **Use strong typing** - Avoid `any`, use explicit types to catch errors at compile time
+- **No defensive validation** - Don't check if a month is between 1-12 if the type is already `number`
+- **No try/catch for logic** - Only catch when you can actually handle the error (e.g., network retry)
+- **Let hard errors throw** - If something truly unexpected happens, let the runtime throw the error
+
+**Pattern to follow:**
+```typescript
+// ✅ Good - trust typed parameters
+private _isFebruary(month: number): boolean {
+  return month === 2;
+}
+
+// ❌ Bad - defensive validation of typed parameters
+private _isFebruary(month: number): boolean {
+  if (month < 1 || month > 12) {
+    throw new Error('Invalid month');
+  }
+  return month === 2;
+}
+
+// ✅ Good - let errors throw naturally
+async function saveToDatabase(email: Email): Promise<void> {
+  await pool.query('INSERT INTO emails VALUES ($1, $2)', [email.id, email.subject]);
+  // If query fails, let it throw - caller should handle database errors
+}
+
+// ❌ Bad - unnecessary error wrapping
+async function saveToDatabase(email: Email): Promise<void> {
+  try {
+    await pool.query('INSERT INTO emails VALUES ($1, $2)', [email.id, email.subject]);
+  } catch (error) {
+    throw new Error(`Failed to save email: ${error.message}`);
+    // Why? The original error was fine. Just let it throw.
+  }
+}
+
+// ✅ Good - typed result object for expected outcomes
+export interface SaveEmailResult {
+  success: boolean;
+  skipped: boolean;
+  saved?: number;
+  error?: string;
+}
+
+async function processEmail(email: Email): Promise<SaveEmailResult> {
+  // Check for expected conditions (not validation errors)
+  if (!email.text && !email.html) {
+    return { success: false, skipped: true, error: 'No content' };
+  }
+
+  // Trust the data is good, let unexpected errors throw
+  const saved = await saveToDatabase(email);
+  return { success: true, skipped: false, saved };
+}
+```
+
+**When to use try/catch:**
+- Network operations with retry logic
+- External API calls where you can fallback to another provider
+- Resource cleanup (finally blocks)
+- API entry points where an end-user could force inject malicious or bad inputs 
+
+**When NOT to use try/catch:**
+- Parameter validation (use types instead)
+- Expected logic paths (use result objects instead)
+- "Just in case" error wrapping (let it throw)
+
+### DRY Principles - CRITICAL
+
+**🚨 BEFORE WRITING NEW CODE: SEARCH THE CODEBASE FIRST 🚨**
+
+This is the most important rule: **The codebase likely already has a solution to your problem.**
+
+**Required workflow:**
+1. **Search first**: Use Grep/Glob to find existing implementations
+2. **Reuse existing code**: Favor using existing functions/services over writing new ones
+3. **Extend existing types**: Modify existing interfaces rather than creating new ones
+4. **Follow established patterns**: Match the style and approach of similar features
+
+**How to search effectively:**
+
+```bash
+# Looking to send email? Search first:
+grep -r "sendEmail\|send.*mail" server/src/lib/
+
+# Need to fetch from database? Search first:
+grep -r "pool.query\|SELECT.*FROM" server/src/
+
+# Need LLM integration? Search first:
+grep -r "generateText\|llm.*generate" server/src/
+
+# Need vector search? Search first:
+grep -r "vectorSearch\|similarity" server/src/lib/vector/
+```
+
+**Examples of existing solutions:**
+
+```typescript
+// ✅ Good - use existing LLMClient
+import { LLMClient } from '@/lib/llm-client';
+const client = new LLMClient(providerId, model);
+const result = await client.generateText(prompt);
+
+// ❌ Bad - reimplementing LLM calls
+import { generateText } from 'ai';
+const result = await generateText({ model, prompt }); // Missing timeout, retry, provider abstraction
+
+// ✅ Good - use existing EmailStorageService
+import { emailStorageService } from '@/lib/email-storage-service';
+await emailStorageService.saveEmail(email);
+
+// ❌ Bad - direct database calls
+await pool.query('INSERT INTO email_sent...'); // Missing validation, vectors, deduplication
+
+// ✅ Good - use existing SpamDetector
+import { getSpamDetector } from '@/lib/spam-detector';
+const detector = await getSpamDetector(providerId);
+const result = await detector.isSpam(email);
+
+// ❌ Bad - reimplementing spam detection
+const hasReplied = await checkReplies(email.from);
+if (!hasReplied) { /* duplicate logic */ }
+```
+
+**Services that already exist (USE THESE):**
+- **EmailStorageService** - Save emails with vectors and validation
+- **LLMClient** - All LLM calls (timeout, retry, multi-provider)
+- **SpamDetector** - Spam detection with auto-whitelist
+- **DraftGenerator** - Draft generation with tone learning
+- **EmailMover** - IMAP operations (upload drafts, move emails)
+- **VectorSearchService** - Dual vector search with filtering
+- **RelationshipDetector** - Detect email relationship types
+- **EmailActionTracker** - Track email processing actions
+
+**Anti-patterns to avoid:**
+- ❌ Copying code from one service to another (extract shared logic instead)
+- ❌ Creating similar functions with different names (consolidate under one name)
+- ❌ Reimplementing database queries (use repository pattern)
+- ❌ Writing custom LLM calls (use LLMClient)
+- ❌ Duplicating validation logic (create shared validators)
+
+### Private Methods
+
+Use private methods to hide implementation details and expose clean public APIs.
+
+**When to use private methods:**
+- Internal helper functions not meant for external use
+- Step-by-step breakdown of complex public methods
+- Functions that depend on internal state
+- Implementation details that might change
+
+**Pattern:**
+
+```typescript
+export class EmailProcessor {
+  // Public API - clean interface
+  public async processEmail(email: Email): Promise<ProcessingResult> {
+    const validated = this._validateEmail(email);
+    if (!validated.success) return validated;
+
+    const parsed = await this._parseContent(email);
+    const enhanced = await this._enhanceMetadata(parsed);
+
+    return this._finalizeProcessing(enhanced);
+  }
+
+  // Private helpers - implementation details
+  private _validateEmail(email: Email): ValidationResult {
+    // Validation logic
+  }
+
+  private async _parseContent(email: Email): Promise<ParsedEmail> {
+    // Parsing logic
+  }
+
+  private async _enhanceMetadata(parsed: ParsedEmail): Promise<EnhancedEmail> {
+    // Enhancement logic
+  }
+
+  private _finalizeProcessing(enhanced: EnhancedEmail): ProcessingResult {
+    // Finalization logic
+  }
+}
+```
+
+**Benefits:**
+- Public methods show what the class does (contract)
+- Private methods show how it does it (implementation)
+- Easy to refactor private methods without breaking users
+- Clear separation between API and internals
+
+**Naming convention:**
+- Prefix private methods with `_` (e.g., `_parseContent`)
+- Use descriptive names that explain the internal step
+- Keep private methods focused on single responsibility
+
+### Well-Defined Types
+
+**CRITICAL: Strongly typed code. No `any`. Use compiler hints. Trust your types.**
+
+**Core Principles:**
+1. **Never use `any`** - Use proper types or `unknown` if truly dynamic
+2. **Use non-null assertions when you know the value exists** - `email!.subject!` not defensive checks
+3. **Trust your types** - If the type says it's there, it's there
+4. **Reuse existing types** - The codebase has comprehensive type definitions
+5. **Extend existing types** - Modify existing interfaces rather than creating new ones
+6. **Never use anonymous objects** - Always define interfaces for return values and parameters
+7. **Use explicit return types** - Document what functions return
+
+**Type assertions and compiler hints:**
+
+```typescript
+// ✅ Good - use non-null assertion when you know it exists
+function processEmail(email: Email): void {
+  const subject = email!.subject!;  // Email always has subject
+  const sender = email!.from!;      // Email always has sender
+  console.log(`Processing: ${subject} from ${sender}`);
+}
+
+// ❌ Bad - defensive checks when type already guarantees it
+function processEmail(email: Email): void {
+  if (!email || !email.subject || !email.from) {
+    return;  // Why? Type says Email has these fields
+  }
+  console.log(`Processing: ${email.subject} from ${email.from}`);
+}
+
+// ✅ Good - type narrowing when truly optional
+function processEmail(email: Email): void {
+  const subject = email.subject ?? 'No Subject';  // If subject is Email['subject'] | undefined
+  console.log(`Processing: ${subject}`);
+}
+
+// ❌ Bad - using any
+function processEmail(email: any): void {
+  console.log(email.subject);  // No type safety
+}
+
+// ✅ Good - use unknown for truly dynamic data
+function parseJson(json: string): unknown {
+  return JSON.parse(json);
+}
+
+// Then narrow it
+const data = parseJson(jsonString);
+if (isEmail(data)) {
+  processEmail(data);  // Now typed as Email
+}
+```
+
+**Avoid defensive null checks:**
+
+```typescript
+// ✅ Good - trust the parameter type
+private _isFebruary(month: number): boolean {
+  return month === 2;
+}
+
+// ❌ Bad - unnecessary null check
+private _isFebruary(month: number | null | undefined): boolean {
+  if (month === null || month === undefined) {
+    throw new Error('Month is required');
+  }
+  return month === 2;
+}
+
+// ✅ Good - trust array methods
+function getFirstEmail(emails: Email[]): Email {
+  return emails[0]!;  // Caller ensures non-empty array
+}
+
+// ❌ Bad - defensive check when type says it's an array
+function getFirstEmail(emails: Email[]): Email | undefined {
+  if (!emails || emails.length === 0) {
+    return undefined;
+  }
+  return emails[0];
+}
+```
+
+**Never use `any`:**
+
+```typescript
+// ✅ Good - proper typing
+function saveToCache(key: string, value: EmailData): void {
+  cache.set(key, value);
+}
+
+// ❌ Bad - any destroys type safety
+function saveToCache(key: string, value: any): void {
+  cache.set(key, value);
+}
+
+// ✅ Good - use generics for flexible types
+function saveToCache<T>(key: string, value: T): void {
+  cache.set(key, value);
+}
+
+// ✅ Good - use unknown for truly unknown data
+function handleWebhook(payload: unknown): void {
+  if (isEmailWebhook(payload)) {
+    processEmail(payload.email);  // Type narrowed
+  }
+}
+```
+
+**Type locations:**
+
+```typescript
+// Server types
+server/src/types/email.ts         // Email-related types
+server/src/types/llm.ts           // LLM provider types
+server/src/lib/vector/types.ts    // Vector search types
+server/src/lib/email-processing/types.ts  // Processing result types
+```
+
+**Examples:**
+
+```typescript
+// ✅ Good - well-defined types
+export interface SaveEmailResult {
+  success: boolean;
+  skipped: boolean;
+  saved?: number;
+  error?: string;
+}
+
+export async function saveEmail(email: Email): Promise<SaveEmailResult> {
+  // Implementation
+}
+
+// ❌ Bad - anonymous return type
+export async function saveEmail(email: Email): Promise<{
+  success: boolean;
+  skipped?: boolean;
+  saved?: number;
+  error?: string;
+}> {
+  // Type exists but isn't reusable
+}
+
+// ❌ Bad - no return type
+export async function saveEmail(email: Email) {
+  return { success: true, saved: 1 }; // What else can this return?
+}
+```
+
+**Pattern for extending types:**
+
+```typescript
+// ✅ Good - extend existing type
+import { VectorSearchParams } from '@/lib/vector/types';
+
+export interface ExtendedSearchParams extends VectorSearchParams {
+  includeMetadata: boolean;
+  minConfidence: number;
+}
+
+// ❌ Bad - redefine everything
+export interface MySearchParams {
+  userId: string;           // Already in VectorSearchParams
+  queryText: string;        // Already in VectorSearchParams
+  limit: number;            // Already in VectorSearchParams
+  includeMetadata: boolean; // New field
+  minConfidence: number;    // New field
+}
+```
+
+**Always define interfaces for:**
+- Function return values (especially for async functions)
+- Function parameters with more than 2 properties
+- Service method results
+- API request/response bodies
+- Database query results
+
+**Type definition checklist:**
+1. Does this type already exist? (Search `server/src/types/` and `*/types.ts` files)
+2. Can I extend an existing type instead?
+3. Is this type reusable across multiple functions?
+4. Does the type name clearly describe its purpose?
+5. Are all properties documented with TSDoc comments?
 
 ## UI Components (shadcn/ui)
 
@@ -306,7 +668,7 @@ source ~/.zshrc && PGPASSWORD=aiemailpass psql -U aiemailuser -h localhost -p 54
 ## Project Files
 - **README.md**: User-facing documentation with setup instructions
 - **CLAUDE.md**: This file - instructions for Claude
-- **complete_project_plan.md**: Original master project specification document
+- **FEATURES.md**: Feature reference and API documentation
 - **.env.example**: Template for environment variables
 - **docker-compose.yml**: Docker services configuration
 - **/scripts**: Utility scripts for development

@@ -107,20 +107,14 @@ npm run tone:e2e
 - Test users created: `npm run db:seed`
 
 ### For Vector/Embedding Tests
-- Qdrant running: `npm run qdrant:up`
-- Embedding model will download on first run (~30MB)
+- PostgreSQL running: `docker compose up -d postgres`
+- Embedding models download on first run (~30MB semantic + ~300MB style)
 
 ### For Pipeline Tests
 - All Docker services running
 - Test email data loaded: `npm run tone:load`
 
 ## Common Issues
-
-### "Cannot connect to Qdrant"
-```bash
-# Reset Qdrant
-npm run qdrant:reset
-```
 
 ### "No test data found"
 ```bash

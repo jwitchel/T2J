@@ -54,19 +54,7 @@ The IMAP implementation provides a robust, production-ready interface for connec
 
 ## API Endpoints
 
-### Email Account Management
-- `POST /api/email-accounts` - Add new email account with IMAP validation
-- `GET /api/email-accounts` - List user's email accounts
-- `DELETE /api/email-accounts/:id` - Remove email account
-
-### IMAP Operations
-- `GET /api/imap/accounts/:id/folders` - List folders
-- `GET /api/imap/accounts/:id/folders/:folder/messages` - List messages
-- `POST /api/imap/accounts/:id/folders/:folder/search` - Search messages
-- `GET /api/imap/accounts/:id/folders/:folder/messages/:uid` - Get single message
-- `PUT /api/imap/accounts/:id/folders/:folder/messages/:uid/read` - Mark as read
-- `PUT /api/imap/accounts/:id/folders/:folder/messages/:uid/unread` - Mark as unread
-- `DELETE /api/imap/accounts/:id/folders/:folder/messages/:uid` - Delete message
+See ../../routes/email-accounts.ts and ../../routes/imap.ts for IMAP-related API endpoints.
 
 ## Configuration
 
@@ -138,18 +126,11 @@ try {
 }
 ```
 
-### Real-time Monitoring
-```typescript
-// Start IDLE monitoring for new emails
-await imapOps.startIdleMonitoring('INBOX', (event) => {
-  if (event.type === 'new_mail') {
-    console.log(`${event.count} new emails received`);
-  }
-});
+### Email Monitoring
 
-// Stop monitoring
-imapOps.stopIdleMonitoring();
-```
+Scheduled polling every 60 seconds (CHECK_MAIL_INTERVAL=60000).
+
+IMAP IDLE support exists in imap-monitor.ts but is not active.
 
 ## Testing
 

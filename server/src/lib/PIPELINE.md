@@ -1,15 +1,16 @@
-# Highland.js Email Processing Pipeline
+# Highland.js Pipeline
 
-This document describes the Highland.js pipeline implementation for processing sent emails.
+Used in sent-email-pipeline.ts for batch processing historical sent emails.
+
+Inbox processing uses async/await (see inbox-processor.ts).
 
 ## Overview
 
-The email processing pipeline uses Highland.js to provide:
+Highland.js provides:
 - Stream-based processing with backpressure handling
 - Configurable concurrency (single-stream by default)
 - Batch processing for efficiency
 - Error resilience with graceful recovery
-- Real-time progress tracking via WebSocket
 
 ## Configuration
 

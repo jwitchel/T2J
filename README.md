@@ -173,7 +173,7 @@ npm run system:reset   # Full reset: Docker, DB, and mail accounts
 
 The project uses environment variables for configuration. Key settings include:
 
-- **EXAMPLE_COUNT**: Number of email examples to use for tone learning (default: 25)
+- **EXAMPLE_COUNT**: Number of email examples to use for tone learning (default: 10)
 - **DIRECT_EMAIL_MAX_PERCENTAGE**: Maximum portion of examples from direct correspondence (default: 0.6)
 - **PATTERN_ANALYSIS_CORPUS_SIZE**: Number of emails to analyze for writing patterns (default: 200)
 - **PIPELINE_BATCH_SIZE**: Batch size for email processing (default: 100)
@@ -215,34 +215,20 @@ The project uses [shadcn/ui](https://ui.shadcn.com/) components with:
 View all components at http://localhost:3001/components-test
 
 ## Important Files
-- **complete_project_plan.md**: Master project specification document
+- **FEATURES.md**: Feature reference and API documentation
 - **CLAUDE.md**: Instructions for Claude AI assistant
 - **TESTING.md**: Comprehensive testing guide
 
-## 📊 Current Project Status
+## 📊 Features
 
-### ✅ Sprint 1 Completed
-- [x] Task 1.1: Next.js initialization with TypeScript
-- [x] Task 1.2: Docker setup (PostgreSQL, Redis) 
-- [x] Task 1.3: shadcn/ui component library setup
-- [x] Task 1.4a: Express.js API setup with better-auth
-- [x] Task 1.4b: Frontend authentication implementation
+### Completed
+- Full authentication system (email/password, Google OAuth)
+- Email processing with spam detection and draft generation
+- IMAP integration with connection pooling
+- Vector-based tone learning (PostgreSQL + Vectra)
+- Background job processing with BullMQ
+- Real-time WebSocket logging
 
-### 🚧 What's Working
-- Full authentication system (sign up, sign in, sign out)
-- Protected routes with session management
-- PostgreSQL database with better-auth tables
-- Express.js API server with CORS support
-- Next.js frontend with TypeScript
-- shadcn/ui components with custom theme
-
-### 📋 What's Next
-- Sprint 2: Email Integration (IMAP setup, email account management)
-- Sprint 3: Tone Analysis Engine
-- Sprint 4: Draft Generation
-- Sprint 5: Testing & Error Handling
-- Sprint 6: Polish & Optimization
-- Sprint 7: Production Readiness
 
 ## 🐛 Troubleshooting
 
@@ -269,17 +255,16 @@ View all components at http://localhost:3001/components-test
    - Generate secure keys for BETTER_AUTH_SECRET and ENCRYPTION_KEY
    - Ensure DATABASE_URL uses port 5434
 
-## 🏗️ Architecture Decisions
+## 🏗️ Architecture
 
-- **Monorepo structure**: Frontend and backend in same repository
-- **Authentication**: Centralized in Express API using better-auth
-- **Database**: PostgreSQL for all data (no separate auth DB)
-- **Session management**: Secure httpOnly cookies (no JWT)
-- **Real-time updates**: WebSocket support for email processing logs
-- **Queue system**: BullMQ with Redis for background jobs
-- **Email parsing**: Uses [email-reply-parser](https://github.com/crisp-oss/email-reply-parser) for extracting user content
-- **HTML conversion**: Uses [html-to-text](https://www.npmjs.com/package/html-to-text) for reliable HTML parsing
-- **Vector storage**: PostgreSQL with Vectra in-memory search, dual embeddings (semantic + style) - see [Vector Services Documentation](server/src/lib/vector/README.md)
+- Monorepo: Frontend and backend in same repository
+- Auth: better-auth with httpOnly cookies
+- Database: PostgreSQL for all data + vectors
+- Queue: BullMQ with Redis
+- Vector: PostgreSQL + Vectra in-memory search
+- LLM: Multi-provider (OpenAI, Anthropic, Google, Ollama)
+
+See FEATURES.md for complete reference.
 
 ## 🔌 Real-time Features
 

@@ -10,8 +10,8 @@ Implements two-phase selection to prioritize relevant examples:
 - **Phase 2**: Same relationship category emails to fill remaining slots
 
 Configuration (via environment variables):
-- `EXAMPLE_COUNT`: Total examples to select (default: 25)
-- `DIRECT_EMAIL_MAX_PERCENTAGE`: Max percentage from direct emails (default: 0.6)
+- `EXAMPLE_COUNT`: Total examples to select (default: 10)
+- `DIRECT_EMAIL_MAX_PERCENTAGE`: Max percentage from direct emails (default: 0.4)
 
 ### 2. Email Ingestion Pipeline (`email-ingest-pipeline.ts`)
 Processes historical emails and stores them in the vector database.
@@ -37,11 +37,11 @@ npm test -- server/src/lib/pipeline/__tests__/template-manager.test.ts
 These tests don't require any external services.
 
 ### Full Integration Test
-To test with real services (requires Qdrant to be running):
+To test with real services:
 
-1. Start Qdrant:
+1. Start PostgreSQL:
    ```bash
-   npm run qdrant:up
+   docker compose up -d postgres
    ```
 
 2. Run the integration test:
