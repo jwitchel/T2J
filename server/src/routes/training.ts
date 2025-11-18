@@ -253,27 +253,34 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
   }
 });
 
-// Wipe user's vector DB data
+// Wipe user's email data
 router.post('/wipe', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
 
-    // Clear vectors from PostgreSQL (vectors are now stored in email_sent/email_received)
+    // Delete all sent emails (CASCADE will handle related data)
     await pool.query(`
-      UPDATE email_sent
-      SET semantic_vector = NULL, style_vector = NULL, vector_generated_at = NULL
-      WHERE user_id = $1
+      DELETE FROM email_sent WHERE user_id = $1
     `, [userId]);
 
+    // Delete all received emails (CASCADE will handle related data)
     await pool.query(`
-      UPDATE email_received
-      SET semantic_vector = NULL, style_vector = NULL, vector_generated_at = NULL
-      WHERE user_id = $1
+      DELETE FROM email_received WHERE user_id = $1
     `, [userId]);
 
     // Delete style clusters
     await pool.query(`
       DELETE FROM style_clusters WHERE user_id = $1
+    `, [userId]);
+
+    // Delete tone preferences
+    await pool.query(`
+      DELETE FROM tone_preferences WHERE user_id = $1
+    `, [userId]);
+
+    // Delete draft tracking
+    await pool.query(`
+      DELETE FROM draft_tracking WHERE user_id = $1
     `, [userId]);
 
     res.json({ success: true });

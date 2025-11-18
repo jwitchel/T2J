@@ -442,7 +442,7 @@ export default function TonePage() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>⚠️ Wipe Vector Database</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will permanently delete all stored email data from the vector database. This cannot be undone.
+                          This will permanently delete all stored email data from the database. This cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
