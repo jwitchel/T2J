@@ -25,99 +25,34 @@ Analyze these {{emailCount}} emails and extract writing patterns.
 
 Emails to analyze:
 {{#each emails}}
-Date: {{this.date}}
 To: {{this.to}}
 Subject: {{this.subject}}
-Content:
 {{this.content}}
-
 ---
 {{/each}}
 
 Extract the following patterns with specific examples and frequencies:
 
-1. SENTENCE PATTERNS
-   - Calculate average sentence length (in words)
-   - Find min and max sentence lengths
-   - Calculate distribution: % short (<10 words), medium (10-25), long (>25)
-   - Include 3-5 example sentences showing variety
-
-2. PARAGRAPH STRUCTURE
-   - Categorize emails into EXACTLY these types:
-     * "single-line response": Very brief emails, 1-2 sentences total, no line breaks
-     * "brief-multi-line": Short emails with 2-4 lines, each line is a distinct point
-     * "multi-paragraph": Structured emails with greeting, multiple paragraphs, and closing
-     * "mixed": Varies between the above patterns
-   - Calculate percentage of each type (must sum to 100%)
-   - Provide a description for each pattern found
-
-3. OPENINGS (exact text with frequencies)
-   - List each unique opening with percentage used
-   - Include "[right to the point]" with frequency if they skip greetings
-   - Note variations like "Hi John," vs "Hi John!" vs "John -"
-   - Be very specific about punctuation and formatting
-
-4. VALEDICTION PATTERNS
-   - Analyze closing phrases before the name (e.g., "Thanks", "Sincerely,", "Best,")
-   - Include "[None]" if no valediction is used in some emails
-   - Calculate percentage of emails using each valediction
-   - IMPORTANT: Percentages must add up to exactly 100%
-   
-   5. RESERVED
-
-6. WHAT THEY NEVER DO (important!)
+1. WHAT THEY NEVER DO (important!)
    - Analyze what is consistently absent from their writing style
    - Only report patterns where you have strong evidence of absence across the entire corpus
    - Do NOT assume common patterns are avoided unless you've verified their absence
    - Focus on surprising or distinctive omissions specific to this person
    - Base confidence levels on how thoroughly you've checked the corpus
 
-7. RESPONSE PATTERNS
+2. RESPONSE PATTERNS
    - Percentage of immediate/brief vs contemplative/detailed responses
    - How they handle questions (direct answer vs acknowledge-then-answer)
    - Note if they use inline responses or bottom-post
 
-8. UNIQUE EXPRESSIONS
+3. UNIQUE EXPRESSIONS
    - Phrases they commonly use (e.g., "Does that make sense?", "Quick question")
    - Their way of expressing agreement/disagreement
    - Transition words they prefer
    - Include context and approximate frequency
 
-Return ONLY a JSON object matching this exact structure.
-IMPORTANT: For "valediction" array, the percentages across all entries MUST sum to exactly 100%:
+Return ONLY a JSON object matching this exact structure:
 {
-  "sentencePatterns": {
-    "avgLength": <number>,
-    "minLength": <number>,
-    "maxLength": <number>,
-    "stdDeviation": <number>,
-    "distribution": {
-      "short": <decimal 0-1>,
-      "medium": <decimal 0-1>,
-      "long": <decimal 0-1>
-    },
-    "examples": ["<example1>", "<example2>", "<example3>"]
-  },
-  "paragraphPatterns": [
-    {
-      "type": "<pattern name>",
-      "percentage": <number 0-100>,
-      "description": "<clear description>"
-    }
-  ],
-  "openingPatterns": [
-    {
-      "pattern": "<exact text>",
-      "percentage": <decimal 0-1>,
-      "notes": "<optional notes about usage>"
-    }
-  ],
-  "valediction": [
-    {
-      "phrase": "<exact valediction phrase or '[None]'>",
-      "percentage": <number 0-100>
-    }
-  ],
   "negativePatterns": [
     {
       "description": "<actual pattern that is notably absent from THIS person's emails>",

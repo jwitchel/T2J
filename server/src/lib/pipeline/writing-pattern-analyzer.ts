@@ -8,6 +8,9 @@ import { nameRedactor } from '../name-redactor';
 import nlp from 'compromise';
 import sentencesPlugin from 'compromise-sentences';
 import * as ss from 'simple-statistics';
+import { writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 // Extend compromise with sentence plugin
 nlp.plugin(sentencesPlugin);
@@ -102,44 +105,40 @@ export class WritingPatternAnalyzer {
     userId: string,
     relationship: string
   ): Promise<SentencePatterns | null> {
-    try {
-      const query = `
-        SELECT profile_data->'sentenceStats' as sentence_stats
-        FROM tone_preferences
-        WHERE user_id = $1 
-          AND preference_type = 'category'
-          AND target_identifier = $2
-      `;
-      
-      const result = await db.query(query, [userId, relationship]);
-      
-      if (result.rows.length > 0 && result.rows[0].sentence_stats) {
-        const stats = result.rows[0].sentence_stats;
-        console.log(`[SentenceStats] Loaded from cache for ${relationship}:`, {
-          hasMedian: !!stats.medianLength,
-          hasTrimmedMean: !!stats.trimmedMean,
-          hasPercentiles: !!(stats.percentile25 && stats.percentile75),
-          avgLength: stats.avgLength,
-          medianLength: stats.medianLength,
-          trimmedMean: stats.trimmedMean
-        });
-        return {
-          avgLength: stats.avgLength,
-          medianLength: stats.medianLength || stats.avgLength, // Fallback for old data
-          trimmedMean: stats.trimmedMean || stats.avgLength,   // Fallback for old data
-          minLength: stats.minLength,
-          maxLength: stats.maxLength,
-          stdDeviation: stats.stdDeviation,
-          percentile25: stats.percentile25 || stats.minLength, // Fallback for old data
-          percentile75: stats.percentile75 || stats.maxLength, // Fallback for old data
-          distribution: stats.distribution,
-          examples: [] // Required by interface
-        };
-      }
-    } catch (error: unknown) {
-      console.error('Failed to load sentence stats:', error);
+    const query = `
+      SELECT profile_data->'sentenceStats' as sentence_stats
+      FROM tone_preferences
+      WHERE user_id = $1
+        AND preference_type = 'category'
+        AND target_identifier = $2
+    `;
+
+    const result = await db.query(query, [userId, relationship]);
+
+    if (result.rows.length > 0 && result.rows[0].sentence_stats) {
+      const stats = result.rows[0].sentence_stats;
+      console.log(`[SentenceStats] Loaded from cache for ${relationship}:`, {
+        hasMedian: !!stats.medianLength,
+        hasTrimmedMean: !!stats.trimmedMean,
+        hasPercentiles: !!(stats.percentile25 && stats.percentile75),
+        avgLength: stats.avgLength,
+        medianLength: stats.medianLength,
+        trimmedMean: stats.trimmedMean
+      });
+      return {
+        avgLength: stats.avgLength,
+        medianLength: stats.medianLength || stats.avgLength, // Fallback for old data
+        trimmedMean: stats.trimmedMean || stats.avgLength,   // Fallback for old data
+        minLength: stats.minLength,
+        maxLength: stats.maxLength,
+        stdDeviation: stats.stdDeviation,
+        percentile25: stats.percentile25 || stats.minLength, // Fallback for old data
+        percentile75: stats.percentile75 || stats.maxLength, // Fallback for old data
+        distribution: stats.distribution,
+        examples: [] // Required by interface
+      };
     }
-    
+
     return null;
   }
 
@@ -151,48 +150,42 @@ export class WritingPatternAnalyzer {
     relationship: string,
     stats: SentencePatterns & { totalSentences?: number }
   ): Promise<void> {
-    try {
-      // Update the profile_data JSONB field with sentence stats
-      const query = `
-        UPDATE tone_preferences
-        SET 
-          profile_data = jsonb_set(
-            COALESCE(profile_data, '{}'),
-            '{sentenceStats}',
-            $1::jsonb,
-            true
-          ),
-          updated_at = NOW()
-        WHERE user_id = $2 
-          AND preference_type = 'category'
-          AND target_identifier = $3
-      `;
-      
-      const statsWithMetadata = {
-        avgLength: stats.avgLength,
-        medianLength: stats.medianLength,
-        trimmedMean: stats.trimmedMean,
-        minLength: stats.minLength,
-        maxLength: stats.maxLength,
-        stdDeviation: stats.stdDeviation,
-        percentile25: stats.percentile25,
-        percentile75: stats.percentile75,
-        distribution: stats.distribution,
-        totalSentences: stats.totalSentences || 0,
-        lastCalculated: new Date().toISOString()
-      };
-      
-      await db.query(query, [
-        JSON.stringify(statsWithMetadata),
-        userId,
-        relationship
-      ]);
-      
-      console.log(`Stored sentence stats for ${userId}/${relationship} in database`);
-    } catch (error: unknown) {
-      console.error('Failed to store sentence stats:', error);
-      // Don't throw - this is a non-critical operation
-    }
+    const query = `
+      UPDATE tone_preferences
+      SET
+        profile_data = jsonb_set(
+          COALESCE(profile_data, '{}'),
+          '{sentenceStats}',
+          $1::jsonb,
+          true
+        ),
+        updated_at = NOW()
+      WHERE user_id = $2
+        AND preference_type = 'category'
+        AND target_identifier = $3
+    `;
+
+    const statsWithMetadata = {
+      avgLength: stats.avgLength,
+      medianLength: stats.medianLength,
+      trimmedMean: stats.trimmedMean,
+      minLength: stats.minLength,
+      maxLength: stats.maxLength,
+      stdDeviation: stats.stdDeviation,
+      percentile25: stats.percentile25,
+      percentile75: stats.percentile75,
+      distribution: stats.distribution,
+      totalSentences: stats.totalSentences || 0,
+      lastCalculated: new Date().toISOString()
+    };
+
+    await db.query(query, [
+      JSON.stringify(statsWithMetadata),
+      userId,
+      relationship
+    ]);
+
+    console.log(`Stored sentence stats for ${userId}/${relationship} in database`);
   }
 
   /**
@@ -208,11 +201,18 @@ export class WritingPatternAnalyzer {
     relationship: string,
     styleClusterName?: string
   ): Promise<SentencePatterns> {
+    const totalStart = Date.now();
+    console.log(`[TIMING] calculateSentenceStats START for ${relationship}`);
+
     // Try to load from cache first (outside transaction)
+    const cacheStart = Date.now();
     const cached = await this.loadSentenceStats(userId, relationship);
+    const cacheEnd = Date.now();
     if (cached) {
+      console.log(`[TIMING] calculateSentenceStats cache HIT: ${cacheEnd - cacheStart}ms`);
       return cached;
     }
+    console.log(`[TIMING] Cache check: ${cacheEnd - cacheStart}ms (MISS)`);
 
     // Use advisory lock to prevent duplicate calculations across processes
     // Advisory locks are lightweight and don't require a row to exist
@@ -220,8 +220,11 @@ export class WritingPatternAnalyzer {
 
     try {
       // Try to acquire advisory lock (non-blocking)
+      const lockStart = Date.now();
       const lockResult = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
       const lockAcquired = lockResult.rows[0]?.pg_try_advisory_lock;
+      const lockEnd = Date.now();
+      console.log(`[TIMING] Lock acquisition: ${lockEnd - lockStart}ms (acquired: ${lockAcquired})`);
 
       if (!lockAcquired) {
         // Someone else is calculating, wait and retry cache
@@ -247,9 +250,10 @@ export class WritingPatternAnalyzer {
       }
 
       // Fetch emails for this relationship from PostgreSQL
+      const fetchStart = Date.now();
       const emails = await this._fetchEmailsFromPostgres(userId, relationship, styleClusterName);
-
-    console.log(`[SentenceStats] Fetched ${emails.length} emails for ${relationship === 'aggregate' ? 'ALL relationships (aggregate)' : relationship}${styleClusterName ? ` (style: ${styleClusterName})` : ''}`);
+      const fetchEnd = Date.now();
+      console.log(`[TIMING] DB fetch: ${fetchEnd - fetchStart}ms, fetched ${emails.length} emails`);
 
     if (emails.length === 0) {
       return {
@@ -265,21 +269,22 @@ export class WritingPatternAnalyzer {
         examples: [] // Required by interface
       };
     }
-    
+
     // Collect all sentences from userReply texts
     const allSentences: string[] = [];
     // Array where each element is the word count of a sentence
     // e.g., [5, 10, 7] means 3 sentences with 5, 10, and 7 words respectively
     const wordCountsPerSentence: number[] = [];
-    
+
+    const nlpStart = Date.now();
     emails.forEach(email => {
       const userReply = email.metadata.userReply || '';
       if (!userReply || userReply === '[ForwardedWithoutComment]') return;
-      
+
       // Use compromise to split into sentences
       const doc = nlp(userReply);
       const sentences = doc.sentences();
-      
+
       sentences.forEach((sentence: any) => {
         const text = sentence.text().trim();
         if (text.length > 0) {
@@ -290,6 +295,8 @@ export class WritingPatternAnalyzer {
         }
       });
     });
+    const nlpEnd = Date.now();
+    console.log(`[TIMING] NLP processing (${emails.length} emails): ${nlpEnd - nlpStart}ms, extracted ${wordCountsPerSentence.length} sentences`);
     
     if (wordCountsPerSentence.length === 0) {
       return {
@@ -324,19 +331,52 @@ export class WritingPatternAnalyzer {
       ? sortedCounts.slice(trimAmount, sortedCounts.length - trimAmount)
       : sortedCounts;
     const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
-    
+
+    // Get sentence length breakpoints from env
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX || '10');
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN || '25');
+
     // Calculate distribution
-    const shortCount = wordCountsPerSentence.filter(c => c < 10).length;
-    const mediumCount = wordCountsPerSentence.filter(c => c >= 10 && c <= 25).length;
-    const longCount = wordCountsPerSentence.filter(c => c > 25).length;
+    const shortCount = wordCountsPerSentence.filter(c => c < shortMax).length;
+    const mediumCount = wordCountsPerSentence.filter(c => c >= shortMax && c <= longMin).length;
+    const longCount = wordCountsPerSentence.filter(c => c > longMin).length;
     const totalSentenceCount = wordCountsPerSentence.length;
-    
+
     const distribution = {
       short: shortCount / totalSentenceCount,
       medium: mediumCount / totalSentenceCount,
       long: longCount / totalSentenceCount
     };
-    
+
+    // Select 3-5 example sentences showing variety in length
+    const examples: string[] = [];
+
+    // Find indices of sentences at different length percentiles
+    const shortSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] < shortMax);
+    const mediumSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] >= shortMax && wordCountsPerSentence[i] <= longMin);
+    const longSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] > longMin);
+
+    // Add one example from each category if available
+    if (shortSentences.length > 0) {
+      examples.push(shortSentences[Math.floor(Math.random() * shortSentences.length)]);
+    }
+    if (mediumSentences.length > 0) {
+      examples.push(mediumSentences[Math.floor(Math.random() * mediumSentences.length)]);
+    }
+    if (longSentences.length > 0) {
+      examples.push(longSentences[Math.floor(Math.random() * longSentences.length)]);
+    }
+
+    // If we have fewer than 3 examples, add more from the most common category
+    while (examples.length < 3 && allSentences.length > examples.length) {
+      const remaining = allSentences.filter(s => !examples.includes(s));
+      if (remaining.length > 0) {
+        examples.push(remaining[Math.floor(Math.random() * remaining.length)]);
+      } else {
+        break;
+      }
+    }
+
     const result: SentencePatterns = {
       avgLength: Math.round(avgLength * 100) / 100,
       medianLength: Math.round(medianLength * 100) / 100,
@@ -347,7 +387,7 @@ export class WritingPatternAnalyzer {
       percentile25: Math.round(percentile25 * 100) / 100,
       percentile75: Math.round(percentile75 * 100) / 100,
       distribution,
-      examples: [] // Required by interface but not used
+      examples
     };
     
     // Debug logging
@@ -366,6 +406,9 @@ export class WritingPatternAnalyzer {
         ...result,
         totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
       } as any);
+
+      const totalEnd = Date.now();
+      console.log(`[TIMING] calculateSentenceStats TOTAL: ${totalEnd - totalStart}ms for ${relationship}`);
 
       return result;
     } finally {
@@ -459,31 +502,6 @@ export class WritingPatternAnalyzer {
   }
 
   /**
-   * Recursively round all numeric values in an object to specified decimal places
-   */
-  private roundNumericValues(obj: any, decimals: number = 2): any {
-    if (typeof obj === 'number') {
-      return Math.round(obj * Math.pow(10, decimals)) / Math.pow(10, decimals);
-    }
-    
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.roundNumericValues(item, decimals));
-    }
-    
-    if (obj !== null && typeof obj === 'object') {
-      const rounded: any = {};
-      for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
-          rounded[key] = this.roundNumericValues(obj[key], decimals);
-        }
-      }
-      return rounded;
-    }
-    
-    return obj;
-  }
-
-  /**
    * Get the model name being used
    */
   getModelName(): string {
@@ -522,20 +540,11 @@ export class WritingPatternAnalyzer {
       throw new Error('No active LLM provider found');
     }
 
-    // Check if API key exists
     if (!provider.api_key) {
-      console.error('LLM provider has no API key:', provider.provider_name);
       throw new Error(`LLM provider "${provider.provider_name}" has no API key configured`);
     }
 
-    // Decrypt the API key
-    let decryptedApiKey = '';
-    try {
-      decryptedApiKey = decryptPassword(provider.api_key);
-    } catch (error: unknown) {
-      console.error('Failed to decrypt API key:', error);
-      throw new Error('Failed to decrypt LLM provider API key');
-    }
+    const decryptedApiKey = decryptPassword(provider.api_key);
 
     this.modelName = provider.model_name || '';
     this.llmClient = new LLMClient({
@@ -560,6 +569,7 @@ export class WritingPatternAnalyzer {
     }
 
     const startTime = Date.now();
+    console.log(`[TIMING] analyzeWritingPatterns START for ${relationship || 'aggregate'}: ${emails.length} emails`);
 
     // Log the analysis start
     realTimeLogger.log(userId, {
@@ -575,47 +585,75 @@ export class WritingPatternAnalyzer {
     // Process in batches of 50 emails
     const batchSize = 50;
     const batches = this.chunkEmails(emails, batchSize);
-    
-    console.log(`Analyzing ${emails.length} emails in ${batches.length} batches...`);
+
+    console.log(`[TIMING] Created ${batches.length} batches of ${batchSize} emails each`);
 
     const batchAnalyses: BatchAnalysisResult[] = [];
     let successfulBatches = 0;
     let failedBatches = 0;
-    
+
+    const batchLoopStart = Date.now();
     for (let i = 0; i < batches.length; i++) {
-      console.log(`Processing batch ${i + 1}/${batches.length}...`);
-      
+      const batchStart = Date.now();
+      console.log(`[TIMING] Batch ${i + 1}/${batches.length} START`);
+
       try {
         const analysis = await this.analyzeBatch(batches[i], relationship);
         batchAnalyses.push(analysis);
         successfulBatches++;
+        const batchEnd = Date.now();
+        console.log(`[TIMING] Batch ${i + 1}/${batches.length} COMPLETE: ${batchEnd - batchStart}ms`);
       } catch (error: unknown) {
         console.error(`Error analyzing batch ${i + 1}:`, error);
         failedBatches++;
         // Continue with other batches even if one fails
       }
     }
+    const batchLoopEnd = Date.now();
+    console.log(`[TIMING] All batches COMPLETE: ${batchLoopEnd - batchLoopStart}ms total for ${batches.length} batches`);
 
     if (batchAnalyses.length === 0) {
       throw new Error('Failed to analyze any email batches');
     }
 
     // Aggregate patterns across all batches
+    const aggStart = Date.now();
     const aggregated = this.aggregatePatterns(batchAnalyses);
-    
+    const aggEnd = Date.now();
+    console.log(`[TIMING] aggregatePatterns COMPLETE: ${aggEnd - aggStart}ms`);
+
     // Calculate sentence statistics directly from emails for accuracy
     // Always calculate, even for aggregate (when relationship is undefined)
     const relationshipLabel = relationship || 'aggregate';
-    console.log(`Calculating sentence statistics directly for ${relationshipLabel}...`);
+    const statsStart = Date.now();
+    console.log(`[TIMING] calculateSentenceStats START for ${relationshipLabel}`);
     const directSentenceStats = await this.calculateSentenceStats(userId, relationship || 'aggregate');
-    
-    // Replace LLM-calculated sentence stats with direct calculation
-    aggregated.sentencePatterns = directSentenceStats;
-    
-    console.log(`Direct sentence stats for ${relationshipLabel}: avg=${directSentenceStats.avgLength}, median=${directSentenceStats.medianLength}, trimmed=${directSentenceStats.trimmedMean}, min=${directSentenceStats.minLength}, max=${directSentenceStats.maxLength}, std=${directSentenceStats.stdDeviation}`);
+    const statsEnd = Date.now();
+    console.log(`[TIMING] calculateSentenceStats COMPLETE: ${statsEnd - statsStart}ms`);
 
-    // Round all numeric values to 2 decimal places
-    const roundedPatterns = this.roundNumericValues(aggregated) as WritingPatterns;
+    // Calculate structural patterns using NLP
+    const structureStart = Date.now();
+    console.log(`[TIMING] NLP structural analysis START for ${relationshipLabel}`);
+
+    const paragraphPatterns = await this.calculateParagraphPatterns(userId, emails);
+    console.log(`[TIMING] Paragraph patterns: ${paragraphPatterns.length} types found`);
+
+    const openingPatterns = await this.calculateOpeningPatterns(userId, emails);
+    console.log(`[TIMING] Opening patterns: ${openingPatterns.length} variations found`);
+
+    const valedictionPatterns = await this.calculateValedictionPatterns(userId, emails);
+    console.log(`[TIMING] Valediction patterns: ${valedictionPatterns.length} types found`);
+
+    const structureEnd = Date.now();
+    console.log(`[TIMING] NLP structural analysis COMPLETE: ${structureEnd - structureStart}ms`);
+
+    // Replace LLM-calculated patterns with NLP calculations
+    aggregated.sentencePatterns = directSentenceStats;
+    aggregated.paragraphPatterns = paragraphPatterns;
+    aggregated.openingPatterns = openingPatterns;
+    aggregated.valediction = valedictionPatterns;
+
+    console.log(`Direct sentence stats for ${relationshipLabel}: avg=${directSentenceStats.avgLength}, median=${directSentenceStats.medianLength}, trimmed=${directSentenceStats.trimmedMean}, min=${directSentenceStats.minLength}, max=${directSentenceStats.maxLength}, std=${directSentenceStats.stdDeviation}`);
 
     const endTime = Date.now();
     const duration = Math.round((endTime - startTime) / 1000);
@@ -627,7 +665,7 @@ export class WritingPatternAnalyzer {
       level: 'info',
       command: 'pattern.analysis.complete',
       data: {
-        raw: `Found ${roundedPatterns.openingPatterns.length} opening patterns, ${roundedPatterns.valediction.length} valedictions, ${roundedPatterns.negativePatterns.length} negative patterns, ${roundedPatterns.uniqueExpressions.length} unique expressions`,
+        raw: `Found ${aggregated.openingPatterns.length} opening patterns, ${aggregated.valediction.length} valedictions, ${aggregated.negativePatterns.length} negative patterns, ${aggregated.uniqueExpressions.length} unique expressions`,
         parsed: {
           totalEmails: emails.length,
           batchSize,
@@ -637,16 +675,16 @@ export class WritingPatternAnalyzer {
           durationSeconds: duration,
           relationship: relationship || 'aggregate',
           patterns: {
-            openings: roundedPatterns.openingPatterns.length,
-            valedictions: roundedPatterns.valediction.length,
-            negative: roundedPatterns.negativePatterns.length,
-            unique: roundedPatterns.uniqueExpressions.length
+            openings: aggregated.openingPatterns.length,
+            valedictions: aggregated.valediction.length,
+            negative: aggregated.negativePatterns.length,
+            unique: aggregated.uniqueExpressions.length
           }
         }
       }
     });
 
-    return roundedPatterns;
+    return aggregated;
   }
 
   /**
@@ -690,12 +728,31 @@ export class WritingPatternAnalyzer {
     };
 
     // Generate prompt using template (includes all instructions)
+    const promptStart = Date.now();
     const prompt = await this.templateManager.renderPrompt('pattern-analysis', templateData as any);
+    const promptEnd = Date.now();
+    console.log(`[TIMING] Prompt generation: ${promptEnd - promptStart}ms, prompt length: ${prompt.length} chars`);
+
+    // Write prompt to disk for inspection
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    const relationshipLabel = relationship || 'aggregate';
+    const promptFile = join(tmpdir(), `llm-prompt-${relationshipLabel}-${timestamp}-${randomId}.txt`);
+    writeFileSync(promptFile, prompt, 'utf8');
+    console.log(`[LLM] Prompt written to: ${promptFile}`);
 
     // Call LLM with structured output expectation
+    const llmStart = Date.now();
     const response = await this.llmClient.generate(prompt, {
       temperature: 0.3 // Lower temperature for more consistent analysis
     });
+    const llmEnd = Date.now();
+    console.log(`[TIMING] LLM API call: ${llmEnd - llmStart}ms, response length: ${response.length} chars`);
+
+    // Write response to disk for inspection
+    const responseFile = join(tmpdir(), `llm-response-${relationshipLabel}-${timestamp}-${randomId}.txt`);
+    writeFileSync(responseFile, response, 'utf8');
+    console.log(`[LLM] Response written to: ${responseFile}`);
 
     // Parse the response
     try {
@@ -718,7 +775,7 @@ export class WritingPatternAnalyzer {
       }
       
       const parsed = JSON.parse(cleanResponse);
-      
+
       // Add metadata
       return {
         ...parsed,
@@ -728,9 +785,9 @@ export class WritingPatternAnalyzer {
           end: emails[emails.length - 1].date
         }
       };
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Failed to parse LLM response:', response);
-      throw new Error('Invalid response format from LLM');
+      throw error;
     }
   }
 
@@ -768,86 +825,29 @@ export class WritingPatternAnalyzer {
       };
     });
     
-    // Aggregate sentence patterns with email count weighting
-    // NOTE: Median, percentiles, and trimmed mean CANNOT be calculated by averaging!
-    // These are overwritten later by calculateSentenceStats() which recalculates from raw data
+    // Sentence patterns, paragraph patterns, openings, and valedictions are NO LONGER calculated by LLM
+    // They're calculated by NLP in analyzeWritingPatterns()
+    // These placeholders are immediately overwritten
     const sentencePatterns: SentencePatterns = {
-      avgLength: this.weightedAverage(
-        batchWeights.map(({ batch, weight }) => ({ 
-          value: batch.sentencePatterns.avgLength, 
-          weight 
-        }))
-      ),
-      medianLength: this.weightedAverage(
-        batchWeights.map(({ batch, weight }) => ({ 
-          value: batch.sentencePatterns.medianLength || batch.sentencePatterns.avgLength, 
-          weight 
-        }))
-      ),
-      trimmedMean: this.weightedAverage(
-        batchWeights.map(({ batch, weight }) => ({ 
-          value: batch.sentencePatterns.trimmedMean || batch.sentencePatterns.avgLength, 
-          weight 
-        }))
-      ),
-      minLength: Math.min(...batchResults.map(b => b.sentencePatterns.minLength)),
-      maxLength: Math.max(...batchResults.map(b => b.sentencePatterns.maxLength)),
-      stdDeviation: this.weightedAverage(
-        batchWeights.map(({ batch, weight }) => ({ 
-          value: batch.sentencePatterns.stdDeviation, 
-          weight 
-        }))
-      ),
-      percentile25: this.weightedAverage(
-        batchWeights.map(({ batch, weight }) => ({ 
-          value: batch.sentencePatterns.percentile25 || batch.sentencePatterns.minLength, 
-          weight 
-        }))
-      ),
-      percentile75: this.weightedAverage(
-        batchWeights.map(({ batch, weight }) => ({ 
-          value: batch.sentencePatterns.percentile75 || batch.sentencePatterns.maxLength, 
-          weight 
-        }))
-      ),
+      avgLength: 0,
+      medianLength: 0,
+      trimmedMean: 0,
+      minLength: 0,
+      maxLength: 0,
+      stdDeviation: 0,
+      percentile25: 0,
+      percentile75: 0,
       distribution: {
-        short: this.weightedAverage(
-          batchWeights.map(({ batch, weight }) => ({ 
-            value: batch.sentencePatterns.distribution.short, 
-            weight 
-          }))
-        ),
-        medium: this.weightedAverage(
-          batchWeights.map(({ batch, weight }) => ({ 
-            value: batch.sentencePatterns.distribution.medium, 
-            weight 
-          }))
-        ),
-        long: this.weightedAverage(
-          batchWeights.map(({ batch, weight }) => ({ 
-            value: batch.sentencePatterns.distribution.long, 
-            weight 
-          }))
-        )
+        short: 0,
+        medium: 0,
+        long: 0
       },
-      examples: this.mergeExamples(batchWeights)
+      examples: []
     };
 
-    // Aggregate paragraph patterns with email count weighting
-    const paragraphPatterns = this.mergePatternsByType(
-      batchWeights.map(({ batch, weight }) => ({ 
-        patterns: batch.paragraphPatterns, 
-        weight 
-      }))
-    );
-
-    // Aggregate opening patterns with context awareness
-    const openingPatterns = this.mergePatternsByFrequency(
-      batchWeights.map(({ batch, weight }) => ({ 
-        patterns: batch.openingPatterns, 
-        weight 
-      }))
-    );
+    const paragraphPatterns: ParagraphPattern[] = [];
+    const openingPatterns: OpeningPattern[] = [];
+    const valediction: ValedictionPattern[] = [];
 
     // Aggregate negative patterns (union of all, keep highest confidence)
     const negativePatterns = this.mergeNegativePatterns(
@@ -878,20 +878,11 @@ export class WritingPatternAnalyzer {
 
     // Aggregate unique expressions with context awareness
     const uniqueExpressions = this.mergeUniqueExpressions(
-      batchWeights.map(({ batch, weight }) => ({ 
-        expressions: batch.uniqueExpressions, 
-        weight 
+      batchWeights.map(({ batch, weight }) => ({
+        expressions: batch.uniqueExpressions,
+        weight
       }))
     );
-
-    // Aggregate valediction patterns
-    const valediction = this.mergePercentagePatterns(
-      batchWeights.map(({ batch, weight }) => ({ 
-        patterns: batch.valediction || [], 
-        weight 
-      }))
-    );
-
 
     return {
       sentencePatterns,
@@ -912,268 +903,24 @@ export class WritingPatternAnalyzer {
   }
 
 
-  private mergeExamples(
-    batchWeights: { batch: BatchAnalysisResult; weight: number }[]
-  ): string[] {
-    // Collect examples with their weights
-    const examplesWithWeights: { example: string; weight: number }[] = [];
-    
-    batchWeights.forEach(({ batch, weight }) => {
-      batch.sentencePatterns.examples.forEach(example => {
-        examplesWithWeights.push({ example, weight });
-      });
-    });
-    
-    // Sort by weight (prioritize examples from larger batches) and deduplicate
-    const uniqueExamples = new Map<string, number>();
-    examplesWithWeights
-      .sort((a, b) => b.weight - a.weight)
-      .forEach(({ example, weight }) => {
-        if (!uniqueExamples.has(example)) {
-          uniqueExamples.set(example, weight);
-        }
-      });
-    
-    // Return top N examples
-    const exampleCount = parseInt(process.env.PATTERN_EXAMPLE_COUNT || '10');
-    return Array.from(uniqueExamples.keys()).slice(0, exampleCount);
-  }
-
-  private mergePatternsByType(
-    batchData: { patterns: ParagraphPattern[]; weight: number }[]
-  ): ParagraphPattern[] {
-    const merged = new Map<string, { totalPercentage: number; totalWeight: number; description: string }>();
-    
-    batchData.forEach(({ patterns, weight }) => {
-      patterns.forEach(pattern => {
-        const existing = merged.get(pattern.type) || { totalPercentage: 0, totalWeight: 0, description: pattern.description };
-        existing.totalPercentage += pattern.percentage * weight;
-        existing.totalWeight += weight;
-        merged.set(pattern.type, existing);
-      });
-    });
-
-    const patterns = Array.from(merged.entries())
-      .map(([type, data]) => ({
-        type,
-        percentage: Math.round(data.totalPercentage / data.totalWeight),
-        description: data.description
-      }))
-      .sort((a, b) => b.percentage - a.percentage);
-    
-    // Ensure we always have at least one pattern
-    if (patterns.length === 0) {
-      patterns.push({
-        type: 'mixed',
-        percentage: 100,
-        description: 'Varies between different response formats'
-      });
-    }
-    
-    return patterns;
-  }
-
-  private mergePatternsByFrequency<T extends { pattern: string; frequency?: number; percentage?: number }>(
-    batchData: { patterns: T[]; weight: number }[]
-  ): T[] {
-    const merged = new Map<string, { 
-      totalFreq: number; 
-      totalWeight: number; 
-      original: T;
-      contexts: Set<string>;
-    }>();
-    
-    batchData.forEach(({ patterns, weight }) => {
-      patterns.forEach(pattern => {
-        // Support both frequency and percentage fields during transition
-        const freq = pattern.frequency ?? pattern.percentage ?? 0;
-        const existing = merged.get(pattern.pattern);
-        if (existing) {
-          existing.totalFreq += freq * weight;
-          existing.totalWeight += weight;
-          // Track context variations if pattern has notes
-          if ('notes' in pattern && (pattern as any).notes) {
-            existing.contexts.add((pattern as any).notes);
-          }
-        } else {
-          merged.set(pattern.pattern, {
-            totalFreq: freq * weight,
-            totalWeight: weight,
-            original: pattern,
-            contexts: new Set('notes' in pattern && (pattern as any).notes ? [(pattern as any).notes] : [])
-          });
-        }
-      });
-    });
-
-    // Calculate raw percentages first
-    const rawPatterns = Array.from(merged.values())
-      .map(data => {
-        const result: any = {
-          ...data.original,
-          percentage: data.totalFreq / data.totalWeight  // Use percentage for consistency
-        };
-        delete result.frequency;  // Remove old frequency field
-        // Add context information if multiple contexts found
-        if (data.contexts.size > 1 && 'notes' in result) {
-          result.notes = `Used in ${data.contexts.size} different contexts`;
-        }
-        return result;
-      })
-      .sort((a, b) => b.percentage - a.percentage);
-    
-    // Normalize to ensure sum equals 1.0
-    const sum = rawPatterns.reduce((acc, p) => acc + p.percentage, 0);
-    if (sum > 0) {
-      return rawPatterns.map(p => ({
-        ...p,
-        percentage: this.roundNumericValues(p.percentage / sum, 4) as number
-      }));
-    }
-    
-    return rawPatterns;
-  }
-
-  private mergePercentagePatterns<T extends { phrase: string; percentage: number }>(
-    batchData: { patterns: T[]; weight: number }[]
-  ): T[] {
-    const merged = new Map<string, { 
-      totalPercentage: number; 
-      totalWeight: number; 
-      original: T;
-    }>();
-    
-    batchData.forEach(({ patterns, weight }) => {
-      patterns.forEach(pattern => {
-        const existing = merged.get(pattern.phrase);
-        if (existing) {
-          existing.totalPercentage += pattern.percentage * weight;
-          existing.totalWeight += weight;
-        } else {
-          merged.set(pattern.phrase, {
-            totalPercentage: pattern.percentage * weight,
-            totalWeight: weight,
-            original: pattern
-          });
-        }
-      });
-    });
-
-    // Calculate raw percentages first
-    const rawPatterns = Array.from(merged.values())
-      .map(data => ({
-        ...data.original,
-        percentage: data.totalPercentage / data.totalWeight
-      }))
-      .sort((a, b) => b.percentage - a.percentage);
-    
-    // Normalize to ensure sum equals 1.0
-    const sum = rawPatterns.reduce((acc, p) => acc + p.percentage, 0);
-    if (sum > 0) {
-      return rawPatterns.map(p => ({
-        ...p,
-        percentage: this.roundNumericValues(p.percentage / sum, 4) as number
-      }));
-    }
-    
-    return rawPatterns;
-  }
-
   private mergeNegativePatterns(patternArrays: NegativePattern[][]): NegativePattern[] {
-    const merged = new Map<string, {
-      pattern: NegativePattern;
-      occurrences: number;
-      contexts: Set<string>;
-    }>();
-    
+    const merged = new Map<string, NegativePattern>();
+
     patternArrays.forEach(patterns => {
       patterns.forEach(pattern => {
-        // Skip generic template-like patterns
-        const genericPatterns = [
-          'punctuation patterns like',
-          'using all caps',
-          'all caps',
-          'corporate speak',
-          'synergy',
-          'circle back',
-          'dear',
-          'sincerely',
-          'best regards',
-          'formal greeting',
-          'formal sign-off',
-          'exclamation marks',
-          'multiple exclamation',
-          'bullet points',
-          'numbered lists',
-          'hello',
-          'good morning',
-          'good afternoon',
-          'good evening',
-          'regards',
-          'kind regards',
-          'warm regards',
-          'yours truly',
-          'respectfully',
-          'cordially'
-        ];
-        
-        const isGeneric = genericPatterns.some(generic => 
-          pattern.description.toLowerCase().includes(generic.toLowerCase())
-        );
-        
-        if (isGeneric) {
-          return; // Skip this pattern
-        }
-        
-        // Create a normalized key to detect duplicates better
-        const normalizedKey = pattern.description
-          .toLowerCase()
-          .replace(/[^a-z0-9\s]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        const existing = merged.get(normalizedKey);
-        if (!existing) {
-          merged.set(normalizedKey, {
-            pattern: { ...pattern },
-            occurrences: 1,
-            contexts: new Set(pattern.context ? [pattern.context] : [])
-          });
-        } else {
-          existing.occurrences++;
-          // Increase confidence with multiple confirmations
-          existing.pattern.confidence = Math.min(
-            0.99,
-            existing.pattern.confidence + (1 - existing.pattern.confidence) * 0.1
-          );
-          if (pattern.context) {
-            existing.contexts.add(pattern.context);
-          }
-          // Merge examples if available, avoiding duplicates
-          if (pattern.examples && existing.pattern.examples) {
-            const allExamples = new Set([...existing.pattern.examples, ...pattern.examples]);
-            existing.pattern.examples = Array.from(allExamples).slice(0, 3);
-          } else if (pattern.examples) {
-            existing.pattern.examples = pattern.examples;
-          }
+        const key = pattern.description.toLowerCase().trim();
+        const existing = merged.get(key);
+
+        if (!existing || pattern.confidence > existing.confidence) {
+          merged.set(key, pattern);
         }
       });
     });
 
-    // Include patterns that appear in multiple batches or have high confidence
     return Array.from(merged.values())
-      .filter(({ occurrences, pattern }) => 
-        occurrences > 1 || pattern.confidence > 0.8
-      )
-      .map(({ pattern, contexts }) => {
-        // Add context variation note if applicable
-        if (contexts.size > 1) {
-          pattern.context = `Applies across ${contexts.size} different contexts`;
-        }
-        return pattern;
-      })
+      .filter(pattern => pattern.confidence > 0.7)
       .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 10); // Limit to top 10 most confident patterns
+      .slice(0, 10);
   }
 
   private mergeUniqueExpressions(
@@ -1233,7 +980,7 @@ export class WritingPatternAnalyzer {
         return {
           phrase: data.originalPhrase,
           context: primaryContext,
-          occurrenceRate: this.roundNumericValues(data.totalFreq / data.totalWeight, 4) as number
+          occurrenceRate: Math.round((data.totalFreq / data.totalWeight) * 10000) / 10000
         };
       })
       .sort((a, b) => b.occurrenceRate - a.occurrenceRate)
@@ -1368,12 +1115,269 @@ export class WritingPatternAnalyzer {
     `;
     
     await db.query(query, [
-      userId, 
-      preferenceType, 
+      userId,
+      preferenceType,
       targetIdentifier,
       userRelationshipId,
-      JSON.stringify(profileData), 
+      JSON.stringify(profileData),
       emailsAnalyzed
     ]);
+  }
+
+  /**
+   * Calculate paragraph structure patterns using NLP
+   * Categorizes emails into: single-line, brief-multi-line, multi-paragraph, mixed
+   */
+  private async calculateParagraphPatterns(
+    _userId: string,
+    emails: ProcessedEmail[]
+  ): Promise<ParagraphPattern[]> {
+    if (emails.length === 0) {
+      return [];
+    }
+
+    // Classify each email's structure
+    const classifications = emails.map(email => this.classifyEmailStructure(email));
+
+    // Count occurrences of each type
+    const counts = new Map<string, number>();
+    classifications.forEach(type => {
+      counts.set(type, (counts.get(type) || 0) + 1);
+    });
+
+    // Convert to percentages and create pattern objects
+    const total = emails.length;
+    const patterns: ParagraphPattern[] = Array.from(counts.entries()).map(([type, count]) => ({
+      type,
+      percentage: (count / total) * 100,
+      description: this.getParagraphTypeDescription(type)
+    }));
+
+    // Sort by percentage (most common first)
+    patterns.sort((a, b) => b.percentage - a.percentage);
+
+    return patterns;
+  }
+
+  /**
+   * Classify a single email's paragraph structure
+   */
+  private classifyEmailStructure(email: ProcessedEmail): string {
+    const text = email.userReply;
+    if (!text || text.trim() === '') {
+      return "single-line response";
+    }
+
+    const doc = nlp(text);
+    const sentences = doc.sentences().length;
+    const lineBreaks = this.countLineBreaks(text);
+    const hasGreeting = this.hasGreeting(text);
+    const hasClosing = this.hasClosing(text);
+
+    // Single-line: Very brief, 1-2 sentences, minimal line breaks
+    if (sentences <= 2 && lineBreaks <= 1) {
+      return "single-line response";
+    }
+
+    // Brief multi-line: Short, 2-4 lines
+    if (sentences <= 4 && lineBreaks >= 2 && lineBreaks <= 4) {
+      return "brief-multi-line";
+    }
+
+    // Multi-paragraph: Structured with greeting, multiple paragraphs, and closing
+    if (hasGreeting && hasClosing && lineBreaks > 4) {
+      return "multi-paragraph";
+    }
+
+    // Default to mixed if doesn't fit clear pattern
+    return "mixed";
+  }
+
+  /**
+   * Count meaningful line breaks in text
+   */
+  private countLineBreaks(text: string): number {
+    return text.split('\n').filter(line => line.trim().length > 0).length - 1;
+  }
+
+  /**
+   * Detect if text has a greeting
+   */
+  private hasGreeting(text: string): boolean {
+    const firstLine = text.split('\n')[0]?.toLowerCase() || '';
+    const doc = nlp(firstLine);
+
+    // Check for common greeting patterns
+    return doc.match('(hi|hello|hey|dear|greetings|good morning|good afternoon|good evening)').found;
+  }
+
+  /**
+   * Detect if text has a closing/valediction
+   */
+  private hasClosing(text: string): boolean {
+    const lines = text.split('\n').filter(l => l.trim());
+    if (lines.length === 0) return false;
+
+    // Check last 3 lines for common closings
+    const lastLines = lines.slice(-3).join('\n').toLowerCase();
+    const doc = nlp(lastLines);
+
+    return doc.match('(thanks|thank you|best|regards|sincerely|cheers|warmly|talk soon|speak soon)').found;
+  }
+
+  /**
+   * Get description for paragraph type
+   */
+  private getParagraphTypeDescription(type: string): string {
+    const descriptions: Record<string, string> = {
+      "single-line response": "Very brief emails, 1-2 sentences total, no line breaks",
+      "brief-multi-line": "Short emails with 2-4 lines, each line is a distinct point",
+      "multi-paragraph": "Structured emails with greeting, multiple paragraphs, and closing",
+      "mixed": "Varies between different paragraph patterns"
+    };
+    return descriptions[type] || type;
+  }
+
+  /**
+   * Calculate opening patterns using NLP
+   * Extracts exact opening text with frequencies
+   */
+  private async calculateOpeningPatterns(
+    _userId: string,
+    emails: ProcessedEmail[]
+  ): Promise<OpeningPattern[]> {
+    if (emails.length === 0) {
+      return [];
+    }
+
+    // Extract opening from each email
+    const openings = emails.map(email => this.extractOpening(email));
+
+    // Count occurrences
+    const counts = new Map<string, number>();
+    openings.forEach(opening => {
+      counts.set(opening, (counts.get(opening) || 0) + 1);
+    });
+
+    // Convert to percentages
+    const total = emails.length;
+    const patterns: OpeningPattern[] = Array.from(counts.entries()).map(([pattern, count]) => ({
+      pattern,
+      percentage: count / total,
+      notes: pattern === "[right to the point]" ? "No greeting, starts directly with content" : undefined
+    }));
+
+    // Sort by percentage (most common first)
+    patterns.sort((a, b) => b.percentage - a.percentage);
+
+    return patterns;
+  }
+
+  /**
+   * Extract opening text from email
+   */
+  private extractOpening(email: ProcessedEmail): string {
+    const lines = email.userReply.split('\n').filter(l => l.trim());
+    if (lines.length === 0) {
+      return "[right to the point]";
+    }
+
+    const firstLine = lines[0].trim();
+
+    // Check for greeting patterns using NLP
+    const doc = nlp(firstLine);
+    const hasGreeting = doc.match('(hi|hello|hey|dear|greetings|good morning|good afternoon|good evening)').found;
+
+    if (!hasGreeting || firstLine.length < 3) {
+      return "[right to the point]";
+    }
+
+    // Extract up to first comma, period, or exclamation (preserve punctuation)
+    const match = firstLine.match(/^[^.,!?]+[.,!?]?/);
+    return match ? match[0].trim() : firstLine;
+  }
+
+  /**
+   * Calculate valediction patterns using NLP
+   * Analyzes closing phrases before name
+   */
+  private async calculateValedictionPatterns(
+    _userId: string,
+    emails: ProcessedEmail[]
+  ): Promise<ValedictionPattern[]> {
+    if (emails.length === 0) {
+      return [];
+    }
+
+    // Extract valediction from each email
+    const valedictions = emails.map(email => this.extractValediction(email));
+
+    // Count occurrences
+    const counts = new Map<string, number>();
+    valedictions.forEach(valediction => {
+      counts.set(valediction, (counts.get(valediction) || 0) + 1);
+    });
+
+    // Convert to percentages (must sum to 100%)
+    const total = emails.length;
+    const patterns: ValedictionPattern[] = Array.from(counts.entries()).map(([phrase, count]) => ({
+      phrase,
+      percentage: (count / total) * 100
+    }));
+
+    // Sort by percentage (most common first)
+    patterns.sort((a, b) => b.percentage - a.percentage);
+
+    // Ensure percentages sum to exactly 100% (handle floating point rounding)
+    const sum = patterns.reduce((acc, p) => acc + p.percentage, 0);
+    if (sum !== 100 && patterns.length > 0) {
+      // Add difference to the most common pattern
+      patterns[0].percentage += (100 - sum);
+    }
+
+    return patterns;
+  }
+
+  /**
+   * Extract valediction from email
+   */
+  private extractValediction(email: ProcessedEmail): string {
+    const lines = email.userReply.split('\n').filter(l => l.trim());
+    if (lines.length === 0) {
+      return "[None]";
+    }
+
+    // Check last 3 lines for valedictions
+    const lastLines = lines.slice(-3).join('\n').toLowerCase();
+
+    const detected = this.detectCommonValedictions(lastLines);
+    return detected || "[None]";
+  }
+
+  /**
+   * Detect common valediction phrases using NLP
+   */
+  private detectCommonValedictions(text: string): string | null {
+    const doc = nlp(text);
+
+    // Use NLP to find common valediction patterns
+    // Look for: thanks/gratitude phrases, farewells, regards patterns
+    const gratitude = doc.match('(thanks|thank you)').text();
+    if (gratitude) return gratitude.charAt(0).toUpperCase() + gratitude.slice(1);
+
+    const farewell = doc.match('(best|sincerely|cheers|warmly|regards)').text();
+    if (farewell) return farewell.charAt(0).toUpperCase() + farewell.slice(1);
+
+    const compound = doc.match('(best|kind|warm) regards').text();
+    if (compound) {
+      return compound.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    const talkSoon = doc.match('(talk|speak) soon').text();
+    if (talkSoon) {
+      return talkSoon.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    return null;
   }
 }
