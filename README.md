@@ -2,6 +2,13 @@
 
 An AI-powered email assistant that generates email reply drafts matching your personal writing tone. Built with Next.js, Express.js, and better-auth.
 
+## 📚 Documentation
+
+- **[FEATURES.md](docs/FEATURES.md)** - Complete feature reference and API documentation
+- **[TESTING.md](docs/TESTING.md)** - Testing guide and strategies
+- **[CLAUDE.md](CLAUDE.md)** - Instructions for Claude AI assistant
+- **[AGENTS.md](AGENTS.md)** - Guidelines for AI agents working on this project
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -214,11 +221,6 @@ The project uses [shadcn/ui](https://ui.shadcn.com/) components with:
 
 View all components at http://localhost:3001/components-test
 
-## Important Files
-- **FEATURES.md**: Feature reference and API documentation
-- **CLAUDE.md**: Instructions for Claude AI assistant
-- **TESTING.md**: Comprehensive testing guide
-
 ## 📊 Features
 
 ### Completed
@@ -264,7 +266,7 @@ View all components at http://localhost:3001/components-test
 - Vector: PostgreSQL + Vectra in-memory search
 - LLM: Multi-provider (OpenAI, Anthropic, Google, Ollama)
 
-See FEATURES.md for complete reference.
+See [docs/FEATURES.md](docs/FEATURES.md) for complete reference.
 
 ## 🔌 Real-time Features
 

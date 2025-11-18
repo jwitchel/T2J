@@ -668,7 +668,8 @@ source ~/.zshrc && PGPASSWORD=aiemailpass psql -U aiemailuser -h localhost -p 54
 ## Project Files
 - **README.md**: User-facing documentation with setup instructions
 - **CLAUDE.md**: This file - instructions for Claude
-- **FEATURES.md**: Feature reference and API documentation
+- **docs/FEATURES.md**: Feature reference and API documentation
+- **docs/TESTING.md**: Comprehensive testing guide
 - **.env.example**: Template for environment variables
 - **docker-compose.yml**: Docker services configuration
 - **/scripts**: Utility scripts for development
