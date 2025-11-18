@@ -205,6 +205,18 @@ async function processEmail(email: Email): Promise<SaveEmailResult> {
 - Expected logic paths (use result objects instead)
 - "Just in case" error wrapping (let it throw)
 
+**No defensive fallbacks - let missing values fail:**
+```typescript
+// ❌ Bad - defensive fallback hides missing config
+const LIMIT = parseInt(process.env.EMAIL_LIMIT || '1000');
+const timeout = config.timeout || 5000;
+
+// ✅ Good - fail immediately if missing
+const LIMIT = parseInt(process.env.EMAIL_LIMIT!);
+const timeout = config.timeout;
+```
+If a value is required for the system to operate correctly, let it throw when missing. Don't hide configuration errors with fallback values.
+
 ### DRY Principles - CRITICAL
 
 **🚨 BEFORE WRITING NEW CODE: SEARCH THE CODEBASE FIRST 🚨**
