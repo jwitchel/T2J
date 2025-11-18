@@ -67,23 +67,7 @@ export class EmailProcessor {
     if (splitResult.userReply && context?.userId) {
       const signatureResult = await this.signatureDetector.removeSignature(splitResult.userReply, context.userId);
       userReplyClean = signatureResult.cleanedText;
-      
-      if (signatureResult.signature) {
-        realTimeLogger.log(context.userId, {
-          userId: context.userId,
-          emailAccountId: context.emailAccountId,
-          level: 'info',
-          command: 'SIGNATURE_REMOVED',
-          data: {
-            parsed: {
-              messageId: parsedMail.messageId,
-              signaturePattern: signatureResult.matchedPattern,
-              signatureLength: signatureResult.signature.length
-            }
-          }
-        });
-      }
-      
+
       // Remove typed name from userReply
       const typedNameResult = await this.typedNameRemover.removeTypedName(userReplyClean, context.userId);
       userReplyClean = typedNameResult.cleanedText;
