@@ -20,9 +20,6 @@ npm run test:unit
 # Run ONLY integration tests (requires Docker services)
 docker compose up -d  # Start PostgreSQL, Redis
 npm run test:integration
-
-# Test specific services
-npm run test:templates   # Test Handlebars templates
 ```
 
 ## Docker Services Required
@@ -161,8 +158,6 @@ npm test -- server/src/lib/__tests__/template-manager.test.ts
 | `npm test` | Run all tests | Docker services |
 | `npm run test:unit` | Unit tests only | None |
 | `npm run test:integration` | Integration tests | Docker services |
-| `npm run test:templates` | Test Handlebars | None |
-| `npm run test:pipeline:mock` | Pipeline with mocks | None |
 
 ## Best Practices
 

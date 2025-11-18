@@ -42,14 +42,14 @@ export const myService = new MyService();
 
 ### Core Services
 
-- `EmailStorageService` (4 dependencies)
-- `ToneLearningOrchestrator` (7 dependencies)
-- `RelationshipService` (1 dependency)
-- `RelationshipDetector` (1 dependency)
+- `EmailStorageService`
+- `ToneLearningOrchestrator`
+- `RelationshipService`
+- `RelationshipDetector`
 
 ### Singleton Services
 
-24 singleton exports exist in the codebase:
+Common singleton exports in the codebase:
 
 ```typescript
 // Services
@@ -67,7 +67,6 @@ export const emailContentParser = new EmailContentParser();
 // Infrastructure
 export const imapPool = new ImapConnectionPool();
 export const imapMonitor = new ImapMonitor();
-export const emailLockManager = new EmailLockManager();
 export const emailMover = new EmailMover();
 export const sharedConnection = new Redis(...);
 

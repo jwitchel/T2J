@@ -438,7 +438,7 @@ export class InboxProcessor {
       // 3. RECORD INITIAL ACTION TRACKING
       await this._recordInitialTracking(context, draft);
 
-      // 6. PERFORM IMAP OPERATIONS (move or upload) - throws on failure
+      // 4. PERFORM IMAP OPERATIONS (move or upload) - throws on failure
       let imapResult: ImapOperationResult;
       try {
         imapResult = await this._performImapOperation(context, draft);
@@ -447,13 +447,13 @@ export class InboxProcessor {
         throw imapError;
       }
 
-      // 7. UPDATE ACTION TRACKING WITH FINAL DESTINATION
+      // 5. UPDATE ACTION TRACKING WITH FINAL DESTINATION
       await this._updateTracking(context, draft, imapResult.destination);
 
-      // 8. SAVE TO DATABASE (best effort - doesn't fail on error)
+      // 6. SAVE TO DATABASE (best effort - doesn't fail on error)
       await this._saveToDatabase(context, draft);
 
-      // 9. BUILD SUCCESS RESULT AND LOG SUMMARY
+      // 7. BUILD SUCCESS RESULT AND LOG SUMMARY
       const result = this._buildResult(context, {
         draft,
         moved: imapResult.moved,
