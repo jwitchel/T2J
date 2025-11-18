@@ -1,3 +1,11 @@
+/**
+ * IMAP Monitor API Routes
+ *
+ * TODO: IMAP IDLE monitoring is opt-in and not automatically enabled.
+ * Primary email checking uses BullMQ polling via JobSchedulerManager (60s interval).
+ * These routes allow manual activation of real-time IMAP IDLE monitoring.
+ */
+
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { imapMonitor } from '../lib/imap-monitor';

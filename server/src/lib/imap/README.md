@@ -128,9 +128,19 @@ try {
 
 ### Email Monitoring
 
-Scheduled polling every 60 seconds (CHECK_MAIL_INTERVAL=60000).
+**Primary Method: Polling via JobSchedulerManager** ✅ ACTIVE
+- Scheduled polling every 60 seconds (default)
+- Configurable via `CHECK_MAIL_INTERVAL` environment variable
+- See `../job-scheduler-manager.ts` for implementation
+- Creates BullMQ jobs that inbox workers process
+- **This is how emails are checked by default**
 
-IMAP IDLE support exists in imap-monitor.ts but is not active.
+**Optional Method: IMAP IDLE** ⚠️ TODO / OPT-IN ONLY
+- Real-time push notifications available but requires manual activation
+- See `../imap-monitor.ts` for IMAP IDLE implementation
+- API endpoints: `/api/imap-monitor/start/:accountId`, `/api/imap-monitor/stop/:accountId`
+- **Not automatically started** - requires explicit API call
+- **TODO**: Auto-enable IMAP IDLE for new email accounts to eliminate polling delays
 
 ## Testing
 
@@ -184,7 +194,7 @@ The implementation has been tested with:
 ## Future Enhancements
 
 1. **OAuth2 Support** - For Gmail and Outlook
-2. **Push Notifications** - Using IMAP IDLE more efficiently
+2. **Auto-enable IMAP IDLE** - Automatically start IMAP IDLE monitoring for new accounts
 3. **Attachment Handling** - Stream large attachments
 4. **Full-text Search** - Local index for faster searching
 5. **Folder Synchronization** - Efficient delta sync

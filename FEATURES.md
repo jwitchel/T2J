@@ -104,7 +104,8 @@ See server/src/routes/workers.ts for worker management endpoints.
 - Connection pooling with reuse
 - OAuth token refresh
 - Encrypted password storage
-- Polling-based monitoring (60s interval)
+- Polling-based monitoring (60s interval via JobSchedulerManager creates BullMQ jobs)
+- IMAP IDLE available but opt-in only (TODO: auto-enable for real-time)
 
 ### Operations
 See ImapOperations class in server/src/lib/imap-operations.ts for available IMAP operations.

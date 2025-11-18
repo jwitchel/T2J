@@ -2,6 +2,10 @@
  * IMAP Monitoring Service
  * Implements real-time email monitoring using IMAP IDLE
  * Handles multiple accounts, reconnection, and queuing of new emails
+ *
+ * TODO: This service is currently opt-in and requires manual API activation.
+ * Email checking is primarily done via BullMQ polling (JobSchedulerManager).
+ * To use IMAP IDLE, call POST /api/imap-monitor/start/:accountId
  */
 
 import { EventEmitter } from 'events';

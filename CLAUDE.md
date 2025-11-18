@@ -128,7 +128,7 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 4. **Vector Storage**: PostgreSQL + Vectra in-memory search (no external vector database)
 5. **LLM Integration**: Multi-provider with timeout protection (40s default) and retry logic (3 attempts)
 6. **Background Jobs**: Worker pause/resume, deterministic job IDs, stalled job cleanup
-7. **IMAP Monitoring**: Polling-based (60s interval) for reliability across providers
+7. **IMAP Monitoring**: Polling-based (60s interval via JobSchedulerManager creates BullMQ jobs). IMAP IDLE exists but is opt-in via API - TODO: auto-enable for real-time push
 
 ## Development Best Practices
 
