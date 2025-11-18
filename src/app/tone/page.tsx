@@ -276,7 +276,7 @@ export default function TonePage() {
       })
 
       if (response.ok) {
-        success('Vector database wiped successfully')
+        success('Emails wiped successfully')
         fetchToneData()
       } else {
         error('Failed to wipe data')
