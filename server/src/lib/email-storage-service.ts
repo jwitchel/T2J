@@ -132,13 +132,8 @@ export class EmailStorageService {
         };
       }
 
-      if (!parsedEmail.subject || parsedEmail.subject.trim() === '') {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Email has no subject'
-        };
-      }
+      // Subject is allowed to be empty - store as empty string
+      const subject = parsedEmail.subject?.trim() || '';
 
       // Process email to extract user content (remove signatures, quotes)
       const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
@@ -224,6 +219,7 @@ export class EmailStorageService {
             emailAccountId,
             emailData,
             parsedEmail,
+            subject,
             redactedUserReply,
             features,
             semanticVector,
@@ -254,6 +250,7 @@ export class EmailStorageService {
           emailAccountId,
           emailData,
           parsedEmail,
+          subject,
           redactedUserReply,
           features,
           semanticVector,
@@ -325,6 +322,7 @@ export class EmailStorageService {
     emailAccountId: string;
     emailData: EmailMessageWithRaw;
     parsedEmail: ParsedMail;
+    subject: string;
     redactedUserReply: string;
     features: EmailFeatures | null;
     semanticVector: number[];
@@ -338,6 +336,7 @@ export class EmailStorageService {
       emailAccountId,
       emailData,
       parsedEmail,
+      subject,
       redactedUserReply,
       features,
       semanticVector,
@@ -368,7 +367,7 @@ export class EmailStorageService {
       const relationshipDetection = await this.relationshipDetector.detectRelationship({
         userId,
         recipientEmail: otherPartyEmail,
-        subject: parsedEmail.subject,
+        subject,
         historicalContext: features ? {
           familiarityLevel: features.relationshipHints.familiarityLevel,
           hasIntimacyMarkers: features.relationshipHints.intimacyMarkers.length > 0,
@@ -389,12 +388,12 @@ export class EmailStorageService {
           userId,
           emailAccountId,
           userReply: redactedUserReply,
-          rawText: parsedEmail.text!,  // Validated above at line 103
-          subject: parsedEmail.subject!,  // Validated above at line 111
+          rawText: parsedEmail.text!,  // Validated above at line 127
+          subject,  // Empty string if no subject
           recipientEmail: otherPartyEmail,
           relationshipType: relationshipDetection.relationship,
           wordCount: features?.stats.wordCount || 0,
-          sentDate: emailData.date!,  // Validated above at line 89
+          sentDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
@@ -409,12 +408,12 @@ export class EmailStorageService {
           emailId: messageId,
           userId,
           emailAccountId,
-          rawText: parsedEmail.text!,  // Validated above at line 103
-          subject: parsedEmail.subject!,  // Validated above at line 111
+          rawText: parsedEmail.text!,  // Validated above at line 127
+          subject,  // Empty string if no subject
           senderEmail: otherPartyEmail,
           senderName: finalSenderName,  // Use email as fallback if name missing
           wordCount: features?.stats.wordCount || 0,
-          receivedDate: emailData.date!,  // Validated above at line 89
+          receivedDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
