@@ -22,7 +22,7 @@ export interface ProcessingContext {
 export class EmailProcessor {
   private signatureDetector: RegexSignatureDetector;
   private typedNameRemover: TypedNameRemover;
-  
+
   constructor(pool: Pool) {
     this.signatureDetector = new RegexSignatureDetector(pool);
     this.typedNameRemover = new TypedNameRemover(pool);
@@ -55,13 +55,16 @@ export class EmailProcessor {
     
     // First, parse the basic email content (userTextPlain, userTextRich)
     const parsedContent = emailContentParser.parseFromMailparser(parsedMail);
-    
+
+    // Get subject for forward detection (email-forward-parser uses it to improve accuracy)
+    const subject = parsedMail.subject || '';
+
     // Extract the user's reply from the plain text
-    let plainResult = replyExtractor.extractWithMetadata(parsedContent.userTextPlain);
-    
+    let plainResult = replyExtractor.extractWithMetadata(parsedContent.userTextPlain, subject);
+
     // Split the email into user reply and quoted content from the original text
-    const splitResult = replyExtractor.splitReply(parsedContent.userTextPlain);
-    
+    const splitResult = replyExtractor.splitReply(parsedContent.userTextPlain, subject);
+
     // Remove signature from userReply if it exists
     let userReplyClean = splitResult.userReply;
     if (splitResult.userReply && context?.userId) {
@@ -91,11 +94,11 @@ export class EmailProcessor {
     
     // Extract only the user's written text from HTML if available
     let processedRichText: string | undefined;
-    
+
     if (parsedContent.userTextRich) {
       // For HTML content, we need to extract the reply content
       // This is a bit more complex as we need to preserve HTML structure
-      processedRichText = replyExtractor.extractFromHtml(parsedContent.userTextRich);      
+      processedRichText = replyExtractor.extractFromHtml(parsedContent.userTextRich, subject);
     }
 
     const result: ProcessedEmail = {

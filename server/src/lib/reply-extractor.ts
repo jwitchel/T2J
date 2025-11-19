@@ -1,4 +1,5 @@
 import EmailReplyParser from 'email-reply-parser';
+import EmailForwardParser from 'email-forward-parser';
 import { convert as htmlToText } from 'html-to-text';
 
 export interface ReplyExtractionResult {
@@ -12,22 +13,24 @@ export interface SplitReplyResult {
 
 export class ReplyExtractor {
   private parser: EmailReplyParser;
+  private forwardParser: EmailForwardParser;
 
   constructor() {
     this.parser = new EmailReplyParser();
+    this.forwardParser = new EmailForwardParser();
   }
 
   /**
    * Extract only the user's written text from an email, removing all quoted content
    */
-  extractUserText(emailBody: string): string {
+  extractUserText(emailBody: string, subject?: string): string {
     if (!emailBody || emailBody.trim() === '') {
       return '';
     }
 
     try {
       // Pre-process to handle special quote patterns that email-reply-parser misses
-      const preprocessed = this.preprocessQuotePatterns(emailBody);
+      const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
       
       // Parse the email body
       const parsed = this.parser.read(preprocessed);
@@ -64,7 +67,7 @@ export class ReplyExtractor {
   /**
    * Extract user text with additional metadata about the email
    */
-  extractWithMetadata(emailBody: string): ReplyExtractionResult {
+  extractWithMetadata(emailBody: string, subject?: string): ReplyExtractionResult {
     if (!emailBody || emailBody.trim() === '') {
       return {
         userReply: ''
@@ -73,7 +76,7 @@ export class ReplyExtractor {
 
     try {
       // Pre-process to handle special quote patterns
-      const preprocessed = this.preprocessQuotePatterns(emailBody);
+      const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
       
       const parsed = this.parser.read(preprocessed);
       const fragments = this.mergeCodeContinuations(parsed.getFragments());
@@ -105,7 +108,7 @@ export class ReplyExtractor {
   /**
    * Extract user text from HTML email by converting to plain text first
    */
-  extractFromHtml(htmlContent: string): string {
+  extractFromHtml(htmlContent: string, subject?: string): string {
     // Convert HTML to plain text using the html-to-text library
     const textContent = htmlToText(htmlContent, {
       wordwrap: false,
@@ -127,7 +130,7 @@ export class ReplyExtractor {
         { selector: 'a', options: { ignoreHref: true } }
       ]
     });
-    return this.extractUserText(textContent);
+    return this.extractUserText(textContent, subject);
   }
 
   /**
@@ -217,23 +220,101 @@ export class ReplyExtractor {
 
   /**
    * Pre-process email to handle special quote patterns
+   * Handles various email client formats for forwards and replies
+   *
+   * Process order:
+   * 1. email-forward-parser (detects forwards from major clients)
+   * 2. Custom regex patterns (catches remaining edge cases)
    */
-  private preprocessQuotePatterns(emailBody: string): string {
-    // Replace Outlook-style quotes with standard quote markers
+  private preprocessQuotePatterns(emailBody: string, subject?: string): string {
     let processed = emailBody;
-    
-    // Handle "-----Original Message-----" pattern
+
+    // Step 1: Use email-forward-parser to detect and remove forwarded content
+    // This library handles: Apple Mail, Gmail, Outlook (multiple versions), Yahoo,
+    // Thunderbird, Missive, HubSpot, and more with locale support
+    try {
+      const forwardResult = this.forwardParser.read(emailBody, subject);
+
+      if (forwardResult.forwarded) {
+        // If email was forwarded, keep only the forwarding message (user's added text)
+        // and replace the original forwarded content with a marker
+        processed = forwardResult.message || '';
+
+        console.log('[ReplyExtractor] Forward detected:', {
+          subject: subject?.substring(0, 40),
+          inputLength: emailBody.length,
+          extractedLength: processed.length,
+          extracted: processed.substring(0, 100)
+        });
+
+        // Add marker to indicate forwarded content was removed
+        // Note: Don't use '>' prefix as email-reply-parser treats it as quoted content
+        if (processed.trim()) {
+          processed += '\n\n[Forwarded-content-removed]';
+        } else {
+          // User added no message before forwarding - use empty string
+          // The system will handle this gracefully with zero vectors
+          processed = '';
+        }
+
+        // Return early - email-forward-parser already handled the forward
+        return processed;
+      }
+    } catch (error) {
+      // If email-forward-parser fails, continue with custom patterns
+      console.warn('[ReplyExtractor] email-forward-parser failed, using fallback patterns:', error);
+    }
+
+    // Step 2: Custom regex patterns for edge cases not handled by email-forward-parser
+
+    // Handle "-----Original Message-----" pattern (Outlook)
     processed = processed.replace(
-      /(\n|^)-----\s*Original Message\s*-----[\s\S]*/i,
+      /(?:\r?\n|^)-{3,}\s*Original Message\s*-{3,}[\s\S]*/i,
       '\n> [Quoted content removed]'
     );
-    
-    // Handle "---------- Forwarded message ---------" pattern
+
+    // Handle "---------- Forwarded message ---------" pattern (Gmail)
     processed = processed.replace(
-      /(\n|^)-{5,}\s*Forwarded message\s*-{5,}[\s\S]*/i,
+      /(?:\r?\n|^)-{5,}\s*Forwarded message\s*-{5,}[\s\S]*/i,
       '\n> [Forwarded content removed]'
     );
-    
+
+    // Handle "Begin forwarded message:" pattern (Apple Mail)
+    processed = processed.replace(
+      /(?:\r?\n|^)Begin forwarded message:\s*(?:\r?\n)+[\s\S]*/i,
+      '\n> [Forwarded content removed]'
+    );
+
+    // Handle "-------- Forwarded Message --------" pattern (variations)
+    processed = processed.replace(
+      /(?:\r?\n|^)-{4,}\s*Forwarded Message\s*-{4,}[\s\S]*/i,
+      '\n> [Forwarded content removed]'
+    );
+
+    // Handle "On DATE at TIME, PERSON wrote:" pattern (inline replies)
+    processed = processed.replace(
+      /(?:\r?\n){2,}On\s+.+?(?:at|@)\s+.+?(?:wrote|said):\s*(?:\r?\n)+[\s\S]*/i,
+      '\n\n> [Quoted reply removed]'
+    );
+
+    // Handle "Le DATE, PERSON a écrit :" pattern (French)
+    processed = processed.replace(
+      /(?:\r?\n){2,}Le\s+.+?,\s+.+?\s+a\s+écrit\s*:\s*(?:\r?\n)+[\s\S]*/i,
+      '\n\n> [Quoted reply removed]'
+    );
+
+    // Handle "Am DATE schrieb PERSON:" pattern (German)
+    processed = processed.replace(
+      /(?:\r?\n){2,}Am\s+.+?\s+schrieb\s+.+?:\s*(?:\r?\n)+[\s\S]*/i,
+      '\n\n> [Quoted reply removed]'
+    );
+
+    // Handle Outlook-style header block (From: / Sent: / To: / Subject:)
+    processed = processed.replace(
+      /(?:\r?\n){2,}From:\s*.+?(?:\r?\n)+(?:Sent|Date):\s*.+?(?:\r?\n)+To:\s*.+?(?:\r?\n)+Subject:\s*.+?(?:\r?\n)+[\s\S]*/i,
+      '\n\n> [Quoted content removed]'
+    );
+
     return processed;
   }
 
@@ -241,21 +322,25 @@ export class ReplyExtractor {
    * Check if a hidden fragment is actually a quote pattern
    */
   private isQuotePattern(content: string): boolean {
+    const trimmed = content.trim();
     const quotePatterns = [
-      /^-----\s*Original Message\s*-----/i,
-      /^-{5,}\s*Forwarded message\s*-{5,}/i,
-      /^From:\s*.+\nSent:\s*.+\nTo:\s*.+\nSubject:/i,
-      /^On .+ wrote:$/i
+      /^-{3,}\s*Original Message\s*-{3,}/i,
+      /^-{4,}\s*Forwarded [Mm]essage\s*-{4,}/i,
+      /^Begin forwarded message:/i,
+      /^From:\s*.+[\r\n]+(?:Sent|Date):\s*.+[\r\n]+To:\s*.+[\r\n]+Subject:/i,
+      /^On .+(?:at|@).+(?:wrote|said):/i,
+      /^Le\s+.+,\s+.+\s+a\s+écrit\s*:/i,
+      /^Am\s+.+\s+schrieb\s+.+:/i
     ];
-    
-    return quotePatterns.some(pattern => pattern.test(content.trim()));
+
+    return quotePatterns.some(pattern => pattern.test(trimmed));
   }
 
 
   /**
    * Split email into user's reply and quoted content
    */
-  splitReply(emailBody: string): SplitReplyResult {
+  splitReply(emailBody: string, subject?: string): SplitReplyResult {
     if (!emailBody || emailBody.trim() === '') {
       return {
         userReply: '',
@@ -265,7 +350,7 @@ export class ReplyExtractor {
 
     try {
       // Pre-process to handle special quote patterns
-      const preprocessed = this.preprocessQuotePatterns(emailBody);
+      const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
 
       // Parse the email body
       const parsed = this.parser.read(preprocessed);

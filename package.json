@@ -101,6 +101,7 @@
     "dotenv": "^17.2.0",
     "echarts": "^5.6.0",
     "echarts-for-react": "^3.0.2",
+    "email-forward-parser": "^1.7.1",
     "email-reply-parser": "^2.0.1",
     "express": "^4.21.2",
     "handlebars": "^4.7.8",

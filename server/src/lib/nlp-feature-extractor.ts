@@ -135,28 +135,32 @@ export interface EmailFeatures {
 }
 
 export function extractEmailFeatures(emailText: string, recipientInfo?: { email?: string; name?: string }): EmailFeatures {
-  const doc = nlp(emailText);
-  const winkResult = emailText.trim() ? winkSentiment(emailText) : {
+  // Remove special markers before analysis
+  // [Forwarded-content-removed] should not affect linguistic analysis or word counts
+  const cleanedText = emailText.replace(/\[Forwarded-content-removed\]/gi, '').trim();
+
+  const doc = nlp(cleanedText);
+  const winkResult = cleanedText ? winkSentiment(cleanedText) : {
     score: 0,
     normalizedScore: 0,
     tokenizedPhrase: []
   };
   
   // Extract enhanced sentiment and tonal qualities
-  const enhancedSentiment = analyzeEnhancedSentiment(emailText, doc, winkResult);
-  const tonalQualities = analyzeTonalQualities(emailText, doc, winkResult);
+  const enhancedSentiment = analyzeEnhancedSentiment(cleanedText, doc, winkResult);
+  const tonalQualities = analyzeTonalQualities(cleanedText, doc, winkResult);
   const linguisticStyle = analyzeLinguisticStyle(doc);
-  
+
   return {
     // Removed linguistic patterns: phrases, contractions, sentenceStarters, closings
     questions: doc.questions().out('array'),
     sentiment: enhancedSentiment,
     tonalQualities: tonalQualities,
     linguisticStyle: linguisticStyle,
-    actionItems: extractActionItems(emailText),
-    contextType: inferContextType(emailText),
-    relationshipHints: extractRelationshipHints(emailText, recipientInfo, doc, tonalQualities),
-    stats: calculateStats(doc, emailText)
+    actionItems: extractActionItems(cleanedText),
+    contextType: inferContextType(cleanedText),
+    relationshipHints: extractRelationshipHints(cleanedText, recipientInfo, doc, tonalQualities),
+    stats: calculateStats(doc, cleanedText)
   };
 }
 
@@ -1143,8 +1147,9 @@ function calculateStats(doc: any, text: string): EmailFeatures['stats'] {
   // Use compromise for accurate counts
   const sentences = doc.sentences();
   const sentenceCount = sentences.length;
-  
+
   // For word count, use simple split for test consistency
+  // Note: text is already cleaned at the top level (markers removed)
   const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
   
   // Calculate vocabulary complexity using compromise

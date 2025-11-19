@@ -169,9 +169,9 @@ export class EmailStorageService {
           ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
           : new Array(768).fill(0);  // Incoming emails don't need style vectors
       } else {
-        // No user content - use zero vectors but still save the email
-        // This allows viewing emails in history even if they have no extractable content
-        redactedUserReply = parsedEmail.text?.trim() || '';
+        // No user content - use the processed reply (which may be empty or a marker)
+        // This ensures forwarded emails without user text are stored correctly
+        redactedUserReply = processedContent.userReply || '';
         features = null;
         semanticVector = new Array(384).fill(0);  // Semantic embedding dimension
         styleVector = new Array(768).fill(0);     // Style embedding dimension
