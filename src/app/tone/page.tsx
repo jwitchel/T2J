@@ -127,17 +127,22 @@ const Stat = ({ label, value, description }: { label: string; value: string | nu
 )
 
 // Reusable Pattern Row component
-const PatternRow = ({ label, value, showProgress = true }: { label: string; value: number; showProgress?: boolean }) => (
-  <div className="flex items-center justify-between">
-    <span className="text-sm font-medium">{label}</span>
-    <div className="flex items-center gap-2">
-      {showProgress && <Progress value={value * 100} className="w-24 h-2" />}
-      <span className="text-sm text-zinc-600 dark:text-zinc-400 w-12 text-right">
-        {Math.round(value * 100)}%
-      </span>
+const PatternRow = ({ label, value, showProgress = true }: { label: string; value: number; showProgress?: boolean }) => {
+  const percentage = value * 100
+  const displayValue = percentage > 0 && percentage < 1 ? '< 1%' : `${Math.round(percentage)}%`
+
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-2">
+        {showProgress && <Progress value={percentage} className="w-24 h-2" />}
+        <span className="text-sm text-zinc-600 dark:text-zinc-400 w-12 text-right">
+          {displayValue}
+        </span>
+      </div>
     </div>
-  </div>
-)
+  )
+}
 
 export default function TonePage() {
   const { user, loading: authLoading } = useAuth()
@@ -622,20 +627,11 @@ export default function TonePage() {
                     <CardContent>
                       <div className="space-y-3">
                         {patterns.paragraphPatterns.map((pattern, idx) => (
-                          <div key={idx} className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <span className="text-sm font-medium">{pattern.type || pattern.structure || 'Unknown'}</span>
-                              {pattern.description && (
-                                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{pattern.description}</p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Progress value={pattern.percentage > 1 ? pattern.percentage : pattern.percentage * 100} className="w-24 h-2" />
-                              <span className="text-sm text-zinc-600 dark:text-zinc-400 w-12 text-right">
-                                {pattern.percentage > 1 ? pattern.percentage : Math.round(pattern.percentage * 100)}%
-                              </span>
-                            </div>
-                          </div>
+                          <PatternRow
+                            key={idx}
+                            label={pattern.type || pattern.structure || 'Unknown'}
+                            value={pattern.percentage / 100}
+                          />
                         ))}
                       </div>
                     </CardContent>
@@ -690,7 +686,7 @@ export default function TonePage() {
                             <PatternRow
                               key={idx}
                               label={pattern.phrase}
-                              value={pattern.percentage > 1 ? pattern.percentage / 100 : pattern.percentage}
+                              value={pattern.percentage / 100}
                             />
                           ))
                         ) : (
