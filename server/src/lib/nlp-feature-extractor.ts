@@ -1,6 +1,7 @@
 import nlp from 'compromise';
 import sentencesPlugin from 'compromise-sentences';
 import statsPlugin from 'compromise-stats';
+import { stripEmailMarkers } from './email-markers';
 const winkSentiment = require('wink-sentiment');
 
 // Extend compromise with plugins
@@ -136,8 +137,8 @@ export interface EmailFeatures {
 
 export function extractEmailFeatures(emailText: string, recipientInfo?: { email?: string; name?: string }): EmailFeatures {
   // Remove special markers before analysis
-  // [Forwarded-content-removed] should not affect linguistic analysis or word counts
-  const cleanedText = emailText.replace(/\[Forwarded-content-removed\]/gi, '').trim();
+  // Email markers should not affect linguistic analysis or word counts
+  const cleanedText = stripEmailMarkers(emailText);
 
   const doc = nlp(cleanedText);
   const winkResult = cleanedText ? winkSentiment(cleanedText) : {

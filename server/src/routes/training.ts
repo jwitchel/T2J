@@ -95,19 +95,6 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       }
       });
 
-    // First, collect a sample of emails to detect signature
-      realTimeLogger.log(userId, {
-      userId,
-      emailAccountId,
-      level: 'info',
-      command: 'SIGNATURE_DETECTION_START',
-      data: { 
-        raw: 'Analyzing emails to detect signature pattern...'
-      }
-      });
-
-
-
     // Batch fetch and process using EmailStorageService
       let processed = 0;
       let saved = 0;

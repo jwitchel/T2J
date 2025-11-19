@@ -1,10 +1,10 @@
 import { ParsedMail } from 'mailparser';
 import { emailContentParser, ParsedEmailContent } from './email-content-parser';
 import { replyExtractor } from './reply-extractor';
-import { realTimeLogger } from './real-time-logger';
 import { Pool } from 'pg';
 import { RegexSignatureDetector } from './regex-signature-detector';
 import { TypedNameRemover } from './typed-name-remover';
+import { isEmailMarker } from './email-markers';
 
 export interface ProcessedEmail extends ParsedEmailContent {
   userTextPlain: string;    // Override to ensure it's the extracted user text
@@ -32,27 +32,6 @@ export class EmailProcessor {
    * Process a parsed email to extract only the user's written content
    */
   async processEmail(parsedMail: ParsedMail, context?: ProcessingContext): Promise<ProcessedEmail> {
-    const startTime = Date.now();
-    
-    // Log the start of processing
-    // if (context) {
-    //   realTimeLogger.log(context.userId, {
-    //     userId: context.userId,
-    //     emailAccountId: context.emailAccountId,
-    //     level: 'info',
-    //     command: 'EMAIL_PARSE_START',
-    //     data: {
-    //       parsed: {
-    //         messageId: parsedMail.messageId,
-    //         subject: parsedMail.subject,
-    //         from: parsedMail.from?.text,
-    //         date: parsedMail.date?.toISOString(),
-    //         originalText: parsedMail.text?.substring(0, 500) + (parsedMail.text && parsedMail.text.length > 500 ? '...' : '')
-    //       }
-    //     }
-    //   });
-    // }
-    
     // First, parse the basic email content (userTextPlain, userTextRich)
     const parsedContent = emailContentParser.parseFromMailparser(parsedMail);
 
@@ -66,16 +45,23 @@ export class EmailProcessor {
     const splitResult = replyExtractor.splitReply(parsedContent.userTextPlain, subject);
 
     // Remove signature from userReply if it exists
+    // Don't process email markers - they should be preserved as-is
     let userReplyClean = splitResult.userReply;
-    if (splitResult.userReply && context?.userId) {
+    if (splitResult.userReply && !isEmailMarker(splitResult.userReply) && context?.userId) {
       const signatureResult = await this.signatureDetector.removeSignature(splitResult.userReply, context.userId);
       userReplyClean = signatureResult.cleanedText;
 
       // Remove typed name from userReply
       const typedNameResult = await this.typedNameRemover.removeTypedName(userReplyClean, context.userId);
       userReplyClean = typedNameResult.cleanedText;
+
+      // If this was a forward and we have no content left after signature/name removal,
+      // mark it as forwarded content removed
+      if (splitResult.wasForwarded && userReplyClean.trim().length === 0) {
+        userReplyClean = splitResult.forwardMarker || '';
+      }
     }
-    
+
     // Extract only the user's written text from HTML if available
     let processedRichText: string | undefined;
 
@@ -92,24 +78,6 @@ export class EmailProcessor {
       userReply: userReplyClean,  // User's reply with signature and typed name removed
       respondedTo: splitResult.respondedTo
     };
-
-    // Log the completion of processing
-    if (context) {
-      const duration = Date.now() - startTime;
-      realTimeLogger.log(context.userId, {
-        userId: context.userId,
-        emailAccountId: context.emailAccountId,
-        level: 'info',
-        command: 'EMAIL_PARSE_COMPLETE',
-        data: {
-          duration,
-          parsed: {
-            messageId: parsedMail.messageId,
-            userReply: result.userTextPlain,
-          }
-        }
-      });
-    }
 
     return result;
   }

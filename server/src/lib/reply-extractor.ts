@@ -1,6 +1,7 @@
 import EmailReplyParser from 'email-reply-parser';
 import EmailForwardParser from 'email-forward-parser';
 import { convert as htmlToText } from 'html-to-text';
+import { EmailMarkers, isEmailMarker } from './email-markers';
 
 export interface ReplyExtractionResult {
   userReply: string;
@@ -9,6 +10,8 @@ export interface ReplyExtractionResult {
 export interface SplitReplyResult {
   userReply: string;
   respondedTo: string;
+  wasForwarded?: boolean;      // Whether the email was detected as a forward
+  forwardMarker?: string;       // The marker to use if content is empty after processing
 }
 
 export class ReplyExtractor {
@@ -31,31 +34,37 @@ export class ReplyExtractor {
     try {
       // Pre-process to handle special quote patterns that email-reply-parser misses
       const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
-      
+
+      // If preprocessing returned just a marker, return it directly
+      // Don't pass markers through email-reply-parser as they may be filtered out
+      if (isEmailMarker(preprocessed.trim())) {
+        return preprocessed.trim();
+      }
+
       // Parse the email body
       const parsed = this.parser.read(preprocessed);
-      
+
       // Post-process fragments to handle code continuation issues
       const fragments = this.mergeCodeContinuations(parsed.getFragments());
-      
+
       // Get only the non-quoted fragments
       // We now check both isQuoted() and isHidden() but with special handling
       const visibleFragments = fragments
         .filter(fragment => {
           // Always exclude quoted fragments
           if (fragment.isQuoted()) return false;
-          
+
           // For hidden fragments, check if it's actually a quote pattern
           if (fragment.isHidden()) {
             const content = fragment.getContent();
             return !this.isQuotePattern(content);
           }
-          
+
           return true;
         })
         .map(fragment => fragment.getContent())
         .join('\n');
-      
+
       return visibleFragments.trim();
     } catch (error: unknown) {
       // If parsing fails, return the original text
@@ -77,10 +86,18 @@ export class ReplyExtractor {
     try {
       // Pre-process to handle special quote patterns
       const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
-      
+
+      // If preprocessing returned just a marker, return it directly
+      // Don't pass markers through email-reply-parser as they may be filtered out
+      if (isEmailMarker(preprocessed.trim())) {
+        return {
+          userReply: preprocessed.trim()
+        };
+      }
+
       const parsed = this.parser.read(preprocessed);
       const fragments = this.mergeCodeContinuations(parsed.getFragments());
-      
+
       // Get only the non-quoted fragments with special handling for hidden fragments
       const visibleFragments = fragments
         .filter(fragment => {
@@ -93,7 +110,7 @@ export class ReplyExtractor {
         .map(fragment => fragment.getContent())
         .join('\n')
         .trim();
-      
+
       return {
         userReply: visibleFragments
       };
@@ -240,21 +257,13 @@ export class ReplyExtractor {
         // and replace the original forwarded content with a marker
         processed = forwardResult.message || '';
 
-        console.log('[ReplyExtractor] Forward detected:', {
-          subject: subject?.substring(0, 40),
-          inputLength: emailBody.length,
-          extractedLength: processed.length,
-          extracted: processed.substring(0, 100)
-        });
-
         // Add marker to indicate forwarded content was removed
         // Note: Don't use '>' prefix as email-reply-parser treats it as quoted content
         if (processed.trim()) {
-          processed += '\n\n[Forwarded-content-removed]';
+          processed += `\n\n${EmailMarkers.FORWARDED_CONTENT_REMOVED}`;
         } else {
-          // User added no message before forwarding - use empty string
-          // The system will handle this gracefully with zero vectors
-          processed = '';
+          // User added no message before forwarding - use marker
+          processed = EmailMarkers.FORWARDED_CONTENT_REMOVED;
         }
 
         // Return early - email-forward-parser already handled the forward
@@ -352,8 +361,35 @@ export class ReplyExtractor {
       // Pre-process to handle special quote patterns
       const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
 
+      // If preprocessing returned just a marker, return it directly
+      // Don't pass markers through email-reply-parser as they may be filtered out
+      if (isEmailMarker(preprocessed.trim())) {
+        const marker = preprocessed.trim();
+        return {
+          userReply: marker,
+          respondedTo: '',
+          wasForwarded: marker === EmailMarkers.FORWARDED_CONTENT_REMOVED,
+          forwardMarker: marker
+        };
+      }
+
+      // Check if preprocessed contains a marker that we need to preserve
+      // Markers are added by forward detection after user content
+      let preservedMarker = '';
+      let textToProcess = preprocessed;
+
+      // Check for markers at the end of the text
+      for (const marker of [EmailMarkers.FORWARDED_CONTENT_REMOVED, EmailMarkers.ATTACHMENT_ONLY]) {
+        if (preprocessed.includes(marker)) {
+          preservedMarker = marker;
+          // Remove the marker temporarily so email-reply-parser doesn't filter it
+          textToProcess = preprocessed.replace(new RegExp(`\\n\\n${this.escapeRegex(marker)}$`), '').trim();
+          break;
+        }
+      }
+
       // Parse the email body
-      const parsed = this.parser.read(preprocessed);
+      const parsed = this.parser.read(textToProcess);
 
       // Post-process fragments to handle code continuation issues
       const fragments = this.mergeCodeContinuations(parsed.getFragments());
@@ -374,18 +410,35 @@ export class ReplyExtractor {
         }
       });
 
-      const userReply = userFragments.join('\n').trim();
+      let userReply = userFragments.join('\n').trim();
       const respondedTo = quotedFragments.join('\n').trim();
+
+      // If we had a marker and no user content remains, use the marker
+      // This happens when forward contained only signature/quoted content
+      // NOTE: This check is for when email-reply-parser filtered everything out
+      // There's also a check in email-processor.ts after signature removal
+      if (preservedMarker && userReply.length === 0) {
+        userReply = preservedMarker;
+      }
 
       return {
         userReply,
-        respondedTo
+        respondedTo,
+        wasForwarded: !!preservedMarker && preservedMarker === EmailMarkers.FORWARDED_CONTENT_REMOVED,
+        forwardMarker: preservedMarker || undefined
       };
     } catch (error: unknown) {
       console.error('Failed to split email:', error);
       // Fallback: try to split on common patterns
       return this.fallbackSplit(emailBody);
     }
+  }
+
+  /**
+   * Escape special regex characters
+   */
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   /**

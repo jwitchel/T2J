@@ -16,6 +16,7 @@ import { simpleParser, ParsedMail } from 'mailparser';
 import { EmailMessageWithRaw } from './imap-operations';
 import { pool } from './db';
 import { EmailRepository } from './repositories/email-repository';
+import { EmailMarkers, hasActualUserContent } from './email-markers';
 
 /**
  * Validates that a raw RFC 5322 email message exists and is non-empty
@@ -142,7 +143,8 @@ export class EmailStorageService {
       });
 
       // Check if we have user content to generate vectors
-      const hasUserContent = processedContent.userReply && processedContent.userReply.trim() !== '';
+      // Special markers should not be treated as user content
+      const hasUserContent = hasActualUserContent(processedContent.userReply);
 
       let redactedUserReply = '';
       let features: EmailFeatures | null = null;
@@ -169,9 +171,17 @@ export class EmailStorageService {
           ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
           : new Array(768).fill(0);  // Incoming emails don't need style vectors
       } else {
-        // No user content - use the processed reply (which may be empty or a marker)
-        // This ensures forwarded emails without user text are stored correctly
-        redactedUserReply = processedContent.userReply || '';
+        // No user content - check if this is an attachment-only email
+        const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
+
+        if (hasAttachments) {
+          // Email has attachments but no body text - mark as attachment-only
+          redactedUserReply = EmailMarkers.ATTACHMENT_ONLY;
+        } else {
+          // No attachments either - use the processed reply (may be empty or marker)
+          redactedUserReply = processedContent.userReply || '';
+        }
+
         features = null;
         semanticVector = new Array(384).fill(0);  // Semantic embedding dimension
         styleVector = new Array(768).fill(0);     // Style embedding dimension
