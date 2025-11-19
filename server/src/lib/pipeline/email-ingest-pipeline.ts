@@ -276,7 +276,6 @@ Email Details:
           userId,
           emailAccountId,
           userReply: redactedUserReply,
-          rawText: email.textContent || '',  // Can be empty for HTML-only emails
           subject: email.subject,
           recipientEmail: recipient.address,
           relationshipType: relationship.relationship,

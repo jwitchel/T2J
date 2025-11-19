@@ -388,7 +388,6 @@ export class EmailStorageService {
           userId,
           emailAccountId,
           userReply: redactedUserReply,
-          rawText: parsedEmail.text!,  // Validated above at line 127
           subject,  // Empty string if no subject
           recipientEmail: otherPartyEmail,
           relationshipType: relationshipDetection.relationship,

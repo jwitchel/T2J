@@ -74,22 +74,6 @@ export class EmailProcessor {
       // Remove typed name from userReply
       const typedNameResult = await this.typedNameRemover.removeTypedName(userReplyClean, context.userId);
       userReplyClean = typedNameResult.cleanedText;
-      
-      if (typedNameResult.removedText) {
-        realTimeLogger.log(context.userId, {
-          userId: context.userId,
-          emailAccountId: context.emailAccountId,
-          level: 'info',
-          command: 'TYPED_NAME_REMOVED',
-          data: {
-            parsed: {
-              messageId: parsedMail.messageId,
-              removedText: typedNameResult.removedText,
-              matchedPattern: typedNameResult.matchedPattern
-            }
-          }
-        });
-      }
     }
     
     // Extract only the user's written text from HTML if available

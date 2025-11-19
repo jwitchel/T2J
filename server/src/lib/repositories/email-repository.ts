@@ -25,7 +25,6 @@ export interface SentEmailInsertParams {
   userId: string;
   emailAccountId: string;
   userReply: string;
-  rawText: string;
   subject: string;
   recipientEmail: string;
   relationshipType: string;
@@ -60,19 +59,18 @@ export class EmailRepository {
 
     const result = await this.pool.query(`
       INSERT INTO email_sent (
-        email_id, user_id, email_account_id, user_reply, raw_text,
+        email_id, user_id, email_account_id, user_reply,
         subject, recipient_email, relationship_type, word_count, sent_date,
         semantic_vector, style_vector, full_message,
         vector_generated_at, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW(), NOW())
       RETURNING id
     `, [
       normalizedEmailId,
       params.userId,
       params.emailAccountId,
       params.userReply,
-      params.rawText,
       params.subject,
       params.recipientEmail,
       params.relationshipType,
