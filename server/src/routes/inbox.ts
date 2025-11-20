@@ -259,12 +259,13 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
     }
 
     // Fetch email from PostgreSQL with action tracking and draft context
+    // JOIN through person_emails to get sender info
     const emailResult = await pool.query(`
       SELECT
         er.email_id as "emailId",
         er.subject,
-        er.sender_email as "senderEmail",
-        er.sender_name as "senderName",
+        pe.email_address as "senderEmail",
+        p.name as "senderName",
         er.received_date as "receivedDate",
         er.full_message as "fullMessage",
         er.word_count as "wordCount",
@@ -272,8 +273,14 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
         dt.id as "draftId",
         dt.context_data as "contextData",
         dt.created_at as "draftCreatedAt",
-        dt.generated_content as "draftBody"
+        dt.generated_content as "draftBody",
+        ur.relationship_type as "relationshipType",
+        pr.confidence as "relationshipConfidence"
       FROM email_received er
+      INNER JOIN person_emails pe ON er.sender_person_email_id = pe.id
+      INNER JOIN people p ON pe.person_id = p.id
+      LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = er.user_id AND pr.is_primary = true
+      LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
       LEFT JOIN email_action_tracking eat
         ON eat.message_id = TRIM(BOTH '<>' FROM er.email_id)
         AND eat.email_account_id = er.email_account_id
@@ -330,14 +337,20 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
           if (messages.length > 0) {
             const msg = messages[0];
 
-            // Try to fetch LLM response from draft_tracking
+            // Try to fetch LLM response from draft_tracking and get relationship from person_relationships
             let llmResponse = undefined;
             const draftResult = await pool.query(
-              `SELECT id, context_data, created_at, generated_content
-               FROM draft_tracking
-               WHERE user_id = $1 AND original_message_id = $2
+              `SELECT dt.id, dt.context_data, dt.created_at, dt.generated_content,
+                      ur.relationship_type, pr.confidence
+               FROM draft_tracking dt
+               LEFT JOIN person_emails pe ON pe.email_address = $3 AND pe.person_id IN (
+                 SELECT person_id FROM person_emails WHERE email_address = $3
+               )
+               LEFT JOIN person_relationships pr ON pr.person_id = pe.person_id AND pr.user_id = $1 AND pr.is_primary = true
+               LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+               WHERE dt.user_id = $1 AND dt.original_message_id = $2
                LIMIT 1`,
-              [userId, messageId]
+              [userId, messageId, msg.from]
             );
 
             if (draftResult.rows.length > 0) {
@@ -349,7 +362,10 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
                 providerId: contextData.providerId || 'unknown',
                 modelName: contextData.modelName || 'unknown',
                 draftId: draft.id || '',
-                relationship: contextData.relationship || { type: 'unknown', confidence: 0, detectionMethod: 'none' },
+                relationship: {
+                  type: draft.relationship_type || 'unknown',
+                  confidence: draft.confidence || 0
+                },  // From database person_relationships, not JSON
                 spamAnalysis: contextData.spamAnalysis || { isSpam: false, indicators: [], senderResponseCount: 0 },
                 body: draft.generated_content || ''  // Can be null for silent actions
               };
@@ -399,7 +415,10 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
         providerId: contextData.providerId || 'unknown',
         modelName: contextData.modelName || 'unknown',
         draftId: email.draftId || '',  // Can be empty for silent actions
-        relationship: contextData.relationship || { type: 'unknown', confidence: 0, detectionMethod: 'none' },
+        relationship: {
+          type: email.relationshipType || 'unknown',
+          confidence: email.relationshipConfidence || 0
+        },  // From database person_relationships, not JSON
         spamAnalysis: contextData.spamAnalysis || { isSpam: false, indicators: [], senderResponseCount: 0 },
         body: email.draftBody || ''  // Can be empty for silent actions
       };

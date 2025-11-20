@@ -64,7 +64,6 @@ export interface ProcessedEmail {
   relationship?: {
     type: string;
     confidence: number;
-    detectionMethod: string;
   };
   fullMessage: string;       // Raw RFC 5322 message format (complete email with headers)
 }
@@ -92,7 +91,6 @@ export interface LLMDraftResult {
   relationship: {
     type: string;
     confidence: number;
-    detectionMethod: string;
   };
   examplesUsed: string[];
   metadata: {
@@ -130,7 +128,6 @@ export interface DraftEmail {
   relationship: {
     type: string;
     confidence: number;
-    detectionMethod: string;
   };
   draftMetadata: {
     originalSubject?: string;
@@ -188,13 +185,11 @@ export interface EmailFeatures {
  * Fields:
  * - relationship: Detected relationship type (spam/spouse/family/colleague/friends/external)
  * - confidence: Detection confidence (0-1)
- * - method: Detection method (user-defined/database/configured/heuristic)
  * - personEmailId: FK to person_emails table for email storage
  */
 export interface RelationshipDetectorResult {
   relationship: string;
   confidence: number;
-  method: string;
   personEmailId: string;  // FK to person_emails(id)
 }
 

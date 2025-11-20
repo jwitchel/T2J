@@ -329,8 +329,7 @@ export class InboxProcessor {
         draftId: draft.id || '',
         relationship: draft.relationship || {
           type: 'professional',
-          confidence: 0.5,
-          detectionMethod: 'default'
+          confidence: 0.5
         },
         spamAnalysis: draft.draftMetadata.spamAnalysis,
         generatedContent: draft.body

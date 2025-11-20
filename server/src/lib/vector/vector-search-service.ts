@@ -311,49 +311,54 @@ export class VectorSearchService {
     }
     const fetchLimit = Math.max(VECTOR_FETCH_LIMIT, limit * 3);
 
-    let whereClause = 'WHERE user_id = $1';
+    let whereClause = 'WHERE es.user_id = $1';
     const queryParams: any[] = [params.userId];
     let paramCount = 1;
 
     if (params.filters?.relationship) {
       paramCount++;
-      whereClause += ` AND relationship_type = $${paramCount}`;
+      // Handle NULL relationships (persons with no relationship set default to 'external')
+      whereClause += ` AND COALESCE(ur.relationship_type, 'external') = $${paramCount}`;
       queryParams.push(params.filters.relationship);
     }
 
     if (params.filters?.recipientEmail) {
       paramCount++;
-      whereClause += ` AND recipient_email = $${paramCount}`;
+      whereClause += ` AND pe.email_address = $${paramCount}`;
       queryParams.push(params.filters.recipientEmail);
     }
 
     if (params.filters?.dateRange) {
       paramCount++;
-      whereClause += ` AND sent_date >= $${paramCount}`;
+      whereClause += ` AND es.sent_date >= $${paramCount}`;
       queryParams.push(params.filters.dateRange.start);
 
       paramCount++;
-      whereClause += ` AND sent_date <= $${paramCount}`;
+      whereClause += ` AND es.sent_date <= $${paramCount}`;
       queryParams.push(params.filters.dateRange.end);
     }
 
     if (params.filters?.excludeIds && params.filters.excludeIds.length > 0) {
       paramCount++;
-      whereClause += ` AND id != ALL($${paramCount})`;
+      whereClause += ` AND es.id != ALL($${paramCount})`;
       queryParams.push(params.filters.excludeIds);
     }
 
     // Only require semantic vector (style vector is optional for semantic-only search)
-    whereClause += ' AND semantic_vector IS NOT NULL';
+    whereClause += ' AND es.semantic_vector IS NOT NULL';
 
     const query = `
       SELECT
-        id, email_id, user_reply as text, semantic_vector, style_vector,
-        user_id, email_account_id, recipient_email, relationship_type,
-        subject, sent_date, word_count
-      FROM email_sent
+        es.id, es.email_id, es.user_reply as text, es.semantic_vector, es.style_vector,
+        es.user_id, es.email_account_id, pe.email_address as recipient_email,
+        ur.relationship_type, es.subject, es.sent_date, es.word_count
+      FROM email_sent es
+      INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
+      INNER JOIN people p ON pe.person_id = p.id
+      LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
+      LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
       ${whereClause}
-      ORDER BY sent_date DESC
+      ORDER BY es.sent_date DESC
       LIMIT $${paramCount + 1}
     `;
 

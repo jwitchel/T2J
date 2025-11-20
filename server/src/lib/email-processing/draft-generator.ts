@@ -13,6 +13,7 @@ import { pool } from '../db';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
 import { ActionHelpers } from '../email-actions';
+import { RelationshipType } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import type { Email as PostalMimeEmail, Address } from 'postal-mime';
 
@@ -30,7 +31,6 @@ interface EmailAddress {
 interface RelationshipResult {
   type: string;
   confidence: number;
-  detectionMethod: string;
 }
 
 /**
@@ -299,8 +299,8 @@ export class DraftGenerator {
 
       // Build final relationship
       const finalRelationship = ActionHelpers.isSpamAction(combinedMeta.recommendedAction)
-        ? { type: 'external', confidence: 0.9, detectionMethod: 'spam-override' }
-        : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence, detectionMethod: detectedRelationship.method };
+        ? { type: RelationshipType.SPAM, confidence: 0.9 }
+        : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence };
 
       return {
         body: responseMessage,

@@ -94,11 +94,16 @@ export class StyleAggregationService {
     relationshipType: string
   ): Promise<AggregatedStyle> {
     // Query email_sent from PostgreSQL for this user and relationship
+    // JOIN through person_emails and person_relationships to filter by relationship type
     const emailsResult = await this.customPool.query(`
-      SELECT user_reply, word_count, sent_date
-      FROM email_sent
-      WHERE user_id = $1 AND relationship_type = $2
-      ORDER BY sent_date DESC
+      SELECT es.user_reply, es.word_count, es.sent_date
+      FROM email_sent es
+      INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
+      INNER JOIN people p ON pe.person_id = p.id
+      INNER JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
+      INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+      WHERE es.user_id = $1 AND ur.relationship_type = $2
+      ORDER BY es.sent_date DESC
       LIMIT $3
     `, [userId, relationshipType, MAX_EMAILS_TO_ANALYZE]);
 

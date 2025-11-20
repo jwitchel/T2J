@@ -216,9 +216,7 @@ export class UserRelationshipService {
       suggestions.push({
         type: detection.relationship,
         confidence: detection.confidence,
-        reason: detection.method === 'database' ? 'Previously assigned' : 
-                detection.method === 'user-defined' ? 'User defined' : 
-                'Based on email domain and context'
+        reason: 'Based on email history and context'
       });
     }
     

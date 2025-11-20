@@ -218,7 +218,7 @@ export class EmailIngestPipeline {
     return await withTransaction(pool, async (client) => {
       // Detect relationship (creates/finds person and returns personEmailId)
       // Use existing relationship if provided (e.g., from test data) for performance
-      let relationship: { relationship: string; confidence: number; method: string; personEmailId: string };
+      let relationship: { relationship: string; confidence: number; personEmailId: string };
 
       if (email.relationship?.type) {
         // Relationship already provided - find/create person with this relationship
@@ -240,7 +240,6 @@ export class EmailIngestPipeline {
         relationship = {
           relationship: email.relationship.type,
           confidence: email.relationship.confidence,
-          method: email.relationship.detectionMethod,
           personEmailId: primaryEmail.id
         };
       } else {

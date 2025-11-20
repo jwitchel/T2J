@@ -54,7 +54,6 @@ export interface SaveEmailParams {
     relationship: {
       type: string;
       confidence: number;
-      detectionMethod: string;
     };
     spamAnalysis: any;
     generatedContent: string;
@@ -295,7 +294,6 @@ export class EmailStorageService {
                   meta: params.llmResponse.meta,
                   providerId: params.llmResponse.providerId,
                   modelName: params.llmResponse.modelName,
-                  relationship: params.llmResponse.relationship,
                   spamAnalysis: params.llmResponse.spamAnalysis  // Include spam analysis
                 })
               ]);

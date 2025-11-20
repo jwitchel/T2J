@@ -22,6 +22,7 @@ import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
 import { stripAttachments } from '../email-attachment-stripper';
+import { RelationshipType } from '../relationships/relationship-detector';
 
 /**
  * User context needed for email processing
@@ -155,9 +156,8 @@ export class EmailProcessingService {
         }
       },
       relationship: {
-        type: 'external',
-        confidence: 0.9,
-        detectionMethod: 'spam-detection'
+        type: RelationshipType.SPAM,
+        confidence: 0.9
       },
       draftMetadata: {
         exampleCount: 0,
