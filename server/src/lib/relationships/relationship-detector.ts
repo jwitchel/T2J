@@ -1,6 +1,7 @@
 import { RelationshipDetectorResult } from '../pipeline/types';
 import { personService as defaultPersonService, PersonService } from './person-service';
 import { pool } from '../db';
+import { NameExtractor } from '../utils/name-extractor';
 
 /**
  * Well-defined relationship types used throughout the system
@@ -49,6 +50,7 @@ export namespace RelationshipType {
 export interface DetectRelationshipParams {
   userId: string;
   recipientEmail: string;
+  recipientName?: string;  // Optional: Recipient's full name from email headers
   replyToEmail?: string;  // Optional: Reply-To header address (checked first for relationship detection)
   subject?: string;
   historicalContext?: {
@@ -230,9 +232,12 @@ export class RelationshipDetector {
       // Create person record with configured relationship
       if (!person) {
         try {
+          // Extract name from email address or use formatted email prefix as fallback
+          const personName = NameExtractor.extractName(matchedEmail, params.recipientName);
+
           await this.personService.findOrCreatePerson({
             userId,
-            name: matchedEmail.split('@')[0],
+            name: personName,
             emailAddress: matchedEmail,
             relationshipType: configuredMatch.relationship,
             confidence: configuredMatch.confidence
@@ -287,9 +292,12 @@ export class RelationshipDetector {
     if (!person) {
       try {
         const emailToStore = replyToEmail || recipientEmail;
+        // Extract name from email address or use formatted email prefix as fallback
+        const personName = NameExtractor.extractName(emailToStore, params.recipientName);
+
         await this.personService.findOrCreatePerson({
           userId,
-          name: email.split('@')[0], // Use email prefix as initial name
+          name: personName,
           emailAddress: emailToStore,
           relationshipType: relationship,
           confidence

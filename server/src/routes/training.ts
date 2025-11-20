@@ -267,6 +267,11 @@ router.post('/wipe', requireAuth, async (req, res): Promise<void> => {
       DELETE FROM draft_tracking WHERE user_id = $1
     `, [userId]);
 
+    // Delete all people (CASCADE will automatically delete person_emails and person_relationships)
+    await pool.query(`
+      DELETE FROM people WHERE user_id = $1
+    `, [userId]);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Wipe error:', error);

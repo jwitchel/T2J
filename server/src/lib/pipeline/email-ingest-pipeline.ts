@@ -207,6 +207,7 @@ export class EmailIngestPipeline {
         relationship = await this.relationshipDetector.detectRelationship({
           userId,
           recipientEmail: recipient.address || '',
+          recipientName: recipient.name,
           subject: email.subject,
           historicalContext: {
             familiarityLevel: features.relationshipHints.familiarityLevel,

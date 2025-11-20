@@ -377,6 +377,7 @@ export class EmailStorageService {
       const relationshipDetection = await this.relationshipDetector.detectRelationship({
         userId,
         recipientEmail: otherPartyEmail,
+        recipientName: otherPartyName,
         subject,
         historicalContext: features ? {
           familiarityLevel: features.relationshipHints.familiarityLevel,

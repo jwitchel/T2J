@@ -212,9 +212,11 @@ export class DraftGenerator {
       // Get the detected relationship
       const t1 = Date.now();
       const replyToEmail = processedEmail.replyTo[0]?.address;
+      const recipientName = processedEmail.from[0]?.name;
       const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
         userId,
         recipientEmail,
+        recipientName,
         replyToEmail
       });
       console.log(`[DraftGenerator] ⏱️  detectRelationship: ${Date.now() - t1}ms`);
