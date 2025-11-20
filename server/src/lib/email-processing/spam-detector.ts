@@ -67,13 +67,15 @@ export class SpamDetector {
 
   /**
    * Get response count for sender across ALL user's email accounts
+   * Uses JOIN through person_emails to find responses to this sender
    * @private
    */
   private async getResponseCount(userId: string, senderEmail: string): Promise<number> {
     const result = await pool.query(
       `SELECT COUNT(*)::int as total
-       FROM email_sent
-       WHERE user_id = $1 AND recipient_email = $2`,
+       FROM email_sent es
+       INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
+       WHERE es.user_id = $1 AND pe.email_address = $2`,
       [userId, senderEmail.toLowerCase()]
     );
 

@@ -179,10 +179,23 @@ export interface EmailFeatures {
   };
 }
 
+/**
+ * Result from relationship detection with person_emails FK
+ *
+ * Purpose: Return relationship type and person_emails.id for email storage FK
+ * Used by: RelationshipDetector, EmailStorageService
+ *
+ * Fields:
+ * - relationship: Detected relationship type (spam/spouse/family/colleague/friends/external)
+ * - confidence: Detection confidence (0-1)
+ * - method: Detection method (user-defined/database/configured/heuristic)
+ * - personEmailId: FK to person_emails table for email storage
+ */
 export interface RelationshipDetectorResult {
   relationship: string;
   confidence: number;
   method: string;
+  personEmailId: string;  // FK to person_emails(id)
 }
 
 export interface RelationshipProfile {

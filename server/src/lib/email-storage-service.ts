@@ -17,6 +17,7 @@ import { EmailMessageWithRaw } from './imap-operations';
 import { pool } from './db';
 import { EmailRepository } from './repositories/email-repository';
 import { EmailMarkers, hasActualUserContent } from './email-markers';
+import { withTransaction } from './db/transaction-utils';
 
 /**
  * Validates that a raw RFC 5322 email message exists and is non-empty
@@ -356,24 +357,18 @@ export class EmailStorageService {
       otherPartyName
     } = params;
 
-    try {
+    // Use a database transaction to ensure person creation and email insertion are atomic
+    return await withTransaction(pool, async (client) => {
       // Generate unique email_id (the email's message-id)
       const messageId = emailData.messageId!;
 
       // Validate that we have the raw message (required for proper storage)
       validateRawMessage(emailData.fullMessage, `EmailStorage - ${messageId}`);
 
-      // Check if already exists (deduplication) using repository
-      const exists = emailType === 'sent'
-        ? await this.emailRepository.sentEmailExists(messageId, userId, otherPartyEmail)
-        : await this.emailRepository.receivedEmailExists(messageId, userId, emailAccountId);
-
-      if (exists) {
-        return false;
-      }
-
       // Detect relationship (fail fast - throws on error)
       // Use default values if features are not available (emails without user content)
+      // This creates/finds the person record and returns the person_email_id
+      // Pass client to ensure person creation is part of the transaction
       const relationshipDetection = await this.relationshipDetector.detectRelationship({
         userId,
         recipientEmail: otherPartyEmail,
@@ -390,9 +385,20 @@ export class EmailStorageService {
           hasProfessionalMarkers: false,
           formalityScore: 0.5
         }
-      });
+      }, client);
 
-      // Store to PostgreSQL
+      // Check if already exists (deduplication) using repository - use transaction client
+      const exists = emailType === 'sent'
+        ? await this.emailRepository.sentEmailExists(messageId, userId, relationshipDetection.personEmailId, client)
+        : await this.emailRepository.receivedEmailExists(messageId, userId, emailAccountId, client);
+
+      if (exists) {
+        // Email already exists - commit person creation (if any) and skip
+        // Note: commitAndRelease will be handled by withTransaction wrapper
+        return false;
+      }
+
+      // Store to PostgreSQL - pass client to ensure it's part of the transaction
       if (emailType === 'sent') {
         await this.emailRepository.insertSentEmail({
           emailId: messageId,
@@ -400,49 +406,40 @@ export class EmailStorageService {
           emailAccountId,
           userReply: redactedUserReply,
           subject,  // Empty string if no subject
-          recipientEmail: otherPartyEmail,
-          relationshipType: relationshipDetection.relationship,
+          recipientPersonEmailId: relationshipDetection.personEmailId,  // FK to person_emails
           wordCount: features?.stats.wordCount || 0,
           sentDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
-        });
+        }, client);
       } else {
-        // Incoming email - use email address as fallback if sender name is missing
-        const finalSenderName = (otherPartyName && otherPartyName.trim() !== '')
-          ? otherPartyName
-          : otherPartyEmail;
-
         await this.emailRepository.insertReceivedEmail({
           emailId: messageId,
           userId,
           emailAccountId,
           rawText: parsedEmail.text!,  // Validated above at line 127
           subject,  // Empty string if no subject
-          senderEmail: otherPartyEmail,
-          senderName: finalSenderName,  // Use email as fallback if name missing
+          senderPersonEmailId: relationshipDetection.personEmailId,  // FK to person_emails
           wordCount: features?.stats.wordCount || 0,
           receivedDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
-        });
+        }, client);
       }
 
       return true;
-
-    } catch (error: any) {
-      // Handle duplicate key constraint silently (expected when re-loading emails)
+    }).catch((error: any) => {
+      // Handle duplicate key constraint - race condition where another transaction inserted first
       if (error?.code === '23505' && error?.constraint?.includes('email_id_key')) {
-        // Duplicate email_id - this is expected, skip silently
+        // Another transaction beat us to it - our person creation was rolled back
+        // (the other transaction already created person, so no data loss)
         return false;
       }
-
-      // Log other unexpected errors
-      console.error('[EmailStorage] Error saving email entry:', error);
-      return false;
-    }
+      // All other errors re-throw
+      throw error;
+    });
   }
 
 }
