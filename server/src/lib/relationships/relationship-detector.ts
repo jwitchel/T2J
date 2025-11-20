@@ -1,3 +1,4 @@
+import { PoolClient } from 'pg';
 import { RelationshipDetectorResult } from '../pipeline/types';
 import { personService as defaultPersonService, PersonService } from './person-service';
 import { pool } from '../db';
@@ -7,6 +8,7 @@ import { NameExtractor } from '../utils/name-extractor';
  * Well-defined relationship types used throughout the system
  */
 export enum RelationshipType {
+  SPAM = 'spam',
   SPOUSE = 'spouse',
   FAMILY = 'family',
   COLLEAGUE = 'colleague',
@@ -20,18 +22,20 @@ export enum RelationshipType {
 export namespace RelationshipType {
   /**
    * Priority order for relationship types (lower number = higher priority)
+   * SPAM has lowest priority (highest number) so it's always overridden by other relationships
    */
   const PRIORITY: Record<string, number> = {
     [RelationshipType.SPOUSE]: 1,
     [RelationshipType.FAMILY]: 2,
     [RelationshipType.COLLEAGUE]: 3,
     [RelationshipType.FRIENDS]: 4,
-    [RelationshipType.EXTERNAL]: 5
+    [RelationshipType.EXTERNAL]: 5,
+    [RelationshipType.SPAM]: 6
   };
 
   /**
    * Select the higher priority relationship match
-   * Priority: spouse > family > colleague > friends > external
+   * Priority: spouse > family > colleague > friends > external > spam
    */
   export function selectHigherPriorityMatch(
     match1: { relationship: string; confidence: number } | null,
@@ -178,7 +182,12 @@ export class RelationshipDetector {
     return null;
   }
 
-  public async detectRelationship(params: DetectRelationshipParams): Promise<RelationshipDetectorResult> {
+  /**
+   * Detect relationship type for an email contact
+   * @param params - Detection parameters
+   * @param client - Optional transaction client. If provided, operation is part of transaction.
+   */
+  public async detectRelationship(params: DetectRelationshipParams, client?: PoolClient): Promise<RelationshipDetectorResult> {
     const { userId, recipientEmail, replyToEmail } = params;
 
     // Check BOTH Reply-To and From addresses (not just fallback)
@@ -186,6 +195,11 @@ export class RelationshipDetector {
     // We want to detect the relationship for either address
 
     // Step 1: Check database for both addresses (prefer Reply-To if both exist)
+    // NOTE: This lookup happens outside the transaction (if client is provided).
+    // This is acceptable because:
+    // 1. If person exists, we just return existing data (no race condition risk)
+    // 2. If person doesn't exist, findOrCreatePerson() handles race with ON CONFLICT
+    // 3. Worst case: two requests create person simultaneously, ON CONFLICT ensures one wins
     let person = null;
 
     if (replyToEmail) {
@@ -201,11 +215,8 @@ export class RelationshipDetector {
       const primaryRel = person.relationships.find(r => r.is_primary)
         || person.relationships.sort((a, b) => b.confidence - a.confidence)[0];
 
-      return {
-        relationship: primaryRel.relationship_type,
-        confidence: primaryRel.confidence,
-        method: primaryRel.user_set ? 'user-defined' : 'database'
-      };
+      // Return early - will extract primaryEmail at end
+      return this._buildResult(person, primaryRel.relationship_type, primaryRel.confidence);
     }
 
     // Step 2: Check configured relationships for BOTH addresses
@@ -231,27 +242,20 @@ export class RelationshipDetector {
 
       // Create person record with configured relationship
       if (!person) {
-        try {
-          // Extract name from email address or use formatted email prefix as fallback
-          const personName = NameExtractor.extractName(matchedEmail, params.recipientName);
+        // Extract name from email address or use formatted email prefix as fallback
+        const personName = NameExtractor.extractName(matchedEmail, params.recipientName);
 
-          await this.personService.findOrCreatePerson({
-            userId,
-            name: personName,
-            emailAddress: matchedEmail,
-            relationshipType: configuredMatch.relationship,
-            confidence: configuredMatch.confidence
-          });
-        } catch (error: unknown) {
-          console.error('Failed to create person record:', error);
-        }
+        person = await this.personService.findOrCreatePerson({
+          userId,
+          name: personName,
+          emailAddress: matchedEmail,
+          relationshipType: configuredMatch.relationship,
+          confidence: configuredMatch.confidence
+        }, client);
       }
 
-      return {
-        relationship: configuredMatch.relationship,
-        confidence: configuredMatch.confidence,
-        method: 'configured'
-      };
+      // Return with person data - will extract primaryEmail at end
+      return this._buildResult(person, configuredMatch.relationship, configuredMatch.confidence);
     }
 
     // Step 3: Use domain-based heuristics (prefer Reply-To if available)
@@ -287,31 +291,44 @@ export class RelationshipDetector {
         confidence = Math.max(confidence, 0.7);
       }
     }
-    
+
     // Create person record for future use (only if we didn't find them)
     if (!person) {
-      try {
-        const emailToStore = replyToEmail || recipientEmail;
-        // Extract name from email address or use formatted email prefix as fallback
-        const personName = NameExtractor.extractName(emailToStore, params.recipientName);
+      const emailToStore = replyToEmail || recipientEmail;
+      // Extract name from email address or use formatted email prefix as fallback
+      const personName = NameExtractor.extractName(emailToStore, params.recipientName);
 
-        await this.personService.findOrCreatePerson({
-          userId,
-          name: personName,
-          emailAddress: emailToStore,
-          relationshipType: relationship,
-          confidence
-        });
-      } catch (error: unknown) {
-        // Log but don't fail - the detection still worked
-        console.error('Failed to create person record:', error);
-      }
+      person = await this.personService.findOrCreatePerson({
+        userId,
+        name: personName,
+        emailAddress: emailToStore,
+        relationshipType: relationship,
+        confidence
+      }, client);
     }
-    
+
+    // Return with person data - will extract primaryEmail at end
+    return this._buildResult(person, relationship, confidence);
+  }
+
+  /**
+   * Helper to build RelationshipDetectorResult from person and relationship data
+   * Centralizes primaryEmail extraction logic
+   */
+  private _buildResult(person: any, relationship: string, confidence: number): RelationshipDetectorResult {
+    if (!person || !person.emails || person.emails.length === 0) {
+      throw new Error(`Failed to create or retrieve person record. Cannot proceed without person_email_id`);
+    }
+
+    const primaryEmail = person.emails.find((e: any) => e.is_primary) || person.emails[0];
+    if (!primaryEmail) {
+      throw new Error(`Person ${person.id} has no email addresses`);
+    }
+
     return {
       relationship,
       confidence,
-      method: 'heuristic'
+      personEmailId: primaryEmail.id
     };
   }
 }

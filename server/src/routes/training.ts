@@ -318,21 +318,26 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
 
     // Get ALL sent emails for the user across ALL accounts and relationships from PostgreSQL
     // (Pattern analysis uses sent emails to learn the user's writing style)
+    // JOIN through person_emails and person_relationships to get recipient and relationship info
     const emailsResult = await pool.query(`
       SELECT
-        id,
-        user_id as "userId",
-        email_account_id as "emailAccountId",
-        user_reply as "userReply",
-        sent_date as "sentDate",
-        relationship_type as relationship,
-        recipient_email as "recipientEmail",
-        subject,
-        email_id as "emailId"
-      FROM email_sent
-      WHERE user_id = $1
-        AND semantic_vector IS NOT NULL
-      ORDER BY sent_date DESC
+        es.id,
+        es.user_id as "userId",
+        es.email_account_id as "emailAccountId",
+        es.user_reply as "userReply",
+        es.sent_date as "sentDate",
+        ur.relationship_type as relationship,
+        pe.email_address as "recipientEmail",
+        es.subject,
+        es.email_id as "emailId"
+      FROM email_sent es
+      INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
+      INNER JOIN people p ON pe.person_id = p.id
+      LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
+      LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+      WHERE es.user_id = $1
+        AND es.semantic_vector IS NOT NULL
+      ORDER BY es.sent_date DESC
       LIMIT 10000
     `, [userId]);
 
