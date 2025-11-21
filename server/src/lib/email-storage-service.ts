@@ -12,7 +12,7 @@ import { EmailProcessor } from './email-processor';
 import { RelationshipDetector } from './relationships/relationship-detector';
 import { nameRedactor } from './name-redactor';
 import { extractEmailFeatures, EmailFeatures } from './pipeline/types';
-import { simpleParser, ParsedMail } from 'mailparser';
+import { ParsedMail } from 'mailparser';
 import { EmailMessageWithRaw } from './imap-operations';
 import { pool } from './db';
 import { EmailRepository } from './repositories/email-repository';
@@ -98,6 +98,14 @@ export class EmailStorageService {
    * Save an email to PostgreSQL with complete metadata and vector embeddings
    * For sent emails: Creates one entry per recipient (TO/CC/BCC)
    * For incoming emails: Creates one entry with sender
+   *
+   * TODO: Implement saveEmailBatch() method to batch embedding generation:
+   * - Collect all email texts first
+   * - Call embeddingService.embedBatch() once for semantic (50/batch)
+   * - Call styleEmbeddingService.embedBatch() once for style (50/batch)
+   * - Map vectors back to emails
+   * - Save with pre-computed vectors
+   * Expected improvement: 50-70% reduction in embedding time
    */
   public async saveEmail(params: SaveEmailParams): Promise<SaveEmailResult> {
     const { userId, emailAccountId, emailData, emailType } = params;
@@ -121,8 +129,8 @@ export class EmailStorageService {
         };
       }
 
-      // Parse raw message with mailparser
-      const parsedEmail = await simpleParser(emailData.fullMessage);
+      // Use pre-parsed email from IMAP layer (avoids duplicate parsing)
+      const parsedEmail = emailData.parsed;
 
       // Validate required parsed fields (fail fast)
       if (!parsedEmail.text || parsedEmail.text.trim() === '') {

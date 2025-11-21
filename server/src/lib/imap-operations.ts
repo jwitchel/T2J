@@ -2,7 +2,7 @@ import { ImapConnection, ImapConnectionError } from './imap-connection';
 import { imapPool } from './imap-pool';
 import { decryptPassword, decrypt, encrypt } from './crypto';
 import { pool } from './db';
-import { simpleParser } from 'mailparser';
+import { simpleParser, ParsedMail } from 'mailparser';
 import { OAuthTokenService } from './oauth-token-service';
 import { getActiveContext, hasActiveContextFor, setContextConnection } from './imap-context';
 import { sharedConnection as redis } from './redis-connection';
@@ -46,6 +46,7 @@ export interface EmailMessage {
 
 export interface EmailMessageWithRaw extends EmailMessage {
   fullMessage: string;
+  parsed: ParsedMail;  // Pre-parsed email to avoid duplicate parsing
 }
 
 export interface SearchCriteria {
@@ -673,7 +674,8 @@ export class ImapOperations {
             date: parsedEmail.date || msg.date || new Date(),
             flags: msg.flags,
             size: msg.size,
-            fullMessage: bodyString
+            fullMessage: bodyString,
+            parsed: parsedEmail  // Include parsed email to avoid duplicate parsing downstream
           };
           return result;
         } catch (err) {
@@ -740,7 +742,10 @@ export class ImapOperations {
         throw new ImapConnectionError('Unexpected body type', 'INVALID_BODY_TYPE');
       }
       
-      // Return without parsing - much faster for emails with attachments
+      // Parse email (required by EmailMessageWithRaw interface)
+      // This is necessary since downstream code expects a parsed email
+      const parsedEmail = await simpleParser(bodyString);
+
       return {
         uid: msg.uid,
         messageId: msg.headers?.messageId?.[0],
@@ -750,7 +755,8 @@ export class ImapOperations {
         date: msg.date,
         flags: msg.flags,
         size: msg.size,
-        fullMessage: bodyString  // This is the complete RFC 5322 message with headers and body
+        fullMessage: bodyString,  // This is the complete RFC 5322 message with headers and body
+        parsed: parsedEmail  // Include parsed email for downstream processing
       };
     } finally {
       if (!preserveConnection) {

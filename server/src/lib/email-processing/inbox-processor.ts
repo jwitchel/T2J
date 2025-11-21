@@ -13,6 +13,7 @@ import { emailStorageService } from '../email-storage-service';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../db';
 import { ActionHelpers } from '../email-actions';
+import { simpleParser } from 'mailparser';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -306,6 +307,9 @@ export class InboxProcessor {
     draft: DraftEmail
   ): Promise<void> {
     try {
+      // Parse email for storage (inbox emails don't come pre-parsed from IMAP)
+      const parsed = await simpleParser(context.message.fullMessage);
+
       // Always store the ORIGINAL fullMessage (complete, unedited, with all attachments)
       // This preserves the complete email for drafts, replies, and future processing
       const emailData = {
@@ -318,7 +322,8 @@ export class InboxProcessor {
         cc: [],
         date: new Date(),
         flags: [],
-        size: context.message.fullMessage.length
+        size: context.message.fullMessage.length,
+        parsed  // Include parsed email for storage service
       };
 
       const llmResponse = {

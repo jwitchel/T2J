@@ -175,9 +175,6 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
             });
           }
 
-          // Small delay to prevent overwhelming the system
-          await new Promise(resolve => setTimeout(resolve, 10));
-
         } catch (err) {
           errors++;
           console.error(`[Training] Error processing email ${i + 1}:`, err);
