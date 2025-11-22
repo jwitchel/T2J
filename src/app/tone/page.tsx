@@ -245,6 +245,7 @@ export default function TonePage() {
     }
 
     setIsLoadingEmails(true)
+    success(`Loading ${emailCount} emails...`)
     try {
       const response = await fetch(`${apiUrl}/api/training/load-sent-emails`, {
         method: 'POST',
@@ -258,7 +259,7 @@ export default function TonePage() {
 
       if (response.ok) {
         const data = await response.json()
-        success(`Loading ${data.count || emailCount} emails...`)
+        success(`Loaded ${data.count || emailCount} emails successfully`)
         setTimeout(() => fetchToneData(), 2000)
       } else {
         const data = await response.json()
@@ -296,6 +297,7 @@ export default function TonePage() {
 
   const handleAnalyzePatterns = async () => {
     setIsAnalyzing(true)
+    success('Analyzing email patterns...')
     try {
       const response = await fetch(`${apiUrl}/api/training/analyze-patterns`, {
         method: 'POST',
@@ -305,7 +307,7 @@ export default function TonePage() {
       })
 
       if (response.ok) {
-        success('Pattern analysis started...')
+        success('Pattern analysis completed successfully')
         setTimeout(() => fetchToneData(), 2000)
       } else {
         const data = await response.json()
