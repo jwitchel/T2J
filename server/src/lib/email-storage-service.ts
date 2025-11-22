@@ -95,6 +95,45 @@ export class EmailStorageService {
   }
 
   /**
+   * Process user reply and determine if email should be saved
+   * Returns null if email should be skipped, otherwise returns the processed reply
+   *
+   * @param processedContent - Content from email processor
+   * @param parsedEmail - Parsed email for attachment checking
+   * @returns Processed user reply or null if should skip
+   */
+  private _processUserReply(
+    processedContent: { userReply: string },
+    parsedEmail: ParsedMail
+  ): string | null {
+    const hasUserContent = hasActualUserContent(processedContent.userReply);
+
+    if (hasUserContent) {
+      // Redact names and trim
+      const redactionResult = nameRedactor.redactNames(processedContent.userReply);
+      const redactedUserReply = redactionResult.text.trim();
+
+      // If after trimming we have only whitespace, skip this email
+      if (redactedUserReply === '') {
+        return null;
+      }
+
+      return redactedUserReply;
+    } else {
+      // No user content - check if this is an attachment-only email
+      const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
+
+      if (hasAttachments) {
+        // Email has attachments but no body text - mark as attachment-only
+        return EmailMarkers.ATTACHMENT_ONLY;
+      } else {
+        // No content and no attachments - skip this email
+        return null;
+      }
+    }
+  }
+
+  /**
    * Save multiple emails in batch with optimized embedding generation
    * Batches embedding generation to reduce overhead and improve performance
    *
@@ -141,29 +180,18 @@ export class EmailStorageService {
         emailAccountId: params.emailAccountId
       });
 
-      const hasUserContent = hasActualUserContent(processedContent.userReply);
-
-      let redactedUserReply = '';
-      let features: EmailFeatures | null = null;
-
-      if (hasUserContent) {
-        const redactionResult = nameRedactor.redactNames(processedContent.userReply);
-        redactedUserReply = redactionResult.text.trim();
-        // If after trimming we have only whitespace, set to empty string
-        if (redactedUserReply === '') {
-          redactedUserReply = '';
-          features = null;
-        } else {
-          features = extractEmailFeatures(redactedUserReply, {
-            email: emailData.from || '',
-            name: ''
-          });
-        }
-      } else {
-        // Handle attachment-only or empty emails
-        const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
-        redactedUserReply = hasAttachments ? EmailMarkers.ATTACHMENT_ONLY : (processedContent.userReply || '').trim() || '';
+      // Process and validate user reply
+      const redactedUserReply = this._processUserReply(processedContent, parsedEmail);
+      if (redactedUserReply === null) {
+        // Skip this email - no content
+        continue;
       }
+
+      const hasUserContent = hasActualUserContent(processedContent.userReply);
+      const features = hasUserContent ? extractEmailFeatures(redactedUserReply, {
+        email: emailData.from || '',
+        name: ''
+      }) : null;
 
       processedEmails.push({
         params,
@@ -433,54 +461,40 @@ export class EmailStorageService {
         emailAccountId
       });
 
-      // Check if we have user content to generate vectors
-      // Special markers should not be treated as user content
-      const hasUserContent = hasActualUserContent(processedContent.userReply);
+      // Process and validate user reply
+      const redactedUserReply = this._processUserReply(processedContent, parsedEmail);
+      if (redactedUserReply === null) {
+        // Skip this email - no content
+        return {
+          success: true,
+          skipped: true,
+          error: 'Email has no content'
+        };
+      }
 
-      let redactedUserReply = '';
+      // Check if we have user content to generate vectors
+      const hasUserContent = hasActualUserContent(processedContent.userReply);
       let features: EmailFeatures | null = null;
       let semanticVector: number[] = [];
       let styleVector: number[] = [];
 
       if (hasUserContent) {
-        // Redact names from user reply
-        const redactionResult = nameRedactor.redactNames(processedContent.userReply);
-        redactedUserReply = redactionResult.text.trim();
+        // Extract features from redacted text
+        features = extractEmailFeatures(redactedUserReply, {
+          email: emailData.from || '',
+          name: ''
+        });
 
-        // If after trimming we have only whitespace, treat as no content
-        if (redactedUserReply === '') {
-          redactedUserReply = '';
-          features = null;
-          semanticVector = new Array(384).fill(0);
-          styleVector = new Array(768).fill(0);
-        } else {
-          // Extract features from redacted text
-          features = extractEmailFeatures(redactedUserReply, {
-            email: emailData.from || '',
-            name: ''
-          });
+        // Generate semantic embedding from redacted user reply
+        const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
+        semanticVector = embeddingResult.vector;
 
-          // Generate semantic embedding from redacted user reply
-          const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
-          semanticVector = embeddingResult.vector;
-
-          // Generate style embedding (only for sent emails)
-          styleVector = emailType === 'sent'
-            ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
-            : new Array(768).fill(0);  // Incoming emails don't need style vectors
-        }
+        // Generate style embedding (only for sent emails)
+        styleVector = emailType === 'sent'
+          ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
+          : new Array(768).fill(0);  // Incoming emails don't need style vectors
       } else {
-        // No user content - check if this is an attachment-only email
-        const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
-
-        if (hasAttachments) {
-          // Email has attachments but no body text - mark as attachment-only
-          redactedUserReply = EmailMarkers.ATTACHMENT_ONLY;
-        } else {
-          // No attachments either - use the processed reply (may be empty or marker)
-          redactedUserReply = (processedContent.userReply || '').trim() || '';
-        }
-
+        // Attachment-only email (already validated by _processUserReply)
         features = null;
         semanticVector = new Array(384).fill(0);  // Semantic embedding dimension
         styleVector = new Array(768).fill(0);     // Style embedding dimension
