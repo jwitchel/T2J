@@ -440,7 +440,16 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     // Analyze patterns for each relationship AND aggregate
     const allPatterns: Record<string, any> = {};
     let totalEmailsAnalyzed = 0;
-    
+
+    // Initialize accumulator for aggregate patterns (cumulative tracking)
+    const aggregateAccumulator = {
+      sentenceLengths: [] as number[],
+      paragraphCounts: new Map<string, number>(),
+      openingCounts: new Map<string, number>(),
+      valedictionCounts: new Map<string, number>(),
+      totalEmails: 0
+    };
+
     try {
       // First, analyze patterns for each relationship
       for (const relationship of relationships) {
@@ -511,60 +520,45 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
           relationship,
           emailsForAnalysis.length
         );
-        
+
         allPatterns[relationship] = patterns;
         totalEmailsAnalyzed += emailsForAnalysis.length;
+
+        // Accumulate data for aggregate calculation
+        if (patterns.sentencePatterns.rawSentenceLengths) {
+          aggregateAccumulator.sentenceLengths.push(...patterns.sentencePatterns.rawSentenceLengths);
+        }
+
+        patterns.paragraphPatterns.forEach((p: any) => {
+          const currentCount = aggregateAccumulator.paragraphCounts.get(p.type) || 0;
+          aggregateAccumulator.paragraphCounts.set(p.type, currentCount + (p.percentage / 100) * emailsForAnalysis.length);
+        });
+
+        patterns.openingPatterns.forEach((o: any) => {
+          const currentCount = aggregateAccumulator.openingCounts.get(o.pattern) || 0;
+          aggregateAccumulator.openingCounts.set(o.pattern, currentCount + o.percentage * emailsForAnalysis.length);
+        });
+
+        patterns.valediction.forEach((v: any) => {
+          const currentCount = aggregateAccumulator.valedictionCounts.get(v.phrase) || 0;
+          aggregateAccumulator.valedictionCounts.set(v.phrase, currentCount + (v.percentage / 100) * emailsForAnalysis.length);
+        });
+
+        aggregateAccumulator.totalEmails += emailsForAnalysis.length;
       }
-      
-      // Now analyze aggregate patterns (all emails combined) - only emails with userReply
-      const allEmailsForAnalysis = await Promise.all(allEmails
-        .filter((email: any) => {
-          // Include all emails with userReply (including [ForwardedWithoutComment])
-          if (!email.metadata.userReply) {
-            console.warn(`[Pattern Analysis - Aggregate] Skipping email ${email.id} - no userReply field`);
-            return false;
-          }
-          return true;
-        })
-        .map(async (email: any) => {
-          // Use userReply which is the redacted user reply (already processed by pipeline)
-          // This has quotes/signatures removed AND names redacted
-          const textForAnalysis = email.metadata.userReply;
-          
-          return {
-            uid: email.id,
-            messageId: email.id,
-            inReplyTo: null,
-            date: new Date(email.metadata.sentDate || Date.now()),
-            from: [{ address: userId, name: '' }],
-            replyTo: [],
-            to: [{ address: email.metadata.recipientEmail || '', name: '' }],
-            cc: [],
-            bcc: [],
-            subject: email.metadata.subject || '',
-            textContent: textForAnalysis,
-            htmlContent: null,
-            userReply: textForAnalysis,
-            respondedTo: '',
-            fullMessage: '' // Not needed for pattern analysis
-          };
-        }));
-      
-      // Analyze aggregate patterns
-      const aggregatePatterns = await patternAnalyzer.analyzeWritingPatterns(
-        userId,
-        allEmailsForAnalysis,
-        undefined // undefined means aggregate
-      );
-      
+
+      // Calculate aggregate patterns from accumulated data (no duplicate processing!)
+      console.log(`[Pattern Analysis] Calculating aggregate from ${aggregateAccumulator.totalEmails} emails (cumulative)`);
+      const aggregatePatterns = patternAnalyzer.calculateAggregateFromAccumulated(aggregateAccumulator);
+
       // Save aggregate patterns
       await patternAnalyzer.savePatterns(
         userId,
         aggregatePatterns,
         undefined, // undefined means aggregate
-        allEmailsForAnalysis.length
+        aggregateAccumulator.totalEmails
       );
-      
+
       allPatterns['aggregate'] = aggregatePatterns;
     } catch (error) {
       console.error('Error analyzing patterns:', error);

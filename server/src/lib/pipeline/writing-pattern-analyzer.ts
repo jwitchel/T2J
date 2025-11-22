@@ -31,6 +31,7 @@ export interface SentencePatterns {
     long: number;     // >25 words
   };
   examples: string[];
+  rawSentenceLengths?: number[];  // Optional: raw data for accumulation
 }
 
 export interface ParagraphPattern {
@@ -387,7 +388,8 @@ export class WritingPatternAnalyzer {
       percentile25: Math.round(percentile25 * 100) / 100,
       percentile75: Math.round(percentile75 * 100) / 100,
       distribution,
-      examples
+      examples,
+      rawSentenceLengths: wordCountsPerSentence  // Include raw data for accumulation
     };
     
     // Debug logging
@@ -1372,5 +1374,140 @@ export class WritingPatternAnalyzer {
     }
 
     return null;
+  }
+
+  /**
+   * Calculate aggregate patterns from accumulated data across all relationships
+   * This avoids duplicate NLP processing and LLM calls for aggregate stats
+   *
+   * @param accumulatedData - Data collected from all relationship analyses
+   * @returns WritingPatterns for aggregate (without LLM-generated patterns)
+   */
+  public calculateAggregateFromAccumulated(accumulatedData: {
+    sentenceLengths: number[];
+    paragraphCounts: Map<string, number>;
+    openingCounts: Map<string, number>;
+    valedictionCounts: Map<string, number>;
+    totalEmails: number;
+  }): WritingPatterns {
+    // Calculate sentence patterns from accumulated lengths
+    const sentencePatterns = this._calculateSentenceStatsFromRaw(accumulatedData.sentenceLengths);
+
+    // Calculate paragraph patterns from accumulated counts
+    const paragraphPatterns: ParagraphPattern[] = Array.from(accumulatedData.paragraphCounts.entries())
+      .map(([type, count]) => ({
+        type,
+        percentage: (count / accumulatedData.totalEmails) * 100,
+        description: this.getParagraphTypeDescription(type)
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Calculate opening patterns from accumulated counts
+    const openingPatterns: OpeningPattern[] = Array.from(accumulatedData.openingCounts.entries())
+      .map(([pattern, count]) => ({
+        pattern,
+        percentage: count / accumulatedData.totalEmails,
+        notes: pattern === "[right to the point]" ? "No greeting, starts directly with content" : undefined
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Calculate valediction patterns from accumulated counts
+    const totalValedictions = Array.from(accumulatedData.valedictionCounts.values()).reduce((sum, c) => sum + c, 0);
+    const valediction: ValedictionPattern[] = Array.from(accumulatedData.valedictionCounts.entries())
+      .map(([phrase, count]) => ({
+        phrase,
+        percentage: (count / totalValedictions) * 100
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Ensure percentages sum to exactly 100%
+    const sum = valediction.reduce((acc, p) => acc + p.percentage, 0);
+    if (sum !== 100 && valediction.length > 0) {
+      valediction[0].percentage += (100 - sum);
+    }
+
+    // Return aggregate patterns without LLM-generated data (Option B)
+    return {
+      sentencePatterns,
+      paragraphPatterns,
+      openingPatterns,
+      valediction,
+      negativePatterns: [],  // Skip LLM for aggregate
+      responsePatterns: {    // Default values
+        immediate: 0,
+        contemplative: 0,
+        questionHandling: 'varies'
+      },
+      uniqueExpressions: []  // Skip LLM for aggregate
+    };
+  }
+
+  /**
+   * Helper method to calculate sentence statistics from raw sentence lengths
+   * Used by calculateAggregateFromAccumulated
+   */
+  private _calculateSentenceStatsFromRaw(wordCounts: number[]): SentencePatterns {
+    if (wordCounts.length === 0) {
+      return {
+        avgLength: 0,
+        medianLength: 0,
+        trimmedMean: 0,
+        minLength: 0,
+        maxLength: 0,
+        stdDeviation: 0,
+        percentile25: 0,
+        percentile75: 0,
+        distribution: { short: 0, medium: 0, long: 0 },
+        examples: []
+      };
+    }
+
+    // Sort for median and percentile calculations
+    const sortedCounts = [...wordCounts].sort((a, b) => a - b);
+
+    // Calculate statistics using simple-statistics
+    const avgLength = ss.mean(wordCounts);
+    const medianLength = ss.median(sortedCounts);
+    const minLength = ss.min(wordCounts);
+    const maxLength = ss.max(wordCounts);
+    const stdDeviation = ss.standardDeviation(wordCounts);
+    const percentile25 = ss.quantile(sortedCounts, 0.25);
+    const percentile75 = ss.quantile(sortedCounts, 0.75);
+
+    // Calculate trimmed mean (remove top and bottom 5%)
+    const trimAmount = Math.floor(sortedCounts.length * 0.05);
+    const trimmedData = trimAmount > 0
+      ? sortedCounts.slice(trimAmount, sortedCounts.length - trimAmount)
+      : sortedCounts;
+    const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
+
+    // Get sentence length breakpoints from env
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX || '10');
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN || '25');
+
+    // Calculate distribution
+    const shortCount = wordCounts.filter(c => c < shortMax).length;
+    const mediumCount = wordCounts.filter(c => c >= shortMax && c <= longMin).length;
+    const longCount = wordCounts.filter(c => c > longMin).length;
+    const totalSentenceCount = wordCounts.length;
+
+    const distribution = {
+      short: shortCount / totalSentenceCount,
+      medium: mediumCount / totalSentenceCount,
+      long: longCount / totalSentenceCount
+    };
+
+    return {
+      avgLength: Math.round(avgLength * 100) / 100,
+      medianLength: Math.round(medianLength * 100) / 100,
+      trimmedMean: Math.round(trimmedMean * 100) / 100,
+      minLength,
+      maxLength,
+      stdDeviation: Math.round(stdDeviation * 100) / 100,
+      percentile25: Math.round(percentile25 * 100) / 100,
+      percentile75: Math.round(percentile75 * 100) / 100,
+      distribution,
+      examples: []  // No examples for aggregate
+    };
   }
 }
