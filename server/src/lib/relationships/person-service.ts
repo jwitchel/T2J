@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { pool as serverPool } from '../db';
 import { withTransaction } from '../db/transaction-utils';
+import { RelationshipType } from './types';
 
 // Custom error classes
 export class PersonServiceError extends Error {
@@ -454,24 +455,46 @@ export class PersonService {
         if (relCheck.rows.length > 0) {
           const userRelationshipId = relCheck.rows[0].id;
 
-          // First, unset any existing primary relationship for this person
-          await db.query(
-            `UPDATE person_relationships
-             SET is_primary = false
-             WHERE user_id = $1 AND person_id = $2 AND is_primary = true`,
+          // Check existing primary relationship to respect priority
+          const existingPrimaryCheck = await db.query(
+            `SELECT pr.id, ur.relationship_type, pr.confidence
+             FROM person_relationships pr
+             INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+             WHERE pr.user_id = $1 AND pr.person_id = $2 AND pr.is_primary = true`,
             [params.userId, personId]
           );
 
-          // Now insert/update the relationship
+          const shouldBecomesPrimary = this._shouldReplacePrimaryRelationship(
+            existingPrimaryCheck.rows[0]?.relationship_type,
+            params.relationshipType,
+            existingPrimaryCheck.rows[0]?.confidence,
+            params.confidence || 0.5
+          );
+
+          // Only unset existing primary if new relationship should take priority
+          if (shouldBecomesPrimary && existingPrimaryCheck.rows.length > 0) {
+            await db.query(
+              `UPDATE person_relationships
+               SET is_primary = false
+               WHERE user_id = $1 AND person_id = $2 AND is_primary = true`,
+              [params.userId, personId]
+            );
+          }
+
+          // Insert/update the relationship
           await db.query(
             `INSERT INTO person_relationships
              (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-             VALUES ($1, $2, $3, true, false, $4, NOW(), NOW())
+             VALUES ($1, $2, $3, $4, false, $5, NOW(), NOW())
              ON CONFLICT (user_id, person_id, user_relationship_id) DO UPDATE
-             SET confidence = GREATEST(person_relationships.confidence, $4),
+             SET confidence = GREATEST(person_relationships.confidence, $5),
+                 is_primary = CASE
+                   WHEN $4 = true THEN true
+                   ELSE person_relationships.is_primary
+                 END,
                  updated_at = NOW()
              WHERE person_relationships.confidence < EXCLUDED.confidence`,
-            [params.userId, personId, userRelationshipId, params.confidence || 0.5]
+            [params.userId, personId, userRelationshipId, shouldBecomesPrimary, params.confidence || 0.5]
           );
         }
       }
@@ -853,6 +876,47 @@ export class PersonService {
    */
   private _normalizeEmail(email: string): string {
     return email.toLowerCase().trim();
+  }
+
+  /**
+   * Determine if a new relationship should replace the existing primary relationship
+   * Based on relationship type priority and confidence
+   *
+   * Priority order: spouse > family > colleague > friends > external > spam
+   *
+   * @param existingType - Current primary relationship type (undefined if no primary exists)
+   * @param newType - New relationship type being added
+   * @param existingConfidence - Confidence of existing primary relationship
+   * @param newConfidence - Confidence of new relationship
+   * @returns true if new relationship should become primary
+   */
+  private _shouldReplacePrimaryRelationship(
+    existingType: string | undefined,
+    newType: string,
+    existingConfidence: number = 0,
+    newConfidence: number = 0
+  ): boolean {
+    // If no existing primary, new relationship becomes primary
+    if (!existingType) {
+      return true;
+    }
+
+    const existingPriority = RelationshipType.PRIORITY[existingType] || 999;
+    const newPriority = RelationshipType.PRIORITY[newType] || 999;
+
+    // Higher priority relationship (lower number) always wins
+    if (newPriority < existingPriority) {
+      return true;
+    }
+
+    // Lower priority relationship (higher number) never wins
+    if (newPriority > existingPriority) {
+      return false;
+    }
+
+    // Same priority - use confidence as tiebreaker
+    // Only replace if new confidence is significantly higher (>= 0.1 difference)
+    return newConfidence >= existingConfidence + 0.1;
   }
 
   /**
