@@ -95,17 +95,300 @@ export class EmailStorageService {
   }
 
   /**
+   * Save multiple emails in batch with optimized embedding generation
+   * Batches embedding generation to reduce overhead and improve performance
+   *
+   * @param emailBatch - Array of email save parameters
+   * @returns Array of save results
+   */
+  public async saveEmailBatch(emailBatch: SaveEmailParams[]): Promise<SaveEmailResult[]> {
+    if (emailBatch.length === 0) {
+      return [];
+    }
+
+    const startTime = Date.now();
+    console.log(`\n[EmailStorage] ========================================`);
+    console.log(`[EmailStorage] Starting batch processing of ${emailBatch.length} emails`);
+    console.log(`[EmailStorage] ========================================\n`);
+
+    // Step 1: Process all emails and extract text content
+    const step1Start = Date.now();
+    const processedEmails: Array<{
+      params: SaveEmailParams;
+      parsedEmail: ParsedMail;
+      subject: string;
+      redactedUserReply: string;
+      features: EmailFeatures | null;
+      hasUserContent: boolean;
+    }> = [];
+
+    for (const params of emailBatch) {
+      const { emailData } = params;
+
+      // Basic validation - skip invalid emails
+      if (!emailData.messageId || !emailData.date) {
+        continue;
+      }
+
+      const parsedEmail = emailData.parsed;
+      if (!parsedEmail.text || parsedEmail.text.trim() === '') {
+        continue;
+      }
+
+      const subject = parsedEmail.subject?.trim() || '';
+      const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
+        userId: params.userId,
+        emailAccountId: params.emailAccountId
+      });
+
+      const hasUserContent = hasActualUserContent(processedContent.userReply);
+
+      let redactedUserReply = '';
+      let features: EmailFeatures | null = null;
+
+      if (hasUserContent) {
+        const redactionResult = nameRedactor.redactNames(processedContent.userReply);
+        redactedUserReply = redactionResult.text.trim();
+        // If after trimming we have only whitespace, set to empty string
+        if (redactedUserReply === '') {
+          redactedUserReply = '';
+          features = null;
+        } else {
+          features = extractEmailFeatures(redactedUserReply, {
+            email: emailData.from || '',
+            name: ''
+          });
+        }
+      } else {
+        // Handle attachment-only or empty emails
+        const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
+        redactedUserReply = hasAttachments ? EmailMarkers.ATTACHMENT_ONLY : (processedContent.userReply || '').trim() || '';
+      }
+
+      processedEmails.push({
+        params,
+        parsedEmail,
+        subject,
+        redactedUserReply,
+        features,
+        hasUserContent
+      });
+    }
+
+    const step1Duration = Date.now() - step1Start;
+    console.log(`[EmailStorage] Step 1 (Processing): ${step1Duration}ms - Processed ${processedEmails.length}/${emailBatch.length} valid emails`);
+
+    // Step 2: Batch generate semantic embeddings for all emails with content
+    const step2Start = Date.now();
+    const textsForSemanticEmbedding = processedEmails
+      .filter(e => e.hasUserContent)
+      .map(e => e.redactedUserReply);
+
+    let semanticEmbeddings: number[][] = [];
+    let step2Duration = 0;
+    if (textsForSemanticEmbedding.length > 0) {
+      console.log(`[EmailStorage] Step 2: Generating semantic embeddings for ${textsForSemanticEmbedding.length} emails (batches of 50)...`);
+      const result = await this.embeddingService.embedBatch(textsForSemanticEmbedding, { batchSize: 50 });
+      semanticEmbeddings = result.embeddings.map(e => e.vector);
+      step2Duration = Date.now() - step2Start;
+      console.log(`[EmailStorage] Step 2 (Semantic Embeddings): ${step2Duration}ms - Generated ${semanticEmbeddings.length} embeddings`);
+    } else {
+      console.log(`[EmailStorage] Step 2: Skipped (no emails with user content)`);
+    }
+
+    // Step 3: Batch generate style embeddings for sent emails with content
+    const step3Start = Date.now();
+    const sentEmailsWithContent = processedEmails.filter(e => e.hasUserContent && e.params.emailType === 'sent');
+    const textsForStyleEmbedding = sentEmailsWithContent.map(e => e.redactedUserReply);
+
+    let styleEmbeddings: number[][] = [];
+    let step3Duration = 0;
+    if (textsForStyleEmbedding.length > 0) {
+      console.log(`[EmailStorage] Step 3: Generating style embeddings for ${textsForStyleEmbedding.length} sent emails (batches of 50)...`);
+      const result = await this.styleEmbeddingService.embedBatch(textsForStyleEmbedding, { batchSize: 50 });
+      styleEmbeddings = result.embeddings.map(e => e.vector);
+      step3Duration = Date.now() - step3Start;
+      console.log(`[EmailStorage] Step 3 (Style Embeddings): ${step3Duration}ms - Generated ${styleEmbeddings.length} embeddings`);
+    } else {
+      console.log(`[EmailStorage] Step 3: Skipped (no sent emails with user content)`);
+    }
+
+    // Step 4: Map embeddings back to emails and save
+    const step4Start = Date.now();
+    console.log(`[EmailStorage] Step 4: Saving ${processedEmails.length} emails to database...`);
+
+    const results: SaveEmailResult[] = [];
+    let semanticIdx = 0;
+    let styleIdx = 0;
+
+    for (const processed of processedEmails) {
+      const { params, parsedEmail, subject, redactedUserReply, features, hasUserContent } = processed;
+
+      // Determine vectors for this email
+      let semanticVector: number[];
+      let styleVector: number[];
+
+      if (hasUserContent) {
+        semanticVector = semanticEmbeddings[semanticIdx++];
+        styleVector = params.emailType === 'sent' ? styleEmbeddings[styleIdx++] : new Array(768).fill(0);
+      } else {
+        semanticVector = new Array(384).fill(0);
+        styleVector = new Array(768).fill(0);
+      }
+
+      // Save email using the same logic as saveEmail but with pre-computed vectors
+      const result = await this._saveWithPrecomputedVectors(
+        params,
+        parsedEmail,
+        subject,
+        redactedUserReply,
+        features,
+        semanticVector,
+        styleVector
+      );
+
+      results.push(result);
+    }
+
+    const step4Duration = Date.now() - step4Start;
+    const totalDuration = Date.now() - startTime;
+    const successCount = results.filter(r => r.success && !r.skipped).length;
+    const skippedCount = results.filter(r => r.skipped).length;
+    const errorCount = results.filter(r => !r.success).length;
+
+    console.log(`[EmailStorage] Step 4 (Database Save): ${step4Duration}ms - Saved ${successCount}, Skipped ${skippedCount}, Errors ${errorCount}`);
+    console.log(`\n[EmailStorage] ========================================`);
+    console.log(`[EmailStorage] BATCH COMPLETE: ${totalDuration}ms total`);
+    console.log(`[EmailStorage]   - Step 1 (Processing):         ${step1Duration}ms`);
+    console.log(`[EmailStorage]   - Step 2 (Semantic Embeddings): ${step2Duration}ms`);
+    console.log(`[EmailStorage]   - Step 3 (Style Embeddings):    ${step3Duration}ms`);
+    console.log(`[EmailStorage]   - Step 4 (Database):           ${step4Duration}ms`);
+    console.log(`[EmailStorage]   - Success: ${successCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`);
+    console.log(`[EmailStorage] ========================================\n`);
+
+    return results;
+  }
+
+  /**
+   * Internal helper to save email with pre-computed vectors
+   * Used by saveEmailBatch to avoid re-generating embeddings
+   */
+  private async _saveWithPrecomputedVectors(
+    params: SaveEmailParams,
+    parsedEmail: ParsedMail,
+    subject: string,
+    redactedUserReply: string,
+    features: EmailFeatures | null,
+    semanticVector: number[],
+    styleVector: number[]
+  ): Promise<SaveEmailResult> {
+    const { userId, emailAccountId, emailData, emailType } = params;
+
+    try {
+      // Determine recipients/senders based on email type
+      let savedCount = 0;
+
+      if (emailType === 'sent') {
+        // For sent emails: Create one entry per recipient
+        const getAddresses = (field: any) => {
+          if (!field) return [];
+          if (Array.isArray(field)) {
+            return field.flatMap(f => f.value || []);
+          }
+          return field.value || [];
+        };
+
+        const allRecipients = [
+          ...getAddresses(parsedEmail.to),
+          ...getAddresses(parsedEmail.cc),
+          ...getAddresses(parsedEmail.bcc)
+        ];
+
+        const uniqueRecipients = Array.from(
+          new Map(allRecipients.map(r => [r.address?.toLowerCase(), r])).values()
+        );
+
+        if (uniqueRecipients.length === 0) {
+          return {
+            success: false,
+            skipped: false,
+            error: 'No recipients found for sent email'
+          };
+        }
+
+        // Save one entry per recipient
+        for (const recipient of uniqueRecipients) {
+          if (!recipient.address) continue;
+
+          const saved = await this.saveEmailEntry({
+            userId,
+            emailAccountId,
+            emailData,
+            parsedEmail,
+            subject,
+            redactedUserReply,
+            features,
+            semanticVector,
+            styleVector,
+            emailType,
+            otherPartyEmail: recipient.address,
+            otherPartyName: recipient.name
+          });
+
+          if (saved) savedCount++;
+        }
+
+      } else {
+        // For incoming emails: Create one entry with sender
+        const senderEmail = parsedEmail.from?.value[0]?.address;
+        const senderName = parsedEmail.from?.value[0]?.name;
+
+        if (!senderEmail) {
+          return {
+            success: false,
+            skipped: false,
+            error: 'No sender email found for incoming email'
+          };
+        }
+
+        const saved = await this.saveEmailEntry({
+          userId,
+          emailAccountId,
+          emailData,
+          parsedEmail,
+          subject,
+          redactedUserReply,
+          features,
+          semanticVector,
+          styleVector,
+          emailType,
+          otherPartyEmail: senderEmail,
+          otherPartyName: senderName
+        });
+
+        if (saved) savedCount++;
+      }
+
+      return {
+        success: true,
+        skipped: false,
+        saved: savedCount
+      };
+
+    } catch (error: unknown) {
+      console.error('[EmailStorage] Error saving email:', error);
+      return {
+        success: false,
+        skipped: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
    * Save an email to PostgreSQL with complete metadata and vector embeddings
    * For sent emails: Creates one entry per recipient (TO/CC/BCC)
    * For incoming emails: Creates one entry with sender
-   *
-   * TODO: Implement saveEmailBatch() method to batch embedding generation:
-   * - Collect all email texts first
-   * - Call embeddingService.embedBatch() once for semantic (50/batch)
-   * - Call styleEmbeddingService.embedBatch() once for style (50/batch)
-   * - Map vectors back to emails
-   * - Save with pre-computed vectors
-   * Expected improvement: 50-70% reduction in embedding time
    */
   public async saveEmail(params: SaveEmailParams): Promise<SaveEmailResult> {
     const { userId, emailAccountId, emailData, emailType } = params;
@@ -162,22 +445,30 @@ export class EmailStorageService {
       if (hasUserContent) {
         // Redact names from user reply
         const redactionResult = nameRedactor.redactNames(processedContent.userReply);
-        redactedUserReply = redactionResult.text;
+        redactedUserReply = redactionResult.text.trim();
 
-        // Extract features from redacted text
-        features = extractEmailFeatures(redactedUserReply, {
-          email: emailData.from || '',
-          name: ''
-        });
+        // If after trimming we have only whitespace, treat as no content
+        if (redactedUserReply === '') {
+          redactedUserReply = '';
+          features = null;
+          semanticVector = new Array(384).fill(0);
+          styleVector = new Array(768).fill(0);
+        } else {
+          // Extract features from redacted text
+          features = extractEmailFeatures(redactedUserReply, {
+            email: emailData.from || '',
+            name: ''
+          });
 
-        // Generate semantic embedding from redacted user reply
-        const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
-        semanticVector = embeddingResult.vector;
+          // Generate semantic embedding from redacted user reply
+          const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
+          semanticVector = embeddingResult.vector;
 
-        // Generate style embedding (only for sent emails)
-        styleVector = emailType === 'sent'
-          ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
-          : new Array(768).fill(0);  // Incoming emails don't need style vectors
+          // Generate style embedding (only for sent emails)
+          styleVector = emailType === 'sent'
+            ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
+            : new Array(768).fill(0);  // Incoming emails don't need style vectors
+        }
       } else {
         // No user content - check if this is an attachment-only email
         const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
@@ -187,7 +478,7 @@ export class EmailStorageService {
           redactedUserReply = EmailMarkers.ATTACHMENT_ONLY;
         } else {
           // No attachments either - use the processed reply (may be empty or marker)
-          redactedUserReply = processedContent.userReply || '';
+          redactedUserReply = (processedContent.userReply || '').trim() || '';
         }
 
         features = null;

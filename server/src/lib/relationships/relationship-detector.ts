@@ -3,6 +3,7 @@ import { RelationshipDetectorResult } from '../pipeline/types';
 import { personService as defaultPersonService, PersonService } from './person-service';
 import { pool } from '../db';
 import { NameExtractor } from '../utils/name-extractor';
+import { PersonCache } from './person-cache';
 
 /**
  * Well-defined relationship types used throughout the system
@@ -74,9 +75,11 @@ interface RelationshipConfig {
 export class RelationshipDetector {
   private personService: PersonService;
   private configCache: Map<string, RelationshipConfig> = new Map();
+  private personCache: PersonCache;
 
   constructor(personService?: PersonService) {
     this.personService = personService || defaultPersonService;
+    this.personCache = new PersonCache(pool, this.personService);
   }
 
   public async initialize(): Promise<void> {
@@ -89,6 +92,14 @@ export class RelationshipDetector {
    */
   public clearConfigCache(userId: string): void {
     this.configCache.delete(userId);
+  }
+
+  /**
+   * Clear person cache
+   * Call this when starting a new batch operation to reset cache
+   */
+  public clearPersonCache(): void {
+    this.personCache.clear();
   }
 
   /**
@@ -194,20 +205,26 @@ export class RelationshipDetector {
     // For Google Docs shares: From=noreply@google.com, Reply-To=tmoon@kingenergy.com
     // We want to detect the relationship for either address
 
-    // Step 1: Check database for both addresses (prefer Reply-To if both exist)
-    // NOTE: This lookup happens outside the transaction (if client is provided).
-    // This is acceptable because:
-    // 1. If person exists, we just return existing data (no race condition risk)
-    // 2. If person doesn't exist, findOrCreatePerson() handles race with ON CONFLICT
-    // 3. Worst case: two requests create person simultaneously, ON CONFLICT ensures one wins
+    // Step 1: Check cache/database for both addresses (prefer Reply-To if both exist)
+    // Use PersonCache for optimized bulk lookups during batch processing
+    // Uses transaction client (if provided) for proper isolation
     let person = null;
 
+    // Build list of emails to lookup (prioritize replyToEmail)
+    const emailsToLookup = replyToEmail ? [replyToEmail, recipientEmail] : [recipientEmail];
+
+    // Bulk lookup with cache (much faster for batch operations)
+    // Pass transaction client for proper isolation
+    const { found } = await this.personCache.bulkFind(emailsToLookup, userId, client);
+
+    // Prefer replyToEmail if found
     if (replyToEmail) {
-      person = await this.personService.findPersonByEmail(replyToEmail, userId);
+      person = found.get(replyToEmail.toLowerCase().trim()) || null;
     }
 
+    // Fallback to recipientEmail
     if (!person) {
-      person = await this.personService.findPersonByEmail(recipientEmail, userId);
+      person = found.get(recipientEmail.toLowerCase().trim()) || null;
     }
 
     if (person && person.relationships.length > 0) {

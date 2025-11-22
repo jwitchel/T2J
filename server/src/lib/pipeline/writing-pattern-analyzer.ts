@@ -455,8 +455,6 @@ export class WritingPatternAnalyzer {
       let query = `
         SELECT se.user_reply, se.sent_date
         FROM email_sent se
-        WHERE se.user_id = $1
-          AND se.semantic_vector IS NOT NULL
       `;
 
       const params: any[] = [userId];
@@ -464,9 +462,24 @@ export class WritingPatternAnalyzer {
 
       // Filter by relationship if not aggregate
       if (relationship && relationship !== 'aggregate') {
+        // Join to relationship tables to filter by relationship type
+        query += `
+        INNER JOIN person_emails pe ON se.recipient_person_email_id = pe.id
+        INNER JOIN person_relationships pr ON pr.person_id = pe.person_id AND pr.user_id = se.user_id
+        INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+        WHERE se.user_id = $1
+          AND se.semantic_vector IS NOT NULL
+          AND pr.is_primary = true
+        `;
         paramCount++;
-        query += ` AND se.relationship_type = $${paramCount}`;
+        query += ` AND ur.relationship_type = $${paramCount}`;
         params.push(relationship);
+      } else {
+        // For aggregate, no joins needed
+        query += `
+        WHERE se.user_id = $1
+          AND se.semantic_vector IS NOT NULL
+        `;
       }
 
       // Filter by style cluster if specified
@@ -535,23 +548,14 @@ export class WritingPatternAnalyzer {
     
     const result = await db.query(query, params);
     const provider = result.rows[0];
-
-    if (!provider) {
-      throw new Error('No active LLM provider found');
-    }
-
-    if (!provider.api_key) {
-      throw new Error(`LLM provider "${provider.provider_name}" has no API key configured`);
-    }
-
     const decryptedApiKey = decryptPassword(provider.api_key);
 
-    this.modelName = provider.model_name || '';
+    this.modelName = provider.model_name;
     this.llmClient = new LLMClient({
       id: provider.id,
       type: provider.provider_type as any,
       apiKey: decryptedApiKey,
-      apiEndpoint: provider.api_endpoint || undefined,
+      apiEndpoint: provider.api_endpoint,
       modelName: provider.model_name
     });
   }
@@ -570,17 +574,6 @@ export class WritingPatternAnalyzer {
 
     const startTime = Date.now();
     console.log(`[TIMING] analyzeWritingPatterns START for ${relationship || 'aggregate'}: ${emails.length} emails`);
-
-    // Log the analysis start
-    realTimeLogger.log(userId, {
-      userId,
-      emailAccountId: 'pattern-analysis',
-      level: 'info',
-      command: 'pattern.analysis.start',
-      data: {
-        raw: `Analyzing ${emails.length} emails for ${relationship || 'all relationships'}`
-      }
-    });
 
     // Process in batches of 50 emails
     const batchSize = 50;
@@ -665,7 +658,7 @@ export class WritingPatternAnalyzer {
       level: 'info',
       command: 'pattern.analysis.complete',
       data: {
-        raw: `Found ${aggregated.openingPatterns.length} opening patterns, ${aggregated.valediction.length} valedictions, ${aggregated.negativePatterns.length} negative patterns, ${aggregated.uniqueExpressions.length} unique expressions`,
+        raw: `For relationship ${relationship || 'aggregate'}, found ${aggregated.openingPatterns.length} opening patterns, ${aggregated.valediction.length} valedictions, ${aggregated.negativePatterns.length} negative patterns, ${aggregated.uniqueExpressions.length} unique expressions`,
         parsed: {
           totalEmails: emails.length,
           batchSize,

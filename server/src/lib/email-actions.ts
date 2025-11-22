@@ -134,7 +134,7 @@ export const ActionHelpers = {
       case EmailActions.UNKNOWN:
         return 'Unknown action';
       default:
-        return 'Unknown action';
+        throw new Error(`Unknown action: ${action}`);
     }
   },
 

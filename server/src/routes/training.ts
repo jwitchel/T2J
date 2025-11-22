@@ -11,17 +11,11 @@ import { vectorSearchService } from '../lib/vector';
 
 const router = express.Router();
 
-// Load sent emails into vector DB
+// Load sent emails into DB
 router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    const { emailAccountId, limit = 1000, startDate } = req.body;
-
-
-    if (!emailAccountId) {
-      res.status(400).json({ error: 'emailAccountId is required' });
-      return;
-    }
+    const { emailAccountId, limit, startDate } = req.body;
 
     // Initialize services
     let imapOps: ImapOperations;
@@ -47,160 +41,151 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       }
       });
 
-    // Search in Sent folder
-      const sentFolders = ['Sent', 'Sent Items', 'Sent Mail', '[Gmail]/Sent Mail'];
-      let messages: any[] = [];
-      let folderUsed = '';
+    // Get user's configured sent folder from preferences
+      const userResult = await pool.query('SELECT preferences FROM "user" WHERE id = $1', [userId]);
+      const sentFolder = userResult.rows[0]!.preferences.sentFolder;
 
-    console.log(`[Training] Searching for sent emails ${beforeDate ? `before ${beforeDate.toISOString()}` : '(most recent)'}, limit ${limit}`);
 
-    for (const folder of sentFolders) {
+      // Search in the configured sent folder
+      let uids: number[] = [];
       try {
-        console.log(`[Training] Trying folder: ${folder}`);
-
-        // Search with or without date criteria
         const searchCriteria = beforeDate ? { before: beforeDate } : {};
-        const searchResults = await imapOps!.searchMessages(folder, searchCriteria, { limit });
-
-        console.log(`[Training] Folder ${folder}: found ${searchResults.length} messages`);
-
-        if (searchResults.length > 0) {
-          messages = searchResults;
-          folderUsed = folder;
-          break;
-        }
+        uids = await imapOps!.searchUidsOnly(sentFolder, searchCriteria, { limit });
+        console.log(`[Training] Search found ${uids.length} UIDs${sentFolder} for sent emails ${beforeDate ? `before ${beforeDate.toISOString()}` : '(most recent)'}, limit ${limit}`);
       } catch (err) {
-        console.log(`[Training] Folder ${folder} error:`, err instanceof Error ? err.message : err);
-        // This is expected when searching for the correct folder name
-        // Different email providers use different folder names
-        continue;
-      }
-    }
-
-      if (messages.length === 0) {
-      console.log(`[Training] No sent emails found in any folder. Tried: ${sentFolders.join(', ')}`);
-      res.status(404).json({ error: 'No sent emails found' });
+        console.error(`[Training] Error searching folder ${sentFolder}:`, err);
+        res.status(500).json({ error: `Failed to search sent folder: ${sentFolder}` });
         return;
       }
-
-      console.log(`[Training] Found ${messages.length} emails in folder ${folderUsed}`);
 
       realTimeLogger.log(userId, {
       userId,
       emailAccountId,
       level: 'info',
       command: 'TRAINING_FOUND_EMAILS',
-      data: { 
-        parsed: { found: messages.length, folder: folderUsed }
+      data: {
+        parsed: { found: uids.length, folder: sentFolder }
       }
       });
 
     // Batch fetch and process using EmailStorageService
-      let processed = 0;
-      let saved = 0;
-      let errors = 0;
       const startTime = Date.now();
-      const totalMessages = messages.length;
+      const totalMessages = uids.length;
 
       // Initialize email storage service
       await emailStorageService.initialize();
 
-      // Collect UIDs for batch fetching
-      const uids = messages.map(msg => msg.uid);
+      // Batch fetch all messages with getMessagesRaw() (direct fetch, no intermediate step)
+      console.log(`\n[Training] ========================================`);
+      console.log(`[Training] Starting IMAP fetch for ${uids.length} messages`);
+      console.log(`[Training] ========================================\n`);
+      const imapFetchStart = Date.now();
 
-      // Batch fetch all messages with getMessagesRaw() (includes bodystructure, flags, size)
-      console.log(`[Training] Batch fetching ${uids.length} messages from ${folderUsed}`);
-      const fullMessages = await imapOps!.getMessagesRaw(folderUsed, uids);
-      console.log(`[Training] Fetched ${fullMessages.length} full messages`);
+      const fullMessages = await imapOps!.getMessagesRaw(sentFolder, uids);
 
-      // Process each message with EmailStorageService
-      for (let i = 0; i < fullMessages.length; i++) {
-        const fullMessage = fullMessages[i];
+      const imapFetchDuration = Date.now() - imapFetchStart;
+      console.log(`\n[Training] ========================================`);
+      console.log(`[Training] IMAP FETCH COMPLETE: ${imapFetchDuration}ms (${(imapFetchDuration/1000).toFixed(1)}s)`);
+      console.log(`[Training] Fetched ${fullMessages.length}/${uids.length} messages`);
+      console.log(`[Training] Average: ${(imapFetchDuration/fullMessages.length).toFixed(0)}ms per message`);
+      console.log(`[Training] ========================================\n`);
 
-        try {
-          // Validate message has required data
-          if (!fullMessage.fullMessage) {
-            errors++;
-            console.error(`[Training] Email ${fullMessage.uid} missing raw message`);
-            realTimeLogger.log(userId, {
-              userId,
-              emailAccountId,
-              level: 'error',
-              command: 'TRAINING_EMAIL_ERROR',
-              data: {
-                error: 'Missing raw RFC 5322 message',
-                parsed: { uid: fullMessage.uid, index: i }
-              }
-            });
-            continue;
-          }
-
-          // Save to database using EmailStorageService
-          const result = await emailStorageService.saveEmail({
-            userId,
-            emailAccountId,
-            emailData: fullMessage,  // Complete EmailMessageWithRaw data
-            emailType: 'sent',
-            folderName: folderUsed
-          });
-
-          if (result.success) {
-            if (result.skipped) {
-              console.log(`[Training] Email ${fullMessage.messageId} skipped (duplicate or no content)`);
-            } else {
-              processed++;
-              saved += result.saved || 0;
-            }
-          } else {
-            errors++;
-            console.error(`[Training] Failed to save email ${fullMessage.messageId}:`, result.error);
-          }
-
-          // Log progress every 10 emails
-          if ((i + 1) % 10 === 0 || i === fullMessages.length - 1) {
-            realTimeLogger.log(userId, {
-              userId,
-              emailAccountId,
-              level: 'info',
-              command: 'TRAINING_PROGRESS',
-              data: {
-                parsed: {
-                  processed: i + 1,
-                  total: totalMessages,
-                  saved,
-                  errors,
-                  percentage: Math.round(((i + 1) / totalMessages) * 100)
-                }
-              }
-            });
-          }
-
-        } catch (err) {
-          errors++;
-          console.error(`[Training] Error processing email ${i + 1}:`, err);
+      // Filter out messages missing raw content
+      const validMessages = fullMessages.filter((msg, i) => {
+        if (!msg.fullMessage) {
+          console.error(`[Training] Email ${msg.uid} missing raw message`);
           realTimeLogger.log(userId, {
             userId,
             emailAccountId,
             level: 'error',
             command: 'TRAINING_EMAIL_ERROR',
             data: {
-              error: err instanceof Error ? err.message : 'Unknown error',
-              parsed: { uid: fullMessage.uid, index: i }
+              error: 'Missing raw RFC 5322 message',
+              parsed: { uid: msg.uid, index: i }
+            }
+          });
+          return false;
+        }
+        return true;
+      });
+
+      console.log(`[Training] Processing ${validMessages.length} valid emails in batch`);
+
+      // Batch process all emails with EmailStorageService
+      const batchParams = validMessages.map(fullMessage => ({
+        userId,
+        emailAccountId,
+        emailData: fullMessage,
+        emailType: 'sent' as const,
+        folderName: sentFolder
+      }));
+
+      const storageStart = Date.now();
+      const results = await emailStorageService.saveEmailBatch(batchParams);
+      const storageDuration = Date.now() - storageStart;
+
+      // Aggregate results
+      let processed = 0;
+      let saved = 0;
+      let errors = 0;
+
+      results.forEach((result, i) => {
+        if (result.success) {
+          if (result.skipped) {
+            console.log(`[Training] Email ${validMessages[i].messageId} skipped (duplicate or no content)`);
+          } else {
+            processed++;
+            saved += result.saved || 0;
+          }
+        } else {
+          errors++;
+          console.error(`[Training] Failed to save email ${validMessages[i].messageId}:`, result.error);
+        }
+
+        // Log progress every 10 emails
+        if ((i + 1) % 10 === 0 || i === results.length - 1) {
+          realTimeLogger.log(userId, {
+            userId,
+            emailAccountId,
+            level: 'info',
+            command: 'TRAINING_PROGRESS',
+            data: {
+              parsed: {
+                processed: i + 1,
+                total: totalMessages,
+                saved,
+                errors,
+                percentage: Math.round(((i + 1) / totalMessages) * 100)
+              }
             }
           });
         }
-      }
+      });
     
-    
+
     // Aggregate styles after all emails are processed
+      const aggregationStart = Date.now();
       try {
         await orchestrator.aggregateStyles(userId);
       } catch (err) {
         console.error('Style aggregation error:', err);
       }
+      const aggregationDuration = Date.now() - aggregationStart;
 
       const duration = Date.now() - startTime;
-    
+
+      console.log(`\n[Training] ========================================`);
+      console.log(`[Training] TRAINING COMPLETE - PERFORMANCE BREAKDOWN`);
+      console.log(`[Training] ========================================`);
+      console.log(`[Training] IMAP Fetch:      ${imapFetchDuration}ms (${(imapFetchDuration/1000).toFixed(1)}s) - ${((imapFetchDuration/duration)*100).toFixed(1)}%`);
+      console.log(`[Training] Email Storage:   ${storageDuration}ms (${(storageDuration/1000).toFixed(1)}s) - ${((storageDuration/duration)*100).toFixed(1)}%`);
+      console.log(`[Training] Style Aggregation: ${aggregationDuration}ms (${(aggregationDuration/1000).toFixed(1)}s) - ${((aggregationDuration/duration)*100).toFixed(1)}%`);
+      console.log(`[Training] Other/Overhead:  ${(duration - imapFetchDuration - storageDuration - aggregationDuration)}ms`);
+      console.log(`[Training] ----------------------------------------`);
+      console.log(`[Training] TOTAL TIME:      ${duration}ms (${(duration/1000).toFixed(1)}s)`);
+      console.log(`[Training] Results: ${saved} saved, ${errors} errors`);
+      console.log(`[Training] ========================================\n`);
+
       realTimeLogger.log(userId, {
       userId,
       emailAccountId,
@@ -302,17 +287,6 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
 
     await patternAnalyzer.clearPatterns(userId);
 
-    // Log the start of pattern analysis
-    realTimeLogger.log(userId, {
-      userId,
-      emailAccountId: 'pattern-training',
-      level: 'info',
-      command: 'patterns.training.start',
-      data: {
-        raw: 'Starting comprehensive pattern analysis across all email accounts'
-      }
-    });
-
     // Get ALL sent emails for the user across ALL accounts and relationships from PostgreSQL
     // (Pattern analysis uses sent emails to learn the user's writing style)
     // JOIN through person_emails and person_relationships to get recipient and relationship info
@@ -330,10 +304,11 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       FROM email_sent es
       INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
       INNER JOIN people p ON pe.person_id = p.id
-      LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
-      LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+      INNER JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
+      INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
       WHERE es.user_id = $1
         AND es.semantic_vector IS NOT NULL
+        AND es.user_reply != ''
       ORDER BY es.sent_date DESC
       LIMIT 10000
     `, [userId]);
@@ -375,17 +350,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     });
 
     // Generate style vectors for all emails via batchIndex()
-    // This is the correct phase for style vector generation (analysis, not ingestion)
-    realTimeLogger.log(userId, {
-      userId,
-      emailAccountId: 'pattern-training',
-      level: 'info',
-      command: 'patterns.training.generating_vectors',
-      data: {
-        raw: `Generating style vectors for ${allEmails.length} emails...`
-      }
-    });
-
+    // This is vector generation (analysis, not ingestion)
     try {
       await vectorSearchService.initialize();
 
@@ -460,7 +425,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     // Group emails by relationship type (ignoring email account)
     const emailsByRelationship: Record<string, any[]> = {};
     allEmails.forEach((email: any) => {
-      const relationship = email.metadata.relationship?.type || 'unknown';
+      const relationship = email.metadata.relationship?.type;
+      if (!relationship) {
+        throw new Error(`Email ${email.id} is missing relationship type - data integrity issue`);
+      }
       if (!emailsByRelationship[relationship]) {
         emailsByRelationship[relationship] = [];
       }
@@ -468,22 +436,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     });
     
     const relationships = Object.keys(emailsByRelationship);
-    
-    realTimeLogger.log(userId, {
-      userId,
-      emailAccountId: 'pattern-training',
-      level: 'info',
-      command: 'patterns.training.relationships_found',
-      data: {
-        parsed: {
-          relationships,
-          counts: Object.fromEntries(
-            relationships.map(rel => [rel, emailsByRelationship[rel].length])
-          )
-        }
-      }
-    });
-    
+
     // Analyze patterns for each relationship AND aggregate
     const allPatterns: Record<string, any> = {};
     let totalEmailsAnalyzed = 0;
@@ -544,19 +497,6 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
           continue; // Skip to next relationship
         }
         
-        realTimeLogger.log(userId, {
-          userId,
-          emailAccountId: 'pattern-training',
-          level: 'info',
-          command: 'patterns.training.analyzing',
-          data: {
-            parsed: {
-              relationship,
-              emailCount: emailsForAnalysis.length
-            }
-          }
-        });
-        
         // Analyze patterns for this relationship
         const patterns = await patternAnalyzer.analyzeWritingPatterns(
           userId,
@@ -574,25 +514,6 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         
         allPatterns[relationship] = patterns;
         totalEmailsAnalyzed += emailsForAnalysis.length;
-        
-        realTimeLogger.log(userId, {
-          userId,
-          emailAccountId: 'pattern-training',
-          level: 'info',
-          command: 'patterns.training.saved',
-          data: {
-            parsed: {
-              relationship,
-              emailsAnalyzed: emailsForAnalysis.length,
-              patternsFound: {
-                openings: patterns.openingPatterns.length,
-                valedictions: patterns.valediction.length,
-                negative: patterns.negativePatterns.length,
-                unique: patterns.uniqueExpressions.length
-              }
-            }
-          }
-        });
       }
       
       // Now analyze aggregate patterns (all emails combined) - only emails with userReply
@@ -629,19 +550,6 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
           };
         }));
       
-      realTimeLogger.log(userId, {
-        userId,
-        emailAccountId: 'pattern-training',
-        level: 'info',
-        command: 'patterns.training.analyzing',
-        data: {
-          parsed: {
-            relationship: 'aggregate',
-            emailCount: allEmailsForAnalysis.length
-          }
-        }
-      });
-      
       // Analyze aggregate patterns
       const aggregatePatterns = await patternAnalyzer.analyzeWritingPatterns(
         userId,
@@ -658,26 +566,6 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       );
       
       allPatterns['aggregate'] = aggregatePatterns;
-      
-      realTimeLogger.log(userId, {
-        userId,
-        emailAccountId: 'pattern-training',
-        level: 'info',
-        command: 'patterns.training.saved',
-        data: {
-          parsed: {
-            relationship: 'aggregate',
-            emailsAnalyzed: allEmailsForAnalysis.length,
-            patternsFound: {
-              openings: aggregatePatterns.openingPatterns.length,
-              valedictions: aggregatePatterns.valediction.length,
-              negative: aggregatePatterns.negativePatterns.length,
-              unique: aggregatePatterns.uniqueExpressions.length
-            }
-          }
-        }
-      });
-        
     } catch (error) {
       console.error('Error analyzing patterns:', error);
       realTimeLogger.log(userId, {
@@ -698,7 +586,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
     // Get relationship breakdown for metadata
     const relationshipBreakdown: Record<string, number> = {};
     allEmails.forEach((email: any) => {
-      const rel = email.metadata.relationship?.type || 'unknown';
+      const rel = email.metadata.relationship?.type;
+      if (!rel) {
+        throw new Error(`Email ${email.id} is missing relationship type - data integrity issue`);
+      }
       relationshipBreakdown[rel] = (relationshipBreakdown[rel] || 0) + 1;
     });
     
@@ -719,21 +610,6 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       },
       patternsByRelationship: allPatterns
     };
-    
-    realTimeLogger.log(userId, {
-      userId,
-      emailAccountId: 'pattern-training',
-      level: 'info',
-      command: 'patterns.training.complete',
-      data: {
-        parsed: {
-          totalEmailsAnalyzed: totalEmailsAnalyzed,
-          emailAccounts: new Set(allEmails.map((e: any) => e.metadata.emailAccountId)).size,
-          relationshipBreakdown,
-          relationshipsAnalyzed: relationships.length + 1 // +1 for aggregate
-        }
-      }
-    });
     
     // Output consolidated patterns JSON to logs
     realTimeLogger.log(userId, {

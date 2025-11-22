@@ -148,4 +148,68 @@ export class EmailRepository {
     );
     return result.rows.length > 0;
   }
+
+  /**
+   * Batch insert sent emails
+   * Uses UNNEST for efficient bulk insertion
+   * @param emails - Array of email parameters to insert
+   * @param client - Optional transaction client
+   * @returns Number of emails inserted
+   */
+  async batchInsertSentEmails(emails: SentEmailInsertParams[], client?: PoolClient): Promise<number> {
+    if (emails.length === 0) return 0;
+
+    const db: QueryExecutor = client || this.pool;
+
+    // Prepare arrays for UNNEST
+    const emailIds = emails.map(e => normalizeEmailId(e.emailId));
+    const userIds = emails.map(e => e.userId);
+    const emailAccountIds = emails.map(e => e.emailAccountId);
+    const userReplies = emails.map(e => e.userReply);
+    const subjects = emails.map(e => e.subject);
+    const recipientPersonEmailIds = emails.map(e => e.recipientPersonEmailId);
+    const wordCounts = emails.map(e => e.wordCount);
+    const sentDates = emails.map(e => e.sentDate);
+    const semanticVectors = emails.map(e => e.semanticVector);
+    const styleVectors = emails.map(e => e.styleVector);
+    const fullMessages = emails.map(e => e.fullMessage);
+
+    const result = await db.query(`
+      INSERT INTO email_sent (
+        email_id, user_id, email_account_id, user_reply,
+        subject, recipient_person_email_id, word_count, sent_date,
+        semantic_vector, style_vector, full_message,
+        vector_generated_at, created_at, updated_at
+      )
+      SELECT * FROM UNNEST(
+        $1::text[], $2::text[], $3::uuid[], $4::text[],
+        $5::text[], $6::uuid[], $7::integer[], $8::timestamp[],
+        $9::real[][], $10::real[][], $11::text[]
+      ) AS t(
+        email_id, user_id, email_account_id, user_reply,
+        subject, recipient_person_email_id, word_count, sent_date,
+        semantic_vector, style_vector, full_message
+      )
+      WHERE NOT EXISTS (
+        SELECT 1 FROM email_sent es
+        WHERE es.email_id = t.email_id
+          AND es.user_id = t.user_id
+          AND es.recipient_person_email_id = t.recipient_person_email_id
+      )
+    `, [
+      emailIds,
+      userIds,
+      emailAccountIds,
+      userReplies,
+      subjects,
+      recipientPersonEmailIds,
+      wordCounts,
+      sentDates,
+      semanticVectors,
+      styleVectors,
+      fullMessages
+    ]);
+
+    return result.rowCount || 0;
+  }
 }

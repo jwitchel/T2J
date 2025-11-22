@@ -451,43 +451,7 @@ export class ImapOperations {
       await conn.selectFolder(folderName);
       
       // Build IMAP search criteria
-      const imapCriteria: any[] = [];
-      
-      if (criteria.seen !== undefined) {
-        imapCriteria.push(criteria.seen ? 'SEEN' : 'UNSEEN');
-      }
-      if (criteria.flagged !== undefined) {
-        imapCriteria.push(criteria.flagged ? 'FLAGGED' : 'UNFLAGGED');
-      }
-      if (criteria.from) {
-        imapCriteria.push(['FROM', criteria.from]);
-      }
-      if (criteria.to) {
-        imapCriteria.push(['TO', criteria.to]);
-      }
-      if (criteria.subject) {
-        imapCriteria.push(['SUBJECT', criteria.subject]);
-      }
-      if (criteria.body) {
-        imapCriteria.push(['BODY', criteria.body]);
-      }
-      if (criteria.before) {
-        imapCriteria.push(['BEFORE', criteria.before]);
-      }
-      if (criteria.since) {
-        imapCriteria.push(['SINCE', criteria.since]);
-      }
-      if (criteria.larger) {
-        imapCriteria.push(['LARGER', criteria.larger]);
-      }
-      if (criteria.smaller) {
-        imapCriteria.push(['SMALLER', criteria.smaller]);
-      }
-
-      // Default to ALL if no criteria
-      if (imapCriteria.length === 0) {
-        imapCriteria.push('ALL');
-      }
+      const imapCriteria: any[] = this._buildImapSearchCriteria(criteria);
 
       const uids = await conn.search(imapCriteria);
       console.log(`IMAP search with criteria ${JSON.stringify(imapCriteria)} returned ${uids.length} UIDs`);
@@ -552,6 +516,86 @@ export class ImapOperations {
     }
   }
 
+  /**
+   * Search for message UIDs only (no fetching)
+   * Much faster than searchMessages() when you just need UIDs
+   */
+  async searchUidsOnly(
+    folderName: string,
+    criteria: SearchCriteria = {},
+    options: { offset?: number; limit?: number } = {}
+  ): Promise<number[]> {
+    const conn = await this.getConnection();
+
+    try {
+      await conn.selectFolder(folderName);
+
+      // Build IMAP search criteria
+      const imapCriteria: any[] = this._buildImapSearchCriteria(criteria);
+
+      const uids = await conn.search(imapCriteria);
+      console.log(`[IMAP] SEARCH with criteria ${JSON.stringify(imapCriteria)} returned ${uids.length} UIDs`);
+
+      if (uids.length === 0) {
+        return [];
+      }
+
+      // Sort UIDs in descending order to get newest emails first
+      const sortedUids = [...uids].sort((a, b) => b - a);
+
+      // Apply pagination
+      const offset = options.offset || 0;
+      const limit = options.limit || 50;
+      const paginatedUids = sortedUids.slice(offset, offset + limit);
+      console.log(`[IMAP] Pagination: offset=${offset}, limit=${limit}, result=${paginatedUids.length} UIDs`);
+
+      return paginatedUids;
+    } finally {
+      this.release();
+    }
+  }
+
+  private _buildImapSearchCriteria(criteria: SearchCriteria) {
+    const imapCriteria: any[] = [];
+
+    if (criteria.seen !== undefined) {
+      imapCriteria.push(criteria.seen ? 'SEEN' : 'UNSEEN');
+    }
+    if (criteria.flagged !== undefined) {
+      imapCriteria.push(criteria.flagged ? 'FLAGGED' : 'UNFLAGGED');
+    }
+    if (criteria.from) {
+      imapCriteria.push(['FROM', criteria.from]);
+    }
+    if (criteria.to) {
+      imapCriteria.push(['TO', criteria.to]);
+    }
+    if (criteria.subject) {
+      imapCriteria.push(['SUBJECT', criteria.subject]);
+    }
+    if (criteria.body) {
+      imapCriteria.push(['BODY', criteria.body]);
+    }
+    if (criteria.before) {
+      imapCriteria.push(['BEFORE', criteria.before]);
+    }
+    if (criteria.since) {
+      imapCriteria.push(['SINCE', criteria.since]);
+    }
+    if (criteria.larger) {
+      imapCriteria.push(['LARGER', criteria.larger]);
+    }
+    if (criteria.smaller) {
+      imapCriteria.push(['SMALLER', criteria.smaller]);
+    }
+
+    // Default to ALL if no criteria
+    if (imapCriteria.length === 0) {
+      imapCriteria.push('ALL');
+    }
+    return imapCriteria;
+  }
+
   async getMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessage & { body?: string; parsed?: any; fullMessage?: string }> {
     const conn = await this.getConnection();
     
@@ -613,11 +657,11 @@ export class ImapOperations {
 
   /**
    * Get multiple messages without parsing in a single batch (fast version)
-   * This uses the same connection for all fetches and can parallelize operations
+   * Batches IMAP fetch operations to reduce overhead
    */
   async getMessagesRaw(
-    folderName: string, 
-    uids: number[], 
+    folderName: string,
+    uids: number[],
     preserveConnection: boolean = false
   ): Promise<EmailMessageWithRaw[]> {
     if (uids.length === 0) {
@@ -625,75 +669,121 @@ export class ImapOperations {
     }
 
     const conn = await this.getConnection();
-    
+
     try {
       await conn.selectFolder(folderName);
-      
-      // Fetch messages in parallel for better performance
-      const fetchPromises = uids.map(async (uid) => {
+
+      // Batch UIDs into groups for efficient IMAP fetch
+      // IMAP supports fetching multiple UIDs at once using UID sets
+      const BATCH_SIZE = 100;
+      const batches: number[][] = [];
+      for (let i = 0; i < uids.length; i += BATCH_SIZE) {
+        batches.push(uids.slice(i, i + BATCH_SIZE));
+      }
+
+      console.log(`[IMAP] Fetching ${uids.length} messages in ${batches.length} batches of up to ${BATCH_SIZE}`);
+
+      // PHASE 1: Fetch all raw messages (network I/O only, no parsing)
+      const fetchStart = Date.now();
+      interface RawMessage {
+        uid: number;
+        bodyString: string;
+        flags: string[];
+        size: number;
+        date: Date;
+      }
+      const allRawMessages: RawMessage[] = [];
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batchUids = batches[batchIndex];
         try {
-          const messages = await conn.fetch(uid.toString(), {
+          const messages = await conn.fetch(batchUids, {
             bodies: '', // Empty string fetches the entire RFC 5322 message
             envelope: true,
             size: true,
             flags: true
           });
 
-          if (messages.length === 0) {
-            console.warn(`Message ${uid} not found`);
-            return null;
+          // Log progress after each batch (every 100 messages)
+          const totalFetched = allRawMessages.length + messages.length;
+          console.log(`[IMAP] Progress: ${totalFetched}/${uids.length} messages fetched (${((totalFetched/uids.length)*100).toFixed(1)}%)`);
+
+          if (messages.length !== batchUids.length) {
+            console.warn(`[IMAP] Batch ${batchIndex + 1}: Expected ${batchUids.length} messages but got ${messages.length}`);
           }
 
-          const msg = messages[0] as any;
+          // Just collect raw messages, don't parse yet
+          for (const msg of messages) {
+            if (!msg.body) {
+              console.warn(`Message ${msg.uid} has no body`);
+              continue;
+            }
 
-          if (!msg.body) {
-            console.warn(`Message ${uid} has no body`);
-            return null;
+            // Ensure body is a string with proper encoding
+            let bodyString: string;
+            if (Buffer.isBuffer(msg.body)) {
+              bodyString = msg.body.toString('utf8');
+            } else if (typeof msg.body === 'string') {
+              bodyString = msg.body;
+            } else {
+              console.warn(`Message ${msg.uid} has invalid body type`);
+              continue;
+            }
+
+            allRawMessages.push({
+              uid: msg.uid,
+              bodyString,
+              flags: msg.flags,
+              size: msg.size || 0,
+              date: msg.date || new Date()
+            });
           }
+        } catch (err) {
+          console.error(`[IMAP] ERROR in batch ${batchIndex + 1}/${batches.length}:`, err);
+          console.error(`[IMAP] Failed UIDs: ${batchUids.slice(0, 10).join(',')}`);
+        }
+      }
 
-          // Ensure body is a string with proper encoding
-          let bodyString: string;
-          if (Buffer.isBuffer(msg.body)) {
-            bodyString = msg.body.toString('utf8');
-          } else if (typeof msg.body === 'string') {
-            bodyString = msg.body;
-          } else {
-            console.warn(`Message ${uid} has invalid body type`);
-            return null;
-          }
+      const fetchDuration = Date.now() - fetchStart;
+      console.log(`[IMAP] Fetch complete: ${fetchDuration}ms for ${allRawMessages.length} messages (${(fetchDuration/allRawMessages.length).toFixed(0)}ms/msg)`);
 
-          // Use mailparser to parse the complete message for proper header extraction
-          const parsedEmail = await simpleParser(bodyString);
+      // PHASE 2: Parse all messages in parallel (CPU-bound, can parallelize)
+      console.log(`[IMAP] Parsing ${allRawMessages.length} messages in parallel...`);
+      const parseStart = Date.now();
+
+      const parsePromises = allRawMessages.map(async (raw) => {
+        try {
+          const parsedEmail = await simpleParser(raw.bodyString);
 
           const result: EmailMessageWithRaw = {
-            uid: msg.uid,
+            uid: raw.uid,
             messageId: parsedEmail.messageId || undefined,
             from: parsedEmail.from?.value?.[0]?.address || undefined,
             to: parsedEmail.to ? (Array.isArray(parsedEmail.to) ? parsedEmail.to : [parsedEmail.to]).flatMap((addr: any) => addr.value || []).map((a: any) => a.address || '') : undefined,
             subject: parsedEmail.subject || undefined,
-            date: parsedEmail.date || msg.date || new Date(),
-            flags: msg.flags,
-            size: msg.size,
-            fullMessage: bodyString,
-            parsed: parsedEmail  // Include parsed email to avoid duplicate parsing downstream
+            date: parsedEmail.date || raw.date || new Date(),
+            flags: raw.flags,
+            size: raw.size,
+            fullMessage: raw.bodyString,
+            parsed: parsedEmail
           };
           return result;
         } catch (err) {
-          console.error(`Error fetching UID ${uid}:`, err);
+          console.error(`Error parsing message ${raw.uid}:`, err);
           return null;
         }
       });
 
-      // Wait for all fetches to complete
-      const results = await Promise.all(fetchPromises);
-      
-      // Filter out nulls from failed fetches  
-      const validMessages: EmailMessageWithRaw[] = [];
-      for (const msg of results) {
-        if (msg !== null) {
-          validMessages.push(msg);
-        }
-      }
+      const parsedResults = await Promise.all(parsePromises);
+      const parseDuration = Date.now() - parseStart;
+
+      // Filter out nulls
+      const validMessages: EmailMessageWithRaw[] = parsedResults.filter((msg): msg is EmailMessageWithRaw => msg !== null);
+
+      console.log(`[IMAP] Parse complete: ${parseDuration}ms for ${validMessages.length} messages (${(parseDuration/validMessages.length).toFixed(0)}ms/msg)`);
+      console.log(`[IMAP] Total: ${fetchDuration + parseDuration}ms (fetch: ${fetchDuration}ms, parse: ${parseDuration}ms)`);
+      console.log(`[IMAP] Successfully processed ${validMessages.length}/${uids.length} messages`);
+
       return validMessages;
     } finally {
       if (!preserveConnection) {
