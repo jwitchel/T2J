@@ -142,8 +142,8 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
           console.error(`[Training] Failed to save email ${validMessages[i].messageId}:`, result.error);
         }
 
-        // Log progress every 10 emails
-        if ((i + 1) % 10 === 0 || i === results.length - 1) {
+        // Log progress every 100 emails
+        if ((i + 1) % 100 === 0 || i === results.length - 1) {
           realTimeLogger.log(userId, {
             userId,
             emailAccountId,
