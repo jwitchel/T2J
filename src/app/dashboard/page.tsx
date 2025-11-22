@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Switch } from '@/components/ui/switch'
 import { Mail, Brain, Eye, EyeOff, Loader2 } from 'lucide-react'
 import useSWR from 'swr'
 import { ActionsSummaryChart } from '@/components/dashboard/actions-summary-chart'
@@ -37,7 +38,7 @@ export default function DashboardPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL!
   const [lookBackOption, setLookBackOption] = useState<string>('15min')
 
-  const { data: emailAccounts, isLoading: accountsLoading} = useSWR<EmailAccount[]>(
+  const { data: emailAccounts, isLoading: accountsLoading, mutate: mutateAccounts } = useSWR<EmailAccount[]>(
     user ? `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts` : null,
     fetcher
   )
@@ -89,6 +90,28 @@ export default function DashboardPage() {
       case 'today': return 'midnight today';
       case 'yesterday': return 'midnight yesterday';
       default: return '15 minutes ago';
+    }
+  };
+
+  const handleToggleMonitoring = async (account: EmailAccount, enabled: boolean) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/email-accounts/${account.id}/monitoring`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled })
+      });
+
+      if (response.ok) {
+        success(enabled ? 'Monitoring enabled' : 'Monitoring disabled');
+        mutateAccounts();
+      } else {
+        const errorData = await response.json();
+        error(errorData.error || 'Failed to toggle monitoring');
+      }
+    } catch (err) {
+      error('Failed to toggle monitoring');
+      console.error('Error:', err);
     }
   };
 
@@ -184,9 +207,11 @@ export default function DashboardPage() {
                                 ) : (
                                   <EyeOff className="h-3 w-3 text-muted-foreground" />
                                 )}
-                                <span className="text-xs">
-                                  {account.monitoring_enabled ? 'Enabled' : 'Paused'}
-                                </span>
+                                <Switch
+                                  checked={account.monitoring_enabled || false}
+                                  onCheckedChange={(checked) => handleToggleMonitoring(account, checked)}
+                                  className="scale-75"
+                                />
                               </div>
                             </TableCell>
                           </TableRow>
