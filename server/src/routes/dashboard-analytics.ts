@@ -90,7 +90,7 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    // Get recent actions with email account info, subject, sender, and destination
+    // Get recent actions with email account info, subject, sender, destination, relationship, and person name
     const result = await pool.query(
       `SELECT
         eat.id,
@@ -101,9 +101,16 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
         eat.destination_folder,
         eat.updated_at,
         eat.email_account_id,
-        ea.email_address
+        ea.email_address,
+        ur.relationship_type,
+        p.name as person_name
        FROM email_action_tracking eat
        JOIN email_accounts ea ON eat.email_account_id = ea.id
+       LEFT JOIN email_received er ON er.email_id = eat.message_id AND er.email_account_id = eat.email_account_id
+       LEFT JOIN person_emails pe ON er.sender_person_email_id = pe.id
+       LEFT JOIN people p ON pe.person_id = p.id
+       LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = eat.user_id AND pr.is_primary = true
+       LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
        WHERE eat.user_id = $1
          AND eat.action_taken != 'none'
        ORDER BY eat.updated_at DESC
@@ -126,10 +133,12 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
         actionTaken: row.action_taken,
         subject: row.subject || '(Subject unavailable for old emails)',
         senderEmail: row.sender_email,
+        senderName: row.person_name,
         destinationFolder: row.destination_folder,
         updatedAt: row.updated_at,
         emailAccountId: row.email_account_id,
-        emailAccount: row.email_address
+        emailAccount: row.email_address,
+        relationship: row.relationship_type || 'unknown'
       })),
       total: countResult.rows[0]?.total || 0
     });

@@ -7,6 +7,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { EmailActions } from '../../../server/src/lib/email-actions';
+import { RelationshipType } from '../../../server/src/lib/relationships/types';
 
 interface RecentAction {
   id: string;
@@ -14,10 +15,12 @@ interface RecentAction {
   actionTaken: string;
   subject: string;
   senderEmail?: string;
+  senderName?: string;
   destinationFolder?: string;
   updatedAt: string;
   emailAccountId: string;
   emailAccount: string;
+  relationship: string;
 }
 
 interface RecentActionsData {
@@ -268,6 +271,7 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
               <tr className="border-b">
                 <th className="text-left py-1.5 px-2 font-medium">Time</th>
                 <th className="text-left py-1.5 px-2 font-medium">From</th>
+                <th className="text-left py-1.5 px-2 font-medium">Relationship</th>
                 <th className="text-left py-1.5 px-2 font-medium">Subject</th>
                 <th className="text-left py-1.5 px-2 font-medium">Action</th>
                 <th className="text-center py-1.5 px-2 font-medium">Account</th>
@@ -278,6 +282,8 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
               {data.actions.map((action) => {
                 const actionInfo = getActionInfo(action.actionTaken, action.destinationFolder);
                 const emailColor = getEmailColor(action.emailAccount);
+                const relationshipColor = RelationshipType.COLORS[action.relationship] || RelationshipType.COLORS.unknown;
+                const relationshipLabel = RelationshipType.LABELS[action.relationship] || RelationshipType.LABELS.unknown;
 
                 return (
                   <tr key={action.id} className="border-b last:border-0 hover:bg-muted/50">
@@ -285,7 +291,12 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
                       {formatDistanceToNow(new Date(action.updatedAt), { addSuffix: true })}
                     </td>
                     <td className="py-1.5 px-2 max-w-[200px] truncate" title={action.senderEmail || 'Unknown'}>
-                      {action.senderEmail || '(Unknown)'}
+                      {action.senderName || action.senderEmail || '(Unknown)'}
+                    </td>
+                    <td className="py-1.5 px-2">
+                      <Badge className={`${relationshipColor} text-white text-xs px-1.5 py-0`}>
+                        {relationshipLabel}
+                      </Badge>
                     </td>
                     <td className="py-1.5 px-2 max-w-xs truncate" title={action.subject}>
                       {action.subject}

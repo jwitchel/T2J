@@ -28,6 +28,33 @@ export namespace RelationshipType {
   };
 
   /**
+   * Colors for relationship badges/pills in the UI
+   * Tailwind CSS color classes for consistent display
+   */
+  export const COLORS: Record<string, string> = {
+    [RelationshipType.SPOUSE]: 'bg-pink-500 hover:bg-pink-600',
+    [RelationshipType.FAMILY]: 'bg-purple-500 hover:bg-purple-600',
+    [RelationshipType.COLLEAGUE]: 'bg-blue-500 hover:bg-blue-600',
+    [RelationshipType.FRIENDS]: 'bg-green-500 hover:bg-green-600',
+    [RelationshipType.EXTERNAL]: 'bg-gray-500 hover:bg-gray-600',
+    [RelationshipType.SPAM]: 'bg-red-500 hover:bg-red-600',
+    'unknown': 'bg-zinc-500 hover:bg-zinc-600'
+  };
+
+  /**
+   * Display labels for relationship types
+   */
+  export const LABELS: Record<string, string> = {
+    [RelationshipType.SPOUSE]: 'Spouse',
+    [RelationshipType.FAMILY]: 'Family',
+    [RelationshipType.COLLEAGUE]: 'Colleague',
+    [RelationshipType.FRIENDS]: 'Friends',
+    [RelationshipType.EXTERNAL]: 'External',
+    [RelationshipType.SPAM]: 'Spam',
+    'unknown': 'Unknown'
+  };
+
+  /**
    * Select the higher priority relationship match
    * Priority: spouse > family > colleague > friends > external > spam
    */
