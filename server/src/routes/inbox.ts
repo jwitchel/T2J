@@ -1,15 +1,13 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
-import { withImapJson } from '../lib/http/imap-utils';
 import { pool } from '../lib/db';
-import { EmailActionTracker } from '../lib/email-action-tracker';
 import { inboxProcessor } from '../lib/email-processing/inbox-processor';
 import { ImapOperations } from '../lib/imap-operations';
 import PostalMime from 'postal-mime';
 
 const router = express.Router();
 
-// Process a single inbox email (used by UI)
+// Process a single inbox email (used by UI to upload draft/file email)
 router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).user.id;
   const {
@@ -68,174 +66,6 @@ router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
     console.error('[inbox-process-single] Error:', error);
     res.status(500).json({
       error: 'Failed to process email',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Get inbox emails for a specific account
-router.get('/emails/:accountId', requireAuth, async (req, res): Promise<void> => {
-  try {
-    const userId = (req as any).user.id;
-    const { accountId } = req.params;
-    const { offset = 0, limit = 1, showAll = 'false' } = req.query;
-
-    await withImapJson(res, accountId, userId, async () => {
-      // Account validation happens in ImapOperations.fromAccountId()
-      const imapOps = await ImapOperations.fromAccountId(accountId, userId);
-
-      const targetOffset = Number(offset);
-      const targetLimit = Number(limit);
-      const BATCH_SIZE = parseInt(process.env.NEXT_PUBLIC_INBOX_BATCH_SIZE || '10', 10);
-      let totalCount = -1;
-      const messages = await imapOps.getMessages('INBOX', {
-        offset: 0,
-        limit: BATCH_SIZE,
-        descending: true
-      });
-
-      // Get full message details for all messages in batch
-      let fullMessages: any[] = [];
-      if (messages.length > 0) {
-        const uids = messages.map(msg => msg.uid);
-        const batched = await imapOps.getMessagesRaw('INBOX', uids);
-        fullMessages = batched.map(msg => ({
-          uid: msg.uid,
-          messageId: msg.messageId || `${msg.uid}@${accountId}`,
-          from: msg.from || 'Unknown',
-          to: msg.to || [],
-          subject: msg.subject || '(No subject)',
-          date: msg.date || new Date(),
-          flags: msg.flags || [],
-          size: msg.size || 0,
-          fullMessage: msg.fullMessage || ''
-        }));
-      }
-
-      // Get action tracking data for ALL messages in one query
-      const messageIds = fullMessages.map(msg => msg.messageId).filter(id => id);
-      const actionTrackingMap = await EmailActionTracker.getActionsForMessages(accountId, messageIds);
-
-      // Enrich all messages with action tracking data
-      const enrichedMessages = fullMessages.map(msg => ({
-        ...msg,
-        actionTaken: actionTrackingMap[msg.messageId]?.actionTaken || 'none',
-        updatedAt: actionTrackingMap[msg.messageId]?.updatedAt
-      }));
-
-      // Get total count on first request
-      if (Number(offset) === 0) {
-        try {
-          const folderInfo = await imapOps.getFolderMessageCount('INBOX');
-          totalCount = folderInfo.total;
-        } catch (err) {
-          console.error('Failed to get total count:', err);
-          totalCount = -1;
-        }
-      }
-
-      // Now apply filtering and pagination on the enriched dataset
-      let resultMessages: any[] = [];
-
-      if (showAll === 'false') {
-        // Filter out messages that have been acted upon
-        const unprocessedMessages = enrichedMessages.filter(msg =>
-          msg.actionTaken === 'none' || !msg.actionTaken
-        );
-
-        // For filtered mode, skip to the target offset in the filtered list
-        // and take the requested limit
-        resultMessages = unprocessedMessages.slice(targetOffset, targetOffset + targetLimit);
-      } else {
-        // For show-all mode, pagination is straightforward
-        resultMessages = enrichedMessages.slice(0, targetLimit);
-      }
-
-      return {
-        messages: resultMessages,
-        total: totalCount,
-        offset: Number(offset),
-        limit: Number(limit)
-      };
-    }, 'Failed to fetch inbox');
-
-  } catch (error: any) {
-    console.error('[inbox] Error fetching inbox:', error);
-    // Map OAuth refresh failures to 401 so client can prompt re-auth
-    if (error?.code === 'AUTH_REFRESH_FAILED') {
-      res.status(401).json({
-        error: 'OAUTH_REAUTH_REQUIRED',
-        message: 'Email provider session expired or revoked. Please reconnect your account.'
-      });
-    } else {
-      res.status(500).json({
-        error: 'Failed to fetch inbox',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
-});
-
-// Reset action taken for an email (force evaluation)
-router.post('/emails/:accountId/reset-action', requireAuth, async (req, res): Promise<void> => {
-  try {
-    const userId = (req as any).user.id;
-    const { accountId } = req.params;
-    const { messageId } = req.body;
-
-    if (!messageId) {
-      res.status(400).json({ error: 'Message ID is required' });
-      return;
-    }
-
-    // Validate account belongs to user (required since EmailActionTracker doesn't validate ownership)
-    const accountCheck = await pool.query(
-      'SELECT id FROM email_accounts WHERE id = $1 AND user_id = $2',
-      [accountId, userId]
-    );
-
-    if (accountCheck.rows.length === 0) {
-      res.status(404).json({ error: 'Email account not found' });
-      return;
-    }
-
-    await EmailActionTracker.resetAction(accountId, messageId);
-
-    res.json({
-      success: true,
-      message: 'Email action reset successfully'
-    });
-  } catch (error: any) {
-    console.error('Failed to reset email action:', error);
-    res.status(500).json({
-      error: 'Failed to reset email action',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Get user's email accounts
-router.get('/accounts', requireAuth, async (req, res): Promise<void> => {
-  try {
-    const userId = (req as any).user.id;
-
-    const result = await pool.query(
-      'SELECT id, email_address, imap_host FROM email_accounts WHERE user_id = $1 ORDER BY created_at DESC',
-      [userId]
-    );
-
-    res.json({
-      accounts: result.rows.map(row => ({
-        id: row.id,
-        email: row.email_address,
-        host: row.imap_host
-      }))
-    });
-
-  } catch (error) {
-    console.error('Error fetching email accounts:', error);
-    res.status(500).json({
-      error: 'Failed to fetch email accounts',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -405,22 +235,48 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
       return;
     }
 
-    // Build llmResponse if draft context exists (draftId can be null for silent actions)
+    // Build llmResponse - either from full draft context or minimal data for older emails
     let llmResponse = undefined;
     if (email.contextData) {
+      // Full draft tracking data available
       const contextData = email.contextData;
       llmResponse = {
         meta: contextData.meta || {},
         generatedAt: email.draftCreatedAt?.toISOString() || new Date().toISOString(),
         providerId: contextData.providerId || 'unknown',
         modelName: contextData.modelName || 'unknown',
-        draftId: email.draftId || '',  // Can be empty for silent actions
+        draftId: email.draftId || '',
         relationship: {
           type: email.relationshipType || 'unknown',
           confidence: email.relationshipConfidence || 0
-        },  // From database person_relationships, not JSON
+        },
         spamAnalysis: contextData.spamAnalysis || { isSpam: false, indicators: [], senderResponseCount: 0 },
-        body: email.draftBody || ''  // Can be empty for silent actions
+        body: email.draftBody || ''
+      };
+    } else if (email.actionTaken && email.actionTaken !== 'none') {
+      // No draft context but email was processed - create minimal response showing action
+      llmResponse = {
+        meta: {
+          recommendedAction: email.actionTaken,
+          keyConsiderations: ['Email processed before analysis tracking was implemented'],
+          contextFlags: {
+            isThreaded: false,
+            hasAttachments: false,
+            isGroupEmail: false,
+            inboundMsgAddressedTo: 'you',
+            urgencyLevel: 'low'
+          }
+        },
+        generatedAt: new Date().toISOString(),
+        providerId: 'unknown',
+        modelName: 'unknown',
+        draftId: '',
+        relationship: {
+          type: email.relationshipType || 'unknown',
+          confidence: email.relationshipConfidence || 0
+        },
+        spamAnalysis: { isSpam: false, indicators: [], senderResponseCount: 0 },
+        body: ''
       };
     }
 

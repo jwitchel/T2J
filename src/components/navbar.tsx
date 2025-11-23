@@ -85,7 +85,6 @@ export function Navbar() {
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/inbox', label: 'Inbox', icon: Mail },
     { href: '/tone', label: 'Tone Analysis', icon: Sparkles },
     { href: '/dashboard/jobs', label: 'Jobs', icon: Briefcase },
   ]
