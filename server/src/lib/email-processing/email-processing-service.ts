@@ -11,11 +11,13 @@
  */
 
 import PostalMime from 'postal-mime';
+import { normalizeMessageId } from '../message-id-utils';
 
 // Helper to format milliseconds as seconds (e.g., 8234ms → 8.2s)
 function formatDuration(ms: number): string {
   return (ms / 1000).toFixed(1) + 's';
 }
+
 import { pool } from '../db';
 import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
@@ -96,7 +98,7 @@ export class EmailProcessingService {
     const to = (parsed.to || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
     const cc = (parsed.cc || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
     const replyTo = (parsed.replyTo || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
-    const messageId = parsed.messageId || `<${Date.now()}@${emailAccountId}>`;
+    const messageId = normalizeMessageId(parsed.messageId) || `${Date.now()}@${emailAccountId}`;
     const messageDate = parsed.date ? new Date(parsed.date) : new Date();
     const inReplyTo = parsed.inReplyTo || null;
 

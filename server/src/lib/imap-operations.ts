@@ -7,6 +7,7 @@ import { OAuthTokenService } from './oauth-token-service';
 import { getActiveContext, hasActiveContextFor, setContextConnection } from './imap-context';
 import { sharedConnection as redis } from './redis-connection';
 import { LLMClient } from './llm-client';
+import { normalizeMessageId } from './message-id-utils';
 
 export interface EmailAccountConfig {
   id: string;
@@ -421,7 +422,7 @@ export class ImapOperations {
 
       return messages.map((msg: any) => ({
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
@@ -501,7 +502,7 @@ export class ImapOperations {
 
       return messages.map((msg: any) => ({
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
@@ -637,7 +638,7 @@ export class ImapOperations {
       
       return {
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
@@ -838,7 +839,7 @@ export class ImapOperations {
 
       return {
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],

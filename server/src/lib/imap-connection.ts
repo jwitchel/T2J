@@ -2,6 +2,7 @@ import Imap from 'imap';
 import { EventEmitter } from 'events';
 import { promisify } from 'util';
 import { realTimeLogger } from './real-time-logger';
+import { normalizeMessageIdArray } from './message-id-utils';
 
 export interface ImapConfig {
   user: string;
@@ -368,7 +369,7 @@ export class ImapConnection extends EventEmitter {
                 to: headers.to,
                 subject: headers.subject,
                 date: headers.date,
-                messageId: headers['message-id']
+                messageId: normalizeMessageIdArray(headers['message-id'])
               };
             } else {
               message.body = buffer;
