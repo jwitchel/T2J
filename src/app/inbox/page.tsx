@@ -277,8 +277,8 @@ function InboxContent() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <div className="mb-6" style={{ textAlign: 'left' }}>
-        <h1 className="text-2xl font-bold mb-2" style={{ textAlign: 'left' }}>Message Analysis</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-2">Message Analysis</h1>
       </div>
 
       {/* Email display with tabs */}
@@ -548,22 +548,51 @@ function InboxContent() {
 
       {/* Add some basic email content styling */}
       <style jsx global>{`
+        /* Force stable layout - prevent scrollbar shifts */
+        html {
+          overflow-y: scroll;
+        }
+
+        /* Lock down the entire page font */
+        body, .container {
+          font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+        }
+
+        /* Isolate email content from parent styles */
         .email-content-wrapper {
           text-align: left !important;
           display: block !important;
           isolation: isolate;
+          contain: layout style paint;
+          overflow: hidden;
         }
-        .email-content * {
-          all: revert;
+
+        /* Force email content to use system font, not email's font */
+        .email-content,
+        .email-content *,
+        .email-content table,
+        .email-content p,
+        .email-content div,
+        .email-content span {
+          font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
         }
+
         .email-content img {
           max-width: 100%;
           height: auto;
+          display: block;
         }
+
         .email-content a {
           color: #6366f1;
           text-decoration: underline;
         }
+
+        .email-content table {
+          border-collapse: collapse;
+          max-width: 100%;
+        }
+
         .email-content center,
         .email-content [align="center"] {
           text-align: center;
