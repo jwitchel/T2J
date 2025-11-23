@@ -24,7 +24,8 @@ import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
 import { EmailActions } from '../email-actions';
 import { stripAttachments } from '../email-attachment-stripper';
-import { RelationshipType } from '../relationships/relationship-detector';
+import { RelationshipType } from '../relationships/types';
+import { personService } from '../relationships/person-service';
 
 /**
  * User context needed for email processing
@@ -251,6 +252,20 @@ export class EmailProcessingService {
 
       // If spam detected, create a silent-spam draft instead of full generation
       if (spamCheckResult.isSpam) {
+        // Update person relationship to spam
+        const senderEmail = parsedData.processedEmail.from[0]?.address;
+        const senderName = parsedData.processedEmail.from[0]?.name || senderEmail;
+
+        if (senderEmail) {
+          await personService.findOrCreatePerson({
+            userId,
+            name: senderName!,
+            emailAddress: senderEmail,
+            relationshipType: RelationshipType.SPAM,
+            confidence: 0.9
+          });
+        }
+
         const spamDraft = this.createSpamDraft(parsedData, userContext, spamCheckResult);
         draftDuration = Date.now() - draftStartTime;
 
