@@ -306,24 +306,16 @@ export class EmailProcessingService {
     } catch (error: unknown) {
       console.error('[EmailProcessingService] Error processing email:', error);
 
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error processing email';
-
-      // Classify error by examining error message
-      let errorCode: 'ACCOUNT_NOT_FOUND' | 'LLM_TIMEOUT' | 'PARSE_ERROR' | 'SPAM_DETECTED' | 'UNKNOWN' = 'UNKNOWN';
-
-      if (errorMessage.includes('not found') || errorMessage.includes('does not belong')) {
-        errorCode = 'ACCOUNT_NOT_FOUND';
-      } else if (errorMessage.includes('timeout')) {
-        errorCode = 'LLM_TIMEOUT';
-      } else if (errorMessage.includes('parse') || errorMessage.includes('parsing')) {
-        errorCode = 'PARSE_ERROR';
+      // Mark permanent errors (configuration issues that won't resolve with retry)
+      if (error instanceof Error) {
+        const message = error.message;
+        if (message.includes('not found') || message.includes('does not belong')) {
+          (error as any).permanent = true;
+        }
       }
 
-      return {
-        success: false,
-        error: errorMessage,
-        errorCode
-      };
+      // Re-throw - let caller handle errors
+      throw error;
     }
   }
 }

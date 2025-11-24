@@ -151,14 +151,8 @@ export class DraftGenerator {
     } catch (error: unknown) {
       console.error('[DraftGenerator] Error generating draft:', error);
 
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorCode = errorMessage.includes('timeout') ? 'LLM_TIMEOUT' : 'UNKNOWN';
-
-      return {
-        success: false,
-        error: errorMessage,
-        errorCode
-      };
+      // Re-throw - let caller handle errors (already marked as permanent if applicable)
+      throw error;
     }
   }
 
