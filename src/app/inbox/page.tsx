@@ -7,10 +7,10 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Paperclip, FileText, Send, Loader2, Brain, AlertCircle, FolderOpen } from 'lucide-react';
+import { Paperclip, FileText, Brain, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PostalMime from 'postal-mime';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
@@ -40,40 +40,6 @@ interface ParsedEmail {
   }>;
 }
 
-interface GeneratedDraft {
-  id: string;
-  from: string;
-  to: string;
-  cc?: string;
-  subject: string;
-  body: string;
-  bodyHtml?: string;
-  inReplyTo: string;
-  references: string;
-  meta?: {
-    recommendedAction: RecommendedAction;
-    keyConsiderations: string[];
-    contextFlags: {
-      isThreaded: boolean;
-      hasAttachments: boolean;
-      isGroupEmail: boolean;
-      inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
-      urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
-    };
-  };
-  relationship: {
-    type: string;
-    confidence: number;
-  };
-  draftMetadata: {
-    originalSubject: string;
-    originalFrom: string;
-    spamAnalysis: SpamCheckResult;
-    exampleCount: number;
-    timestamp: string;
-  };
-}
-
 interface EmailData {
   messageId: string;
   subject: string;
@@ -90,14 +56,37 @@ interface EmailData {
 }
 
 function InboxContent() {
-  const { error, success } = useToast();
+  const { error } = useToast();
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('message');
+  const [activeTab, setActiveTab] = useState('analysis');
   const [emailData, setEmailData] = useState<EmailData | null>(null);
   const [parsedMessage, setParsedMessage] = useState<ParsedEmail | null>(null);
-  const [generatedDraft, setGeneratedDraft] = useState<GeneratedDraft | null>(null);
+  const [llmResponse, setLlmResponse] = useState<{
+    meta: {
+      recommendedAction: RecommendedAction;
+      keyConsiderations: string[];
+      contextFlags: {
+        isThreaded: boolean;
+        hasAttachments: boolean;
+        isGroupEmail: boolean;
+        inboundMsgAddressedTo: 'you' | 'group' | 'someone-else';
+        urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
+      };
+    };
+    generatedAt: string;
+    providerId: string;
+    modelName: string;
+    draftId: string;
+    body?: string;
+    bodyHtml?: string;
+    relationship: {
+      type: string;
+      confidence: number;
+    };
+    spamAnalysis: SpamCheckResult;
+  } | null>(null);
 
   // URL parameters (required)
   const emailAccountId = searchParams.get('emailAccountId');
@@ -166,33 +155,8 @@ function InboxContent() {
 
       if (data.success && data.email) {
         setEmailData(data.email);
-
-        // If llmResponse exists, convert it to GeneratedDraft format
-        if (data.email.llmResponse) {
-          const draft: GeneratedDraft = {
-            id: data.email.llmResponse.draftId,
-            from: '',
-            to: data.email.to.join(', '),
-            cc: data.email.cc?.join(', ') || '',
-            subject: data.email.subject,
-            body: data.email.llmResponse.body || '',
-            bodyHtml: data.email.llmResponse.bodyHtml,
-            inReplyTo: data.email.messageId,
-            references: data.email.messageId,
-            meta: data.email.llmResponse.meta,
-            relationship: data.email.llmResponse.relationship,
-            draftMetadata: {
-              originalSubject: data.email.subject,
-              originalFrom: data.email.from,
-              spamAnalysis: data.email.llmResponse.spamAnalysis,
-              exampleCount: 0,
-              timestamp: data.email.llmResponse.generatedAt
-            }
-          };
-
-          setGeneratedDraft(draft);
-          setActiveTab('analysis');
-        }
+        setLlmResponse(data.email.llmResponse || null);
+        console.log('Email data loaded:', { hasLlmResponse: !!data.email.llmResponse, email: data.email });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load email';
@@ -284,7 +248,7 @@ function InboxContent() {
       {/* Email display with tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="analysis" disabled={!generatedDraft}>
+          <TabsTrigger value="analysis">
             Analysis
           </TabsTrigger>
           <TabsTrigger value="message">Message</TabsTrigger>
@@ -401,21 +365,21 @@ function InboxContent() {
         </TabsContent>
 
         <TabsContent value="analysis">
-          {generatedDraft ? (
+          {llmResponse && emailData ? (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Analysis</CardTitle>
                 <div className="text-sm text-muted-foreground mt-1">
-                  <div>To: {generatedDraft.to}</div>
-                  {generatedDraft.cc && <div>CC: {generatedDraft.cc}</div>}
-                  <div>Subject: {generatedDraft.subject}</div>
-                  <div>Relationship: {generatedDraft.relationship.type} ({Math.round(generatedDraft.relationship.confidence * 100)}% confidence)</div>
+                  <div>To: {emailData.to.join(', ')}</div>
+                  {emailData.cc && emailData.cc.length > 0 && <div>CC: {emailData.cc.join(', ')}</div>}
+                  <div>Subject: {emailData.subject}</div>
+                  <div>Relationship: {llmResponse.relationship.type} ({Math.round(llmResponse.relationship.confidence * 100)}% confidence)</div>
                 </div>
               </CardHeader>
               <CardContent>
-                {generatedDraft.body ? (
+                {llmResponse.body ? (
                   <div className="bg-muted p-4 rounded-md">
-                    <pre className="whitespace-pre-wrap font-sans text-sm">{generatedDraft.body}</pre>
+                    <pre className="whitespace-pre-wrap font-sans text-sm">{llmResponse.body}</pre>
                   </div>
                 ) : (
                   <div className="bg-muted p-4 rounded-md text-center text-muted-foreground">
@@ -424,7 +388,7 @@ function InboxContent() {
                 )}
 
                 {/* AI Analysis Metadata */}
-                {generatedDraft.meta && (
+                {llmResponse.meta && (
                   <div className="mt-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
@@ -432,7 +396,7 @@ function InboxContent() {
                         <h3 className="font-semibold">AI Analysis</h3>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono">
-                        Message ID: {generatedDraft.inReplyTo}
+                        Message ID: {emailData.messageId}
                       </div>
                     </div>
 
@@ -442,16 +406,16 @@ function InboxContent() {
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Spam Analysis</div>
                           {
-                            generatedDraft.draftMetadata.spamAnalysis.isSpam ? (
+                            llmResponse.spamAnalysis.isSpam ? (
                               <Badge
                                 variant="destructive"
                                 className="cursor-help"
-                                title={generatedDraft.draftMetadata.spamAnalysis.indicators.join('\n')}
+                                title={llmResponse.spamAnalysis.indicators.join('\n')}
                               >
                                 ⚠️ Spam
-                                {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount > 0 && (
+                                {llmResponse.spamAnalysis.senderResponseCount > 0 && (
                                   <span className="ml-1">
-                                    (replied {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount}x)
+                                    (replied {llmResponse.spamAnalysis.senderResponseCount}x)
                                   </span>
                                 )}
                               </Badge>
@@ -459,12 +423,12 @@ function InboxContent() {
                               <Badge
                                 variant="default"
                                 className="cursor-help"
-                                title={generatedDraft.draftMetadata.spamAnalysis.indicators.join('\n')}
+                                title={llmResponse.spamAnalysis.indicators.join('\n')}
                               >
                                 ✓ Not Spam
-                                {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount > 0 && (
+                                {llmResponse.spamAnalysis.senderResponseCount > 0 && (
                                   <span className="ml-1">
-                                    (replied {generatedDraft.draftMetadata.spamAnalysis.senderResponseCount}x)
+                                    (replied {llmResponse.spamAnalysis.senderResponseCount}x)
                                   </span>
                                 )}
                               </Badge>
@@ -476,18 +440,18 @@ function InboxContent() {
                           <div className="text-sm font-medium text-muted-foreground mb-1">Recommended Action</div>
                           <Badge
                             variant={
-                              generatedDraft.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS ? 'destructive' :
-                              generatedDraft.meta.recommendedAction.startsWith('silent') ? 'secondary' :
-                              generatedDraft.meta.recommendedAction.includes('forward') ? 'outline' : 'default'
+                              llmResponse.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS ? 'destructive' :
+                              llmResponse.meta.recommendedAction.startsWith('silent') ? 'secondary' :
+                              llmResponse.meta.recommendedAction.includes('forward') ? 'outline' : 'default'
                             }
                             className={
-                              generatedDraft.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS
+                              llmResponse.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS
                                 ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
                                 : ''
                             }
                           >
-                            {generatedDraft.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS && '⚠️ '}
-                            {generatedDraft.meta.recommendedAction}
+                            {llmResponse.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS && '⚠️ '}
+                            {llmResponse.meta.recommendedAction}
                           </Badge>
                         </div>
                       </div>
@@ -497,24 +461,24 @@ function InboxContent() {
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Context Flags</div>
                           <div className="flex flex-wrap gap-1">
-                            <Badge variant={generatedDraft.meta.contextFlags.isThreaded ? "default" : "outline"} className="text-xs">
-                              {generatedDraft.meta.contextFlags.isThreaded ? "✓" : "✗"} Threaded
+                            <Badge variant={llmResponse.meta.contextFlags.isThreaded ? "default" : "outline"} className="text-xs">
+                              {llmResponse.meta.contextFlags.isThreaded ? "✓" : "✗"} Threaded
                             </Badge>
-                            <Badge variant={generatedDraft.meta.contextFlags.hasAttachments ? "default" : "outline"} className="text-xs">
-                              {generatedDraft.meta.contextFlags.hasAttachments ? "✓" : "✗"} Has Attachments
+                            <Badge variant={llmResponse.meta.contextFlags.hasAttachments ? "default" : "outline"} className="text-xs">
+                              {llmResponse.meta.contextFlags.hasAttachments ? "✓" : "✗"} Has Attachments
                             </Badge>
-                            <Badge variant={generatedDraft.meta.contextFlags.isGroupEmail ? "default" : "outline"} className="text-xs">
-                              {generatedDraft.meta.contextFlags.isGroupEmail ? "✓" : "✗"} Group Email
+                            <Badge variant={llmResponse.meta.contextFlags.isGroupEmail ? "default" : "outline"} className="text-xs">
+                              {llmResponse.meta.contextFlags.isGroupEmail ? "✓" : "✗"} Group Email
                             </Badge>
                             <Badge variant="secondary" className="text-xs">
-                              Addressed To: {generatedDraft.meta.contextFlags.inboundMsgAddressedTo}
+                              Addressed To: {llmResponse.meta.contextFlags.inboundMsgAddressedTo}
                             </Badge>
                             <Badge variant={
-                              generatedDraft.meta.contextFlags.urgencyLevel === 'critical' ? 'destructive' :
-                              generatedDraft.meta.contextFlags.urgencyLevel === 'high' ? 'default' :
+                              llmResponse.meta.contextFlags.urgencyLevel === 'critical' ? 'destructive' :
+                              llmResponse.meta.contextFlags.urgencyLevel === 'high' ? 'default' :
                               'secondary'
                             } className="text-xs">
-                              Urgency: {generatedDraft.meta.contextFlags.urgencyLevel}
+                              Urgency: {llmResponse.meta.contextFlags.urgencyLevel}
                             </Badge>
                           </div>
                         </div>
@@ -522,11 +486,11 @@ function InboxContent() {
                     </div>
 
                     {/* Key Considerations */}
-                    {Array.isArray(generatedDraft.meta?.keyConsiderations) && generatedDraft.meta.keyConsiderations.length > 0 && (
+                    {Array.isArray(llmResponse.meta?.keyConsiderations) && llmResponse.meta.keyConsiderations.length > 0 && (
                       <div className="mt-4">
                         <div className="text-sm font-medium text-muted-foreground mb-2">Key Considerations</div>
                         <ul className="list-disc list-inside space-y-1">
-                          {generatedDraft.meta.keyConsiderations.map((consideration, idx) => (
+                          {llmResponse.meta.keyConsiderations.map((consideration, idx) => (
                             <li key={idx} className="text-sm text-muted-foreground">{consideration}</li>
                           ))}
                         </ul>
@@ -536,10 +500,19 @@ function InboxContent() {
                 )}
               </CardContent>
             </Card>
+          ) : loading ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <p>Loading analysis...</p>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                <p>No draft available for this email</p>
+                <p>No analysis available for this email</p>
+                {emailData?.actionTaken && (
+                  <p className="text-sm mt-2">Action taken: {emailData.actionTaken}</p>
+                )}
               </CardContent>
             </Card>
           )}
