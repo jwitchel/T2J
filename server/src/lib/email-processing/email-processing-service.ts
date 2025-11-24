@@ -245,6 +245,8 @@ export class EmailProcessingService {
       });
       const spamCheckDuration = Date.now() - spamCheckStartTime;
 
+      console.log(`[EmailProcessingService] 🔍 Spam check result for ${senderEmail}: isSpam=${spamCheckResult.isSpam}, indicators=[${spamCheckResult.indicators.join(', ')}], responseCount=${spamCheckResult.senderResponseCount}`);
+
       // Step 5: Generate draft (or create spam draft)
       const draftStartTime = Date.now();
       let draftDuration = 0;

@@ -17,8 +17,6 @@ import {
   ChevronDown,
   Mail,
   Database,
-  Code2,
-  Home,
   Sparkles,
   Settings,
   LogOut,
@@ -83,7 +81,7 @@ export function Navbar() {
 
   const isActive = (path: string) => pathname === path
 
-  const navItems: { href: string; label: string; icon: any }[] = []
+  const navItems: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = []
 
   const handleSignOut = async () => {
     await signOut()

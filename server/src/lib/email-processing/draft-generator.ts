@@ -302,6 +302,8 @@ export class DraftGenerator {
         ? { type: RelationshipType.SPAM, confidence: 0.9 }
         : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence };
 
+      console.log(`[DraftGenerator] 🎯 Final relationship determination: action=${combinedMeta.recommendedAction}, isSpamAction=${ActionHelpers.isSpamAction(combinedMeta.recommendedAction)}, detectedRelationship=${detectedRelationship.relationship}, finalRelationship=${finalRelationship.type}`);
+
       return {
         body: responseMessage,
         meta: combinedMeta,

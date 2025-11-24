@@ -272,6 +272,8 @@ export class RelationshipDetector {
       // Extract name from email address or use formatted email prefix as fallback
       const personName = NameExtractor.extractName(emailToStore, params.recipientName);
 
+      console.log(`[RelationshipDetector] 👤 Creating person: email=${emailToStore}, relationship=${relationship}, confidence=${confidence}`);
+
       person = await this.personService.findOrCreatePerson({
         userId,
         name: personName,
@@ -279,6 +281,8 @@ export class RelationshipDetector {
         relationshipType: relationship,
         confidence
       }, client);
+    } else {
+      console.log(`[RelationshipDetector] ✓ Found existing person: email=${recipientEmail}, relationship=${relationship}, confidence=${confidence}`);
     }
 
     // Return with person data - will extract primaryEmail at end
