@@ -194,17 +194,16 @@ export class DraftGenerator {
       const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
       const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;
       console.log(`[DraftGenerator] 📧 Selected ${exampleSelection.examples.length} examples for ${exampleSelection.relationship} relationship: ${directCount} direct, ${categoryCount} category`);
-      exampleSelection.examples.forEach((example, idx) => {
-        const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
-        const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
-        const subject = example.metadata?.subject || 'No subject';
-        const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
-        const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
-        console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
-      });
+      // exampleSelection.examples.forEach((example, idx) => {
+      //   const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
+      //   const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
+      //   const subject = example.metadata?.subject || 'No subject';
+      //   const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
+      //   const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
+      //   console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
+      // });
 
       // Get the detected relationship
-      const t1 = Date.now();
       const replyToEmail = processedEmail.replyTo[0]?.address;
       const recipientName = processedEmail.from[0]?.name;
       const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
@@ -213,13 +212,10 @@ export class DraftGenerator {
         recipientName,
         replyToEmail
       });
-      console.log(`[DraftGenerator] ⏱️  detectRelationship: ${Date.now() - t1}ms`);
 
       // Get enhanced profile with aggregated style from PostgreSQL
-      const t2 = Date.now();
       const styleService = new StyleAggregationService(pool);
       const aggregatedStyle = await styleService.getAggregatedStyle(userId, exampleSelection.relationship);
-      console.log(`[DraftGenerator] ⏱️  getAggregatedStyle: ${Date.now() - t2}ms`);
 
       // Wrap aggregated style in enhanced profile structure
       const enhancedProfile = aggregatedStyle ? {
@@ -235,12 +231,10 @@ export class DraftGenerator {
       } : null;
 
       // Step 2: Load writing patterns (pre-computed during training)
-      const t3 = Date.now();
       const writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
         userId,
         exampleSelection.relationship
       );
-      console.log(`[DraftGenerator] ⏱️  loadPatterns: ${Date.now() - t3}ms`);
 
       // Note: If no patterns exist, we should NOT analyze on-demand during draft generation
       // Pattern analysis is expensive (LLM calls + sentence stats calculation)
@@ -252,7 +246,6 @@ export class DraftGenerator {
 
       // Step 3: Action Analysis (First LLM Call)
       // Single source of truth for email classification and action determination
-      const t4 = Date.now();
       const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
@@ -262,7 +255,6 @@ export class DraftGenerator {
       });
 
       const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
-      console.log(`[DraftGenerator] ⏱️  actionAnalysis (LLM 1): ${Date.now() - t4}ms`);
 
       // Use action analysis as complete metadata (no merging needed)
       const combinedMeta: LLMMetadata = actionAnalysis.meta;
