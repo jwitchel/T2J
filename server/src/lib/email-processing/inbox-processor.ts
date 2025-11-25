@@ -14,6 +14,8 @@ import { DraftEmail } from '../pipeline/types';
 import { pool } from '../db';
 import { ActionHelpers } from '../email-actions';
 import { simpleParser } from 'mailparser';
+import { PoolClient } from 'pg';
+import { EmailActionRouter } from '../email-action-router';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -37,9 +39,7 @@ interface ProcessingState {
 }
 
 interface DraftGenerationResult {
-  shouldSkip: boolean; // true for spam
-  draft?: DraftEmail;
-  skipReason?: string;
+  draft: DraftEmail;
 }
 
 interface ImapOperationResult {
@@ -54,6 +54,10 @@ export interface ProcessEmailParams {
     messageId?: string;
     subject?: string;
     from?: string;
+    to?: string[];
+    cc?: string[];
+    date?: Date;
+    flags?: string[];
     fullMessage: string;
   };
   accountId: string;
@@ -154,7 +158,7 @@ export class InboxProcessor {
   }
 
   /**
-   * Generate draft or detect spam
+   * Generate draft (spam emails return a draft with silent-spam action)
    * @private
    */
   private async _generateDraft(
@@ -162,9 +166,10 @@ export class InboxProcessor {
     existingDraft?: DraftEmail
   ): Promise<DraftGenerationResult> {
     if (existingDraft) {
-      return { shouldSkip: false, draft: existingDraft };
+      return { draft: existingDraft };
     }
 
+    // Let errors throw naturally - emailProcessingService marks permanent errors
     const processingResult = await emailProcessingService.processEmail({
       fullMessage: context.message.fullMessage,
       emailAccountId: context.accountId,
@@ -172,26 +177,36 @@ export class InboxProcessor {
       userId: context.userId
     });
 
-    if (!processingResult.success) {
-      if (processingResult.errorCode === 'SPAM_DETECTED') {
-        return { shouldSkip: true, skipReason: 'spam' };
-      }
-
-      if (processingResult.errorCode === 'ACCOUNT_NOT_FOUND') {
-        const error = new Error(processingResult.error || 'Account not found');
-        (error as any).permanent = true;
-        throw error;
-      }
-
-      throw new Error(processingResult.error || 'Failed to process email');
-    }
-
     return {
-      shouldSkip: false,
       draft: processingResult.draft as DraftEmail
     };
   }
 
+
+  /**
+   * Determine destination folder for email action
+   * This is synchronous and deterministic based on user preferences and action type
+   * @private
+   */
+  private async _determineDestination(
+    context: ProcessingContext,
+    draft: DraftEmail
+  ): Promise<string> {
+    // Fetch user preferences to determine folder routing
+    const userResult = await pool.query(
+      'SELECT preferences FROM "user" WHERE id = $1',
+      [context.userId]
+    );
+    const preferences = userResult.rows[0]?.preferences || {};
+    const folderPrefs = preferences.folderPreferences;
+    const draftsFolderPath = folderPrefs?.draftsFolderPath;
+
+    // Create router and get destination
+    const actionRouter = new EmailActionRouter(folderPrefs, draftsFolderPath);
+    const routeResult = actionRouter.getActionRoute(draft.meta.recommendedAction as any);
+
+    return routeResult.folder;
+  }
 
   /**
    * Perform IMAP operation (move or upload draft)
@@ -249,110 +264,56 @@ export class InboxProcessor {
   }
 
   /**
-   * Record initial action tracking (before IMAP operations)
-   * @private
-   */
-  private async _recordInitialTracking(context: ProcessingContext, draft: DraftEmail): Promise<void> {
-    await EmailActionTracker.recordAction(
-      context.userId,
-      context.accountId,
-      context.messageKey,
-      draft.meta.recommendedAction as any, // recommendedAction type mismatch - cast for now
-      context.message.subject,
-      undefined, // Will be updated after IMAP
-      context.message.uid,
-      context.message.from
-    );
-  }
-
-  /**
-   * Update action tracking with final destination (after IMAP operations)
-   * @private
-   */
-  private async _updateTracking(
-    context: ProcessingContext,
-    draft: DraftEmail,
-    destination: string
-  ): Promise<void> {
-    await EmailActionTracker.recordAction(
-      context.userId,
-      context.accountId,
-      context.messageKey,
-      draft.meta.recommendedAction as any, // recommendedAction type mismatch - cast for now
-      context.message.subject,
-      destination,
-      context.message.uid,
-      context.message.from
-    );
-  }
-
-  /**
-   * Rollback action tracking on failure
-   * @private
-   */
-  private async _rollbackTracking(context: ProcessingContext): Promise<void> {
-    try {
-      await EmailActionTracker.resetAction(context.accountId, context.messageKey);
-    } catch (error: unknown) {
-      console.error('[InboxProcessor] Rollback failed:', error);
-    }
-  }
-
-  /**
-   * Save email to database (best effort - doesn't throw on error)
+   * Save email to database
+   * @param context - Processing context with email data
+   * @param draft - Generated draft email
+   * @param client - Transaction client for atomic operations
    * @private
    */
   private async _saveToDatabase(
     context: ProcessingContext,
-    draft: DraftEmail
+    draft: DraftEmail,
+    client: PoolClient
   ): Promise<void> {
-    try {
-      // Parse email for storage (inbox emails don't come pre-parsed from IMAP)
-      const parsed = await simpleParser(context.message.fullMessage);
+    // Parse email for storage (inbox emails don't come pre-parsed from IMAP)
+    const parsed = await simpleParser(context.message.fullMessage);
 
-      // Always store the ORIGINAL fullMessage (complete, unedited, with all attachments)
-      // This preserves the complete email for drafts, replies, and future processing
-      const emailData = {
-        uid: context.message.uid,
-        messageId: context.message.messageId,
-        subject: context.message.subject,
-        from: context.message.from,
-        fullMessage: context.message.fullMessage, // ORIGINAL - complete with all attachments
-        to: [],
-        cc: [],
-        date: new Date(),
-        flags: [],
-        size: context.message.fullMessage.length,
-        parsed  // Include parsed email for storage service
-      };
+    // Always store the ORIGINAL fullMessage (complete, unedited, with all attachments)
+    // This preserves the complete email for drafts, replies, and future processing
+    const emailData = {
+      uid: context.message.uid,
+      messageId: context.message.messageId,
+      subject: context.message.subject,
+      from: context.message.from,
+      fullMessage: context.message.fullMessage, // ORIGINAL - complete with all attachments
+      to: context.message.to || [],
+      cc: context.message.cc || [],
+      date: context.message.date || parsed.date || new Date(), // IMAP date already prefers parsed > envelope > now
+      flags: context.message.flags || [],
+      size: context.message.fullMessage.length,
+      parsed  // Include parsed email for storage service
+    };
 
-      const llmResponse = {
-        meta: draft.meta,
-        generatedAt: (draft as any).generatedAt || draft.draftMetadata?.timestamp || new Date().toISOString(),
-        providerId: context.providerId,
-        modelName: (draft as any).modelName || 'unknown',
-        draftId: draft.id || '',
-        relationship: draft.relationship || {
-          type: 'professional',
-          confidence: 0.5
-        },
-        spamAnalysis: draft.draftMetadata.spamAnalysis,
-        generatedContent: draft.body
-      };
+    const llmResponse = {
+      meta: draft.meta,
+      generatedAt: (draft as any).generatedAt,
+      providerId: context.providerId,
+      modelName: (draft as any).modelName,
+      draftId: draft.id,
+      relationship: draft.relationship,
+      spamAnalysis: draft.draftMetadata.spamAnalysis,
+      generatedContent: draft.body
+    };
 
-      await emailStorageService.saveEmail({
-        userId: context.userId,
-        emailAccountId: context.accountId,
-        emailData,
-        emailType: 'incoming',
-        folderName: DEFAULT_SOURCE_FOLDER,
-        llmResponse
-      });
-    } catch (error: unknown) {
-      console.error(`[InboxProcessor] ⚠️ DATABASE SAVE FAILED for ${context.message.messageId}:`, error);
-      console.error(`[InboxProcessor] This email will not be viewable in history!`);
-      // Don't throw - database save is best-effort
-    }
+    await emailStorageService.saveEmail({
+      userId: context.userId,
+      emailAccountId: context.accountId,
+      emailData,
+      emailType: 'incoming',
+      folderName: DEFAULT_SOURCE_FOLDER,
+      llmResponse,
+      client
+    });
   }
 
   /**
@@ -427,37 +388,62 @@ export class InboxProcessor {
 
     try {
       // 2. GENERATE DRAFT (includes spam detection)
+      // Note: Spam emails return a draft with silent-spam action, not an error
       const draftResult = await this._generateDraft(context, params.generatedDraft as DraftEmail);
-
-      if (draftResult.shouldSkip) {
-        // Should not happen anymore - spam now returns a draft with silent-spam action
-        const result = this._buildResult(context);
-        this._logProcessingSummary(context, result, true);
-        return result;
-      }
-
-      const draft = draftResult.draft!;
+      const draft = draftResult.draft;
       const isSpam = ActionHelpers.isSpamAction(draft.meta.recommendedAction);
 
-      // 3. RECORD INITIAL ACTION TRACKING
-      await this._recordInitialTracking(context, draft);
+      // 3. DETERMINE DESTINATION FOLDER (before transaction)
+      // This is deterministic based on user preferences and action type
+      const destinationFolder = await this._determineDestination(context, draft);
 
-      // 4. PERFORM IMAP OPERATIONS (move or upload) - throws on failure
-      let imapResult: ImapOperationResult;
+      // 4. DATABASE TRANSACTION - Atomic writes BEFORE irreversible IMAP operations
+      const client = await pool.connect();
       try {
-        imapResult = await this._performImapOperation(context, draft);
-      } catch (imapError) {
-        await this._rollbackTracking(context);
-        throw imapError;
+        await client.query('BEGIN');
+
+        // 4a. Record action tracking in transaction WITH destination
+        try {
+          await EmailActionTracker.recordAction(
+            context.userId,
+            context.accountId,
+            context.messageKey,
+            draft.meta.recommendedAction as any,
+            context.message.subject,
+            destinationFolder,
+            context.message.uid,
+            context.message.from,
+            client
+          );
+        } catch (trackError: unknown) {
+          console.error('[InboxProcessor] EmailActionTracker.recordAction failed:', trackError);
+          throw trackError;
+        }
+
+        // 4b. Save email to database in transaction
+        try {
+          await this._saveToDatabase(context, draft, client);
+        } catch (saveError: unknown) {
+          console.error('[InboxProcessor] _saveToDatabase failed:', saveError);
+          throw saveError;
+        }
+
+        // 4c. COMMIT - all database writes are now atomic
+        await client.query('COMMIT');
+      } catch (dbError) {
+        // ROLLBACK on any database error
+        await client.query('ROLLBACK');
+        console.error('[InboxProcessor] Transaction rolled back due to error:', dbError);
+        throw dbError;
+      } finally {
+        client.release();
       }
 
-      // 5. UPDATE ACTION TRACKING WITH FINAL DESTINATION
-      await this._updateTracking(context, draft, imapResult.destination);
+      // 5. PERFORM IMAP OPERATIONS - After successful database commit
+      // If this fails, database record exists and can be retried/corrected
+      const imapResult = await this._performImapOperation(context, draft);
 
-      // 6. SAVE TO DATABASE (best effort - doesn't fail on error)
-      await this._saveToDatabase(context, draft);
-
-      // 7. BUILD SUCCESS RESULT AND LOG SUMMARY
+      // 6. BUILD SUCCESS RESULT AND LOG SUMMARY
       const result = this._buildResult(context, {
         draft,
         moved: imapResult.moved,
@@ -469,6 +455,12 @@ export class InboxProcessor {
       return result;
 
     } catch (error: unknown) {
+      // Log detailed error before building result
+      console.error(`[InboxProcessor] _executeProcessing failed for message ${context.messageKey}:`, error);
+      if (error instanceof Error) {
+        console.error(`[InboxProcessor] Error stack:`, error.stack);
+      }
+
       const result = this._buildResult(context, undefined, error as Error);
       this._logProcessingSummary(context, result, false);
       return result;
@@ -558,6 +550,10 @@ export class InboxProcessor {
               messageId: msg.messageId,
               subject: msg.subject,
               from: msg.from,
+              to: msg.to,
+              cc: msg.parsed?.cc ? [msg.parsed.cc].flat().map(addr => addr.text || '').filter(Boolean) : [],
+              date: msg.date,
+              flags: msg.flags,
               fullMessage: msg.fullMessage
             },
             accountId,

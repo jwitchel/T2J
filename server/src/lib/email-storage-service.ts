@@ -15,6 +15,7 @@ import { extractEmailFeatures, EmailFeatures } from './pipeline/types';
 import { ParsedMail } from 'mailparser';
 import { EmailMessageWithRaw } from './imap-operations';
 import { pool } from './db';
+import { PoolClient } from 'pg';
 import { EmailRepository } from './repositories/email-repository';
 import { EmailMarkers, hasActualUserContent } from './email-markers';
 import { withTransaction } from './db/transaction-utils';
@@ -58,6 +59,7 @@ export interface SaveEmailParams {
     spamAnalysis: any;
     generatedContent: string;
   };
+  client?: PoolClient;  // Optional transaction client
 }
 
 export interface SaveEmailResult {
@@ -360,7 +362,8 @@ export class EmailStorageService {
             styleVector,
             emailType,
             otherPartyEmail: recipient.address,
-            otherPartyName: recipient.name
+            otherPartyName: recipient.name,
+            client: undefined
           });
 
           if (saved) savedCount++;
@@ -391,7 +394,8 @@ export class EmailStorageService {
           styleVector,
           emailType,
           otherPartyEmail: senderEmail,
-          otherPartyName: senderName
+          otherPartyName: senderName,
+          client: undefined
         });
 
         if (saved) savedCount++;
@@ -419,38 +423,12 @@ export class EmailStorageService {
    * For incoming emails: Creates one entry with sender
    */
   public async saveEmail(params: SaveEmailParams): Promise<SaveEmailResult> {
-    const { userId, emailAccountId, emailData, emailType } = params;
+    const { userId, emailAccountId, emailData, emailType, client } = params;
+    const db = client || pool;
 
     try {
-      // Validate message ID
-      if (!emailData.messageId) {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Missing message-id'
-        };
-      }
-
-      // Validate email date (required for proper storage)
-      if (!emailData.date) {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Missing email date'
-        };
-      }
-
       // Use pre-parsed email from IMAP layer (avoids duplicate parsing)
       const parsedEmail = emailData.parsed;
-
-      // Validate required parsed fields (fail fast)
-      if (!parsedEmail.text || parsedEmail.text.trim() === '') {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Email has no text content'
-        };
-      }
 
       // Subject is allowed to be empty - store as empty string
       const subject = parsedEmail.subject?.trim() || '';
@@ -464,7 +442,7 @@ export class EmailStorageService {
       // Process and validate user reply
       const redactedUserReply = this._processUserReply(processedContent, parsedEmail);
       if (redactedUserReply === null) {
-        // Skip this email - no content
+        // Skip this email - no content (attachment-only emails are valid)
         return {
           success: true,
           skipped: true,
@@ -549,7 +527,8 @@ export class EmailStorageService {
             styleVector,
             emailType,
             otherPartyEmail: recipient.address,
-            otherPartyName: recipient.name
+            otherPartyName: recipient.name,
+            client
           });
 
           if (saved) savedCount++;
@@ -580,7 +559,8 @@ export class EmailStorageService {
           styleVector,
           emailType,
           otherPartyEmail: senderEmail,
-          otherPartyName: senderName
+          otherPartyName: senderName,
+          client: client
         });
 
         if (saved) {
@@ -589,7 +569,7 @@ export class EmailStorageService {
           // Save draft tracking data if LLM analysis was performed
           if (params.llmResponse) {
             try {
-              await pool.query(`
+              await db.query(`
                 INSERT INTO draft_tracking (
                   user_id, email_account_id, original_message_id,
                   draft_message_id, generated_content, relationship_type,
@@ -611,9 +591,7 @@ export class EmailStorageService {
                 })
               ]);
             } catch (draftError) {
-              // Log but don't fail - draft tracking is supplementary data
-              console.error('[EmailStorage] Failed to save draft tracking:', draftError);
-              console.error('[EmailStorage] llmResponse data:', JSON.stringify(params.llmResponse, null, 2));
+              throw new Error(`Failed to save draft_tracking for ${emailData.messageId}: ${draftError instanceof Error ? draftError.message : String(draftError)}`);
             }
           }
         }
@@ -652,6 +630,7 @@ export class EmailStorageService {
     emailType: 'incoming' | 'sent';
     otherPartyEmail: string;
     otherPartyName?: string;
+    client?: PoolClient;
   }): Promise<boolean> {
     const {
       userId,
@@ -665,11 +644,13 @@ export class EmailStorageService {
       styleVector,
       emailType,
       otherPartyEmail,
-      otherPartyName
+      otherPartyName,
+      client: externalClient
     } = params;
 
     // Use a database transaction to ensure person creation and email insertion are atomic
-    return await withTransaction(pool, async (client) => {
+    // If external client provided, use it; otherwise create new transaction
+    const executeInTransaction = async (client: PoolClient) => {
       // Generate unique email_id (the email's message-id)
       const messageId = emailData.messageId!;
 
@@ -741,16 +722,23 @@ export class EmailStorageService {
       }
 
       return true;
-    }).catch((error: any) => {
-      // Handle duplicate key constraint - race condition where another transaction inserted first
-      if (error?.code === '23505' && error?.constraint?.includes('email_id_key')) {
-        // Another transaction beat us to it - our person creation was rolled back
-        // (the other transaction already created person, so no data loss)
-        return false;
-      }
-      // All other errors re-throw
-      throw error;
-    });
+    };
+
+    // Execute in transaction - use external client if provided, otherwise create new transaction
+    if (externalClient) {
+      return await executeInTransaction(externalClient);
+    } else {
+      return await withTransaction(pool, executeInTransaction).catch((error: any) => {
+        // Handle duplicate key constraint - race condition where another transaction inserted first
+        if (error?.code === '23505' && error?.constraint?.includes('email_id_key')) {
+          // Another transaction beat us to it - our person creation was rolled back
+          // (the other transaction already created person, so no data loss)
+          return false;
+        }
+        // All other errors re-throw
+        throw error;
+      });
+    }
   }
 
 }

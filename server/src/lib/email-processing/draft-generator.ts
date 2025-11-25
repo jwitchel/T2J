@@ -179,7 +179,6 @@ export class DraftGenerator {
     }
 
     const pipelinePromise = (async () => {
-      const t0 = Date.now();
 
       // Step 1: Select relevant examples
       const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
@@ -188,8 +187,6 @@ export class DraftGenerator {
         recipientEmail,
         desiredCount: maxExamples
       });
-      console.log(`[DraftGenerator] ⏱️  selectExamples: ${Date.now() - t0}ms`);
-
       // Log selected examples for draft generation
       const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
       const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;

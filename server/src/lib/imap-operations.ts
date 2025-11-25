@@ -685,7 +685,6 @@ export class ImapOperations {
       console.log(`[IMAP] Fetching ${uids.length} messages in ${batches.length} batches of up to ${BATCH_SIZE}`);
 
       // PHASE 1: Fetch all raw messages (network I/O only, no parsing)
-      const fetchStart = Date.now();
       interface RawMessage {
         uid: number;
         bodyString: string;
@@ -745,12 +744,7 @@ export class ImapOperations {
         }
       }
 
-      const fetchDuration = Date.now() - fetchStart;
-      console.log(`[IMAP] Fetch complete: ${fetchDuration}ms for ${allRawMessages.length} messages (${(fetchDuration/allRawMessages.length).toFixed(0)}ms/msg)`);
-
       // PHASE 2: Parse all messages in parallel (CPU-bound, can parallelize)
-      console.log(`[IMAP] Parsing ${allRawMessages.length} messages in parallel...`);
-      const parseStart = Date.now();
 
       const parsePromises = allRawMessages.map(async (raw) => {
         try {
@@ -776,14 +770,9 @@ export class ImapOperations {
       });
 
       const parsedResults = await Promise.all(parsePromises);
-      const parseDuration = Date.now() - parseStart;
 
       // Filter out nulls
       const validMessages: EmailMessageWithRaw[] = parsedResults.filter((msg): msg is EmailMessageWithRaw => msg !== null);
-
-      console.log(`[IMAP] Parse complete: ${parseDuration}ms for ${validMessages.length} messages (${(parseDuration/validMessages.length).toFixed(0)}ms/msg)`);
-      console.log(`[IMAP] Total: ${fetchDuration + parseDuration}ms (fetch: ${fetchDuration}ms, parse: ${parseDuration}ms)`);
-      console.log(`[IMAP] Successfully processed ${validMessages.length}/${uids.length} messages`);
 
       return validMessages;
     } finally {

@@ -104,7 +104,12 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
     WHERE er.user_id = $1 AND er.email_account_id = $2 AND er.email_id = $3
   `, [userId, accountId, messageId]);
 
-  const email = emailResult.rows[0]!;
+  if (emailResult.rows.length === 0) {
+    res.status(404).json({ error: 'Email not found' });
+    return;
+  }
+
+  const email = emailResult.rows[0];
 
   const parser = new PostalMime();
   const parsed = await parser.parse(email.fullMessage);

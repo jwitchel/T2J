@@ -1,5 +1,6 @@
 import { pool } from './db';
 import { EmailActionType } from '../types/email-action-tracking';
+import { PoolClient } from 'pg';
 
 /**
  * Normalize an email ID to ensure consistent formatting
@@ -35,6 +36,7 @@ export class EmailActionTracker {
    * @param destinationFolder - Optional destination folder
    * @param uid - Optional IMAP UID for fetching the email from the server
    * @param senderEmail - Optional sender email address
+   * @param client - Optional transaction client
    * @returns Promise<void>
    */
   static async recordAction(
@@ -45,12 +47,14 @@ export class EmailActionTracker {
     subject?: string,
     destinationFolder?: string,
     uid?: number,
-    senderEmail?: string
+    senderEmail?: string,
+    client?: PoolClient
   ): Promise<void> {
     const normalizedMessageId = normalizeEmailId(messageId);
+    const db = client || pool;
 
     try {
-      await pool.query(
+      await db.query(
         `INSERT INTO email_action_tracking (user_id, email_account_id, message_id, action_taken, subject, destination_folder, uid, sender_email, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
          ON CONFLICT (email_account_id, message_id)

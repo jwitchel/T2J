@@ -12,6 +12,7 @@ export interface ActionRouteResult {
 export class EmailActionRouter {
   // Read defaults from environment variables or use fallback values
   private static readonly DEFAULT_ROOT_FOLDER = process.env.DEFAULT_ROOT_FOLDER || '';
+  private static readonly DEFAULT_DRAFTS_FOLDER = process.env.DEFAULT_DRAFTS_FOLDER || '[Gmail]/Drafts';
   private static readonly DEFAULT_NO_ACTION_FOLDER = process.env.DEFAULT_NO_ACTION_FOLDER || 't2j-no-action';
   private static readonly DEFAULT_SPAM_FOLDER = process.env.DEFAULT_SPAM_FOLDER || 't2j-spam';
   private static readonly DEFAULT_TODO_FOLDER = process.env.DEFAULT_TODO_FOLDER || 't2j-todo';
@@ -20,6 +21,7 @@ export class EmailActionRouter {
   static getDefaultFolders(): FolderPreferences {
     return {
       rootFolder: EmailActionRouter.DEFAULT_ROOT_FOLDER,
+      draftsFolderPath: EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
       noActionFolder: EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
       spamFolder: EmailActionRouter.DEFAULT_SPAM_FOLDER,
       todoFolder: EmailActionRouter.DEFAULT_TODO_FOLDER
@@ -32,6 +34,7 @@ export class EmailActionRouter {
   constructor(preferences?: Partial<FolderPreferences>, draftsFolderPath?: string) {
     this.folderPrefs = {
       rootFolder: preferences?.rootFolder !== undefined ? preferences.rootFolder : EmailActionRouter.DEFAULT_ROOT_FOLDER,
+      draftsFolderPath: preferences?.draftsFolderPath || EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
       noActionFolder: preferences?.noActionFolder || EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
       spamFolder: preferences?.spamFolder || EmailActionRouter.DEFAULT_SPAM_FOLDER,
       todoFolder: preferences?.todoFolder || EmailActionRouter.DEFAULT_TODO_FOLDER
@@ -51,7 +54,7 @@ export class EmailActionRouter {
       case EmailActions.FORWARD:
       case EmailActions.FORWARD_WITH_COMMENT:
         if (!this.draftsFolderPath) {
-          throw new Error('Draft folder path not configured');
+          throw new Error('Draft folder path not configured. Please configure folderPreferences.draftsFolderPath in user settings (e.g., "[Gmail]/Drafts" for Gmail)');
         }
         return {
           folder: this.draftsFolderPath,
