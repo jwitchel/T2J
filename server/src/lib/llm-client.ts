@@ -4,7 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType, getModelInfo } from '../types/llm-provider';
-import { RecommendedAction } from './email-actions';
+import { EmailActionType } from '../types/email-action-tracking';
 import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
 
 /**
@@ -26,7 +26,7 @@ export interface ContextFlags {
  * Single source of truth for email classification and action determination
  */
 export interface ActionData {
-  recommendedAction: RecommendedAction;
+  recommendedAction: EmailActionType;
   keyConsiderations: string[]; // Includes spam screening reasons for transparency (e.g., "Not spam - legitimate domain")
   contextFlags: ContextFlags;
 }

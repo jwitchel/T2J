@@ -1,7 +1,7 @@
 import { SelectedExample } from './example-selector';
 import { TemplateManager, EnhancedRelationshipProfile } from './template-manager';
 import { WritingPatterns } from './writing-pattern-analyzer';
-import { EmailActions } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
 import { SpamCheckResult } from './types';
 import { SimplifiedEmailMetadata } from './types';
 
@@ -126,7 +126,7 @@ export class PromptFormatterV2 {
     await this.initialize();
 
     // Generate dynamic enum values to prevent hardcoded template drift
-    const availableActions = Object.values(EmailActions).join('|');
+    const availableActions = Object.values(EmailActionType).join('|');
     const addressedToOptions = 'you|group|someone-else';
     const urgencyOptions = 'low|medium|high|critical';
 

@@ -19,6 +19,7 @@ import { PoolClient } from 'pg';
 import { EmailRepository } from './repositories/email-repository';
 import { EmailMarkers, hasActualUserContent } from './email-markers';
 import { withTransaction } from './db/transaction-utils';
+import { EmailActionType } from '../types/email-action-tracking';
 
 /**
  * Validates that a raw RFC 5322 email message exists and is non-empty
@@ -60,6 +61,10 @@ export interface SaveEmailParams {
     generatedContent: string;
   };
   client?: PoolClient;  // Optional transaction client
+  // Action tracking fields (for incoming emails)
+  actionTaken?: EmailActionType;
+  destinationFolder?: string;
+  uid?: number;
 }
 
 export interface SaveEmailResult {
@@ -560,7 +565,11 @@ export class EmailStorageService {
           emailType,
           otherPartyEmail: senderEmail,
           otherPartyName: senderName,
-          client: client
+          client: client,
+          // Action tracking fields
+          actionTaken: params.actionTaken,
+          destinationFolder: params.destinationFolder,
+          uid: params.uid
         });
 
         if (saved) {
@@ -631,6 +640,10 @@ export class EmailStorageService {
     otherPartyEmail: string;
     otherPartyName?: string;
     client?: PoolClient;
+    // Action tracking fields (for incoming emails)
+    actionTaken?: EmailActionType;
+    destinationFolder?: string;
+    uid?: number;
   }): Promise<boolean> {
     const {
       userId,
@@ -645,7 +658,10 @@ export class EmailStorageService {
       emailType,
       otherPartyEmail,
       otherPartyName,
-      client: externalClient
+      client: externalClient,
+      actionTaken,
+      destinationFolder,
+      uid
     } = params;
 
     // Use a database transaction to ensure person creation and email insertion are atomic
@@ -717,7 +733,11 @@ export class EmailStorageService {
           receivedDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
-          fullMessage: emailData.fullMessage  // Validated at entry point
+          fullMessage: emailData.fullMessage,  // Validated at entry point
+          // Action tracking fields
+          actionTaken,
+          destinationFolder,
+          uid
         }, client);
       }
 

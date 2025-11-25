@@ -1,7 +1,7 @@
 import { ImapOperations } from './imap-operations';
 import { LLMMetadata } from './llm-client';
 import { FolderPreferences } from '../types/settings';
-import { EmailActions, ActionHelpers } from './email-actions';
+import { EmailActionType } from '../types/email-action-tracking';
 
 export interface ActionRouteResult {
   folder: string;
@@ -49,10 +49,10 @@ export class EmailActionRouter {
     const rootPath = this.folderPrefs.rootFolder ? `${this.folderPrefs.rootFolder}/` : '';
 
     switch (recommendedAction) {
-      case EmailActions.REPLY:
-      case EmailActions.REPLY_ALL:
-      case EmailActions.FORWARD:
-      case EmailActions.FORWARD_WITH_COMMENT:
+      case EmailActionType.REPLY:
+      case EmailActionType.REPLY_ALL:
+      case EmailActionType.FORWARD:
+      case EmailActionType.FORWARD_WITH_COMMENT:
         if (!this.draftsFolderPath) {
           throw new Error('Draft folder path not configured. Please configure folderPreferences.draftsFolderPath in user settings (e.g., "[Gmail]/Drafts" for Gmail)');
         }
@@ -62,31 +62,31 @@ export class EmailActionRouter {
           displayName: this.draftsFolderPath
         };
 
-      case EmailActions.SILENT_FYI_ONLY:
-      case EmailActions.SILENT_LARGE_LIST:
-      case EmailActions.SILENT_UNSUBSCRIBE:
+      case EmailActionType.SILENT_FYI_ONLY:
+      case EmailActionType.SILENT_LARGE_LIST:
+      case EmailActionType.SILENT_UNSUBSCRIBE:
         return {
           folder: `${rootPath}${this.folderPrefs.noActionFolder}`,
           flags: [],  // No-action items should not be marked as Seen
           displayName: this.folderPrefs.noActionFolder
         };
 
-      case EmailActions.SILENT_SPAM:
+      case EmailActionType.SILENT_SPAM:
         return {
           folder: `${rootPath}${this.folderPrefs.spamFolder}`,
           flags: ['\\Seen'],  // Spam should be marked as Seen
           displayName: this.folderPrefs.spamFolder
         };
 
-      case EmailActions.SILENT_TODO:
+      case EmailActionType.SILENT_TODO:
         return {
           folder: `${rootPath}${this.folderPrefs.todoFolder}`,
           flags: [],  // Todo items should not be marked as Seen
           displayName: this.folderPrefs.todoFolder
         };
 
-      case EmailActions.SILENT_AMBIGUOUS:
-        // Ambiguous emails stay in INBOX for manual review
+      case EmailActionType.KEEP_IN_INBOX:
+        // Keep-in-inbox emails stay in INBOX for manual review
         return {
           folder: 'INBOX',
           flags: [],  // Keep unread for user attention
@@ -188,6 +188,6 @@ export class EmailActionRouter {
    * Get a human-readable description of the action
    */
   getActionDescription(recommendedAction: LLMMetadata['recommendedAction']): string {
-    return ActionHelpers.getDescription(recommendedAction);
+    return EmailActionType.DESCRIPTIONS[recommendedAction] || 'Unknown action';
   }
 }

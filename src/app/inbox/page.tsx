@@ -14,9 +14,8 @@ import { apiGet } from '@/lib/api';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
-import { EmailActions, RecommendedAction } from '../../../server/src/lib/email-actions';
+import { EmailActionType } from '../../../server/src/types/email-action-tracking';
 import type { SpamCheckResult } from '../../../server/src/lib/pipeline/types';
-import type { EmailActionType } from '../../../server/src/types/email-action-tracking';
 
 interface ParsedEmail {
   headers: Array<{ key: string; value: string }>;
@@ -65,7 +64,7 @@ function InboxContent() {
   const [parsedMessage, setParsedMessage] = useState<ParsedEmail | null>(null);
   const [llmResponse, setLlmResponse] = useState<{
     meta: {
-      recommendedAction: RecommendedAction;
+      recommendedAction: EmailActionType;
       keyConsiderations: string[];
       contextFlags: {
         isThreaded: boolean;
@@ -128,7 +127,7 @@ function InboxContent() {
           actionTaken?: EmailActionType;
           llmResponse?: {
             meta: {
-              recommendedAction: RecommendedAction;
+              recommendedAction: EmailActionType;
               keyConsiderations: string[];
               contextFlags: {
                 isThreaded: boolean;
@@ -273,9 +272,13 @@ function InboxContent() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-lg">{parsedMessage.subject || '(No subject)'}</CardTitle>
-                      {emailData.actionTaken && emailData.actionTaken !== 'none' && (
-                        <Badge variant="secondary" className="text-xs">
-                          {emailData.actionTaken.replace('_', ' ')}
+                      {emailData.actionTaken && emailData.actionTaken !== EmailActionType.PENDING && (
+                        <Badge
+                          variant="secondary"
+                          className="text-xs"
+                          style={{ backgroundColor: EmailActionType.COLORS[emailData.actionTaken], color: 'white' }}
+                        >
+                          {EmailActionType.LABELS[emailData.actionTaken]}
                         </Badge>
                       )}
                     </div>
@@ -439,19 +442,10 @@ function InboxContent() {
                         <div>
                           <div className="text-sm font-medium text-muted-foreground mb-1">Recommended Action</div>
                           <Badge
-                            variant={
-                              llmResponse.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS ? 'destructive' :
-                              llmResponse.meta.recommendedAction.startsWith('silent') ? 'secondary' :
-                              llmResponse.meta.recommendedAction.includes('forward') ? 'outline' : 'default'
-                            }
-                            className={
-                              llmResponse.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS
-                                ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                                : ''
-                            }
+                            variant="secondary"
+                            style={{ backgroundColor: EmailActionType.COLORS[llmResponse.meta.recommendedAction], color: 'white' }}
                           >
-                            {llmResponse.meta.recommendedAction === EmailActions.SILENT_AMBIGUOUS && '⚠️ '}
-                            {llmResponse.meta.recommendedAction}
+                            {EmailActionType.LABELS[llmResponse.meta.recommendedAction]}
                           </Badge>
                         </div>
                       </div>
@@ -511,7 +505,7 @@ function InboxContent() {
               <CardContent className="py-12 text-center text-muted-foreground">
                 <p>No analysis available for this email</p>
                 {emailData?.actionTaken && (
-                  <p className="text-sm mt-2">Action taken: {emailData.actionTaken}</p>
+                  <p className="text-sm mt-2">Action taken: {EmailActionType.LABELS[emailData.actionTaken]}</p>
                 )}
               </CardContent>
             </Card>

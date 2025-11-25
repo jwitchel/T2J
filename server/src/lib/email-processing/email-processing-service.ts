@@ -22,7 +22,7 @@ import { pool } from '../db';
 import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
-import { EmailActions } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
 import { stripAttachments } from '../email-attachment-stripper';
 import { RelationshipType } from '../relationships/types';
 import { personService } from '../relationships/person-service';
@@ -147,7 +147,7 @@ export class EmailProcessingService {
       inReplyTo: processedEmail.messageId || `<${Date.now()}>`,
       references: processedEmail.messageId || `<${Date.now()}>`,
       meta: {
-        recommendedAction: EmailActions.SILENT_SPAM,
+        recommendedAction: EmailActionType.SILENT_SPAM,
         keyConsiderations: spamCheckResult.indicators,
         inboundMsgAddressedTo: 'you',
         inboundMsgIsRequesting: 'none',

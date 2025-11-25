@@ -11,8 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 import * as nodemailer from 'nodemailer';
 import { EmailActionRouter } from '../email-action-router';
 import { LLMMetadata } from '../llm-client';
-import { EmailActionTracker } from '../email-action-tracker';
-import { ActionHelpers } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
+import { EmailRepository } from '../repositories/email-repository';
 
 // Helper function to create RFC2822 formatted email using nodemailer
 async function createEmailMessage(
@@ -99,7 +99,7 @@ export interface MoveEmailParams {
   emailAccountId: string;
   userId: string;
   messageUid: number;
-  messageId?: string;
+  messageId: string; // The email's message ID for tracking (required for action updates)
   sourceFolder: string;
   recommendedAction: LLMMetadata['recommendedAction'];
 }
@@ -230,14 +230,14 @@ export class EmailMover {
         await imapOps.moveMessage(sourceFolder, routeResult.folder, messageUid, routeResult.flags, true);
       });
 
-      // Record the action taken (map recommended action to action type)
-      if (messageId) {
-        let actionType: 'manually_handled' | 'draft_created' = 'manually_handled';
-        if (ActionHelpers.isSilentAction(recommendedAction)) {
-          actionType = 'manually_handled'; // Silent actions mean the email was handled without a draft
-        }
-        await EmailActionTracker.recordAction(userId, emailAccountId, messageId, actionType);
-      }
+      // Update the action in email_received with the action the user chose
+      const emailRepository = new EmailRepository(pool);
+      await emailRepository.updateReceivedEmailAction(
+        messageId,
+        emailAccountId,
+        recommendedAction as EmailActionType,
+        routeResult.folder
+      );
 
       return {
         success: true,

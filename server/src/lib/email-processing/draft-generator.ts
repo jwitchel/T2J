@@ -12,7 +12,7 @@ import { TypedNameRemover } from '../typed-name-remover';
 import { pool } from '../db';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
-import { ActionHelpers } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
 import { RelationshipType } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import type { Email as PostalMimeEmail, Address } from 'postal-mime';
@@ -133,7 +133,7 @@ export class DraftGenerator {
       const cleanedBody = await this.removeTypedName(aiResult.body, userId);
 
       // Step 4: Determine if this is a silent action
-      const isSilentAction = aiResult.meta && ActionHelpers.isSilentAction(aiResult.meta.recommendedAction);
+      const isSilentAction = aiResult.meta && EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
 
       // Step 5: Format complete draft response
       const formattedDraft = isSilentAction
@@ -257,7 +257,7 @@ export class DraftGenerator {
       const combinedMeta: LLMMetadata = actionAnalysis.meta;
 
       // Step 4: Response Generation (Second LLM Call - conditional)
-      const needsResponse = !ActionHelpers.isSilentAction(combinedMeta.recommendedAction);
+      const needsResponse = !EmailActionType.isSilentAction(combinedMeta.recommendedAction);
       let responseMessage = '';
 
       if (needsResponse) {
@@ -281,11 +281,11 @@ export class DraftGenerator {
       }
 
       // Build final relationship
-      const finalRelationship = ActionHelpers.isSpamAction(combinedMeta.recommendedAction)
+      const finalRelationship = EmailActionType.isSpamAction(combinedMeta.recommendedAction)
         ? { type: RelationshipType.SPAM, confidence: 0.9 }
         : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence };
 
-      console.log(`[DraftGenerator] 🎯 Final relationship determination: action=${combinedMeta.recommendedAction}, isSpamAction=${ActionHelpers.isSpamAction(combinedMeta.recommendedAction)}, detectedRelationship=${detectedRelationship.relationship}, finalRelationship=${finalRelationship.type}`);
+      console.log(`[DraftGenerator] 🎯 Final relationship determination: action=${combinedMeta.recommendedAction}, isSpamAction=${EmailActionType.isSpamAction(combinedMeta.recommendedAction)}, detectedRelationship=${detectedRelationship.relationship}, finalRelationship=${finalRelationship.type}`);
 
       return {
         body: responseMessage,
@@ -402,7 +402,7 @@ export class DraftGenerator {
       ? parsed.subject!
       : `Re: ${parsed.subject!}`;
 
-    const isReplyAll = ActionHelpers.isReplyAll(meta.recommendedAction);
+    const isReplyAll = EmailActionType.isReplyAll(meta.recommendedAction);
     const { to, cc } = isReplyAll
       ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
       : { to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''), cc: '' };
