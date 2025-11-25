@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import useSWR from 'swr';
 import ReactECharts from 'echarts-for-react';
-import { EmailActions } from '../../../server/src/lib/email-actions';
+import { EmailActionType } from '../../../server/src/types/email-action-tracking';
 
 // Raw action counts from API (all possible actions)
 interface RawActionCounts {
@@ -47,24 +47,13 @@ function aggregateActions(raw: RawActionCounts): ActionCounts {
   };
 
   Object.entries(raw).forEach(([action, count]) => {
-    // Draft actions (reply, forward, etc.)
-    if (action === EmailActions.REPLY || action === EmailActions.REPLY_ALL || action === EmailActions.FORWARD || action === EmailActions.FORWARD_WITH_COMMENT) {
+    if (EmailActionType.isDraftAction(action)) {
       result.drafted += count;
-    }
-    // Spam
-    else if (action === EmailActions.SILENT_SPAM) {
+    } else if (EmailActionType.isSpamAction(action)) {
       result.spam += count;
-    }
-    // Moved (FYI, Large List, Unsubscribe, Todo)
-    else if (action === EmailActions.SILENT_FYI_ONLY || action === EmailActions.SILENT_LARGE_LIST || action === EmailActions.SILENT_UNSUBSCRIBE || action === EmailActions.SILENT_TODO) {
+    } else if (EmailActionType.isMovedAction(action)) {
       result.moved += count;
-    }
-    // Legacy draft_created - we can't distinguish these in aggregate, so count as drafted
-    else if (action === 'draft_created') {
-      result.drafted += count;
-    }
-    // Everything else is No Action (including SILENT_AMBIGUOUS which stays in inbox)
-    else {
+    } else {
       result.noAction += count;
     }
   });

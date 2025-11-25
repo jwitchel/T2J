@@ -19,7 +19,7 @@ import { PoolClient } from 'pg';
 import { EmailRepository } from './repositories/email-repository';
 import { EmailMarkers, hasActualUserContent } from './email-markers';
 import { withTransaction } from './db/transaction-utils';
-import { EmailActionType } from '../types/email-action-tracking';
+import { EmailActionType, EmailDirection } from '../types/email-action-tracking';
 
 /**
  * Validates that a raw RFC 5322 email message exists and is non-empty
@@ -41,11 +41,10 @@ export function validateRawMessage(
   return fullMessage;
 }
 
-export interface SaveEmailParams {
+interface SaveEmailParamsBase {
   userId: string;
   emailAccountId: string;
   emailData: EmailMessageWithRaw;
-  emailType: 'incoming' | 'sent';
   folderName: string;
   llmResponse?: {  // AI evaluation metadata from draft generation
     meta: any;
@@ -61,11 +60,21 @@ export interface SaveEmailParams {
     generatedContent: string;
   };
   client?: PoolClient;  // Optional transaction client
-  // Action tracking fields (for incoming emails)
-  actionTaken?: EmailActionType;
-  destinationFolder?: string;
-  uid?: number;
 }
+
+interface SaveSentEmailParams extends SaveEmailParamsBase {
+  emailType: EmailDirection.SENT;
+}
+
+interface SaveIncomingEmailParams extends SaveEmailParamsBase {
+  emailType: EmailDirection.INCOMING;
+  // Action tracking fields (required for incoming emails)
+  actionTaken: EmailActionType;
+  destinationFolder: string | null;
+  uid: number;
+}
+
+export type SaveEmailParams = SaveSentEmailParams | SaveIncomingEmailParams;
 
 export interface SaveEmailResult {
   success: boolean;
@@ -233,7 +242,7 @@ export class EmailStorageService {
 
     // Step 3: Batch generate style embeddings for sent emails with content
     const step3Start = Date.now();
-    const sentEmailsWithContent = processedEmails.filter(e => e.hasUserContent && e.params.emailType === 'sent');
+    const sentEmailsWithContent = processedEmails.filter(e => e.hasUserContent && e.params.emailType === EmailDirection.SENT);
     const textsForStyleEmbedding = sentEmailsWithContent.map(e => e.redactedUserReply);
 
     let styleEmbeddings: number[][] = [];
@@ -265,7 +274,7 @@ export class EmailStorageService {
 
       if (hasUserContent) {
         semanticVector = semanticEmbeddings[semanticIdx++];
-        styleVector = params.emailType === 'sent' ? styleEmbeddings[styleIdx++] : new Array(768).fill(0);
+        styleVector = params.emailType === EmailDirection.SENT ? styleEmbeddings[styleIdx++] : new Array(768).fill(0);
       } else {
         semanticVector = new Array(384).fill(0);
         styleVector = new Array(768).fill(0);
@@ -323,7 +332,7 @@ export class EmailStorageService {
       // Determine recipients/senders based on email type
       let savedCount = 0;
 
-      if (emailType === 'sent') {
+      if (emailType === EmailDirection.SENT) {
         // For sent emails: Create one entry per recipient
         const getAddresses = (field: any) => {
           if (!field) return [];
@@ -473,7 +482,7 @@ export class EmailStorageService {
         semanticVector = embeddingResult.vector;
 
         // Generate style embedding (only for sent emails)
-        styleVector = emailType === 'sent'
+        styleVector = emailType === EmailDirection.SENT
           ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
           : new Array(768).fill(0);  // Incoming emails don't need style vectors
       } else {
@@ -486,7 +495,7 @@ export class EmailStorageService {
       // Determine recipients/senders based on email type
       let savedCount = 0;
 
-      if (emailType === 'sent') {
+      if (emailType === EmailDirection.SENT) {
         // For sent emails: Create one entry per recipient
         // parsedEmail.to/cc/bcc can be AddressObject or AddressObject[]
         const getAddresses = (field: any) => {
@@ -636,13 +645,13 @@ export class EmailStorageService {
     features: EmailFeatures | null;
     semanticVector: number[];
     styleVector: number[];
-    emailType: 'incoming' | 'sent';
+    emailType: EmailDirection;
     otherPartyEmail: string;
     otherPartyName?: string;
     client?: PoolClient;
-    // Action tracking fields (for incoming emails)
+    // Action tracking fields (required when emailType === EmailDirection.INCOMING)
     actionTaken?: EmailActionType;
-    destinationFolder?: string;
+    destinationFolder?: string | null;
     uid?: number;
   }): Promise<boolean> {
     const {
@@ -696,7 +705,7 @@ export class EmailStorageService {
       }, client);
 
       // Check if already exists (deduplication) using repository - use transaction client
-      const exists = emailType === 'sent'
+      const exists = emailType === EmailDirection.SENT
         ? await this.emailRepository.sentEmailExists(messageId, userId, relationshipDetection.personEmailId, client)
         : await this.emailRepository.receivedEmailExists(messageId, userId, emailAccountId, client);
 
@@ -707,7 +716,7 @@ export class EmailStorageService {
       }
 
       // Store to PostgreSQL - pass client to ensure it's part of the transaction
-      if (emailType === 'sent') {
+      if (emailType === EmailDirection.SENT) {
         await this.emailRepository.insertSentEmail({
           emailId: messageId,
           userId,
@@ -734,10 +743,10 @@ export class EmailStorageService {
           semanticVector,
           styleVector,
           fullMessage: emailData.fullMessage,  // Validated at entry point
-          // Action tracking fields
-          actionTaken,
-          destinationFolder,
-          uid
+          // Action tracking fields (required for incoming emails - callers ensure these are set)
+          actionTaken: actionTaken!,
+          destinationFolder: destinationFolder ?? null,
+          uid: uid!
         }, client);
       }
 

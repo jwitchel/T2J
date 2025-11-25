@@ -5,6 +5,7 @@
 
 import { ImapOperations } from '../lib/imap-operations';
 import { emailStorageService } from '../lib/email-storage-service';
+import { EmailDirection } from '../types/email-action-tracking';
 
 async function testMessageIdExtraction() {
   console.log('🧪 Testing Message-ID Extraction from IMAP...\n');
@@ -82,7 +83,7 @@ async function testMessageIdExtraction() {
         userId,
         emailAccountId,
         emailData: firstMessage,
-        emailType: 'sent',
+        emailType: EmailDirection.SENT,
         folderName: folderUsed
       });
 

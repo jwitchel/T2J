@@ -157,6 +157,13 @@ export namespace EmailActionType {
   }
 
   /**
+   * Check if action moves email to a folder (silent but not spam)
+   */
+  export function isMovedAction(action: EmailActionType | string): boolean {
+    return isSilentAction(action) && !isSpamAction(action);
+  }
+
+  /**
    * Get action category
    */
   export function getCategory(action: EmailActionType | string): 'draft' | 'silent' | 'other' {

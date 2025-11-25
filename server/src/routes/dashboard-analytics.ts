@@ -12,45 +12,41 @@ router.get('/actions-summary', requireAuth, async (req, res) => {
   try {
     const userId = (req as any).user.id;
 
-    // Query all time periods in parallel
+    // Query all time periods in parallel from email_received
     const [last15min, lastHour, last24Hours, last30Days] = await Promise.all([
       // Last 15 minutes
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '15 minutes'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       ),
       // Last hour
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '1 hour'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       ),
       // Last 24 hours
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '24 hours'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       ),
       // Last 30 days
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '30 days'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       )
@@ -90,30 +86,28 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    // Get recent actions with email account info, subject, sender, destination, relationship, and person name
+    // Get recent actions from email_received with related info
     const result = await pool.query(
       `SELECT
-        eat.id,
-        eat.message_id,
-        eat.action_taken,
-        eat.subject,
-        eat.sender_email,
-        eat.destination_folder,
-        eat.updated_at,
-        eat.email_account_id,
+        er.id,
+        er.email_id as message_id,
+        er.action_taken,
+        er.subject,
+        pe.email_address as sender_email,
+        er.destination_folder,
+        er.updated_at,
+        er.email_account_id,
         ea.email_address,
         ur.relationship_type,
         p.name as person_name
-       FROM email_action_tracking eat
-       JOIN email_accounts ea ON eat.email_account_id = ea.id
-       LEFT JOIN email_received er ON er.email_id = eat.message_id AND er.email_account_id = eat.email_account_id
+       FROM email_received er
+       JOIN email_accounts ea ON er.email_account_id = ea.id
        LEFT JOIN person_emails pe ON er.sender_person_email_id = pe.id
        LEFT JOIN people p ON pe.person_id = p.id
-       LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = eat.user_id AND pr.is_primary = true
+       LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = er.user_id AND pr.is_primary = true
        LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
-       WHERE eat.user_id = $1
-         AND eat.action_taken != 'none'
-       ORDER BY eat.updated_at DESC
+       WHERE er.user_id = $1
+       ORDER BY er.updated_at DESC
        LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
@@ -121,8 +115,8 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
     // Get total count
     const countResult = await pool.query(
       `SELECT COUNT(*)::int as total
-       FROM email_action_tracking
-       WHERE user_id = $1 AND action_taken != 'none'`,
+       FROM email_received
+       WHERE user_id = $1`,
       [userId]
     );
 
@@ -131,7 +125,7 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
         id: row.id,
         messageId: row.message_id,
         actionTaken: row.action_taken,
-        subject: row.subject || '(Subject unavailable for old emails)',
+        subject: row.subject || '(No subject)',
         senderEmail: row.sender_email,
         senderName: row.person_name,
         destinationFolder: row.destination_folder,
