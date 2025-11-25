@@ -750,7 +750,7 @@ export class ImapOperations {
 
           const result: EmailMessageWithRaw = {
             uid: raw.uid,
-            messageId: parsedEmail.messageId || undefined,
+            messageId: normalizeMessageId(parsedEmail.messageId),
             from: parsedEmail.from?.value?.[0]?.address || undefined,
             to: parsedEmail.to ? (Array.isArray(parsedEmail.to) ? parsedEmail.to : [parsedEmail.to]).flatMap((addr: any) => addr.value || []).map((a: any) => a.address || '') : undefined,
             subject: parsedEmail.subject || undefined,

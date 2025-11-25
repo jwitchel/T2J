@@ -254,11 +254,6 @@ export class TemplateManager {
       e.metadata.isDirectCorrespondence === false
     );
     
-    // Debug logging
-    if (params.examples.length > 0) {
-      console.log(`[TemplateManager] First example relationship:`, params.examples[0].metadata.relationship);
-    }
-    
     const avgWordCount = params.examples.length > 0
       ? Math.round(params.examples.reduce((sum, ex) => 
           sum + (ex.metadata.wordCount || ex.text.split(/\s+/).length), 0

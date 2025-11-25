@@ -437,8 +437,6 @@ export class InboxProcessor {
       // 5. PERFORM IMAP OPERATIONS - After successful database commit
       // If this fails, database record exists and can be retried/corrected
       const imapResult = await this._performImapOperation(context, draft);
-
-      // 6. BUILD SUCCESS RESULT AND LOG SUMMARY
       const result = this._buildResult(context, {
         draft,
         moved: imapResult.moved,
