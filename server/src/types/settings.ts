@@ -2,6 +2,7 @@
 
 export interface FolderPreferences {
   rootFolder: string;
+  draftsFolderPath: string;
   noActionFolder: string;
   spamFolder: string;
   todoFolder: string;
