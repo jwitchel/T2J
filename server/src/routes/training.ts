@@ -8,6 +8,7 @@ import { WritingPatternAnalyzer } from '../lib/pipeline/writing-pattern-analyzer
 import { pool } from '../lib/db';
 import { emailStorageService } from '../lib/email-storage-service';
 import { vectorSearchService } from '../lib/vector';
+import { EmailDirection } from '../types/email-action-tracking';
 
 const router = express.Router();
 
@@ -116,7 +117,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
         userId,
         emailAccountId,
         emailData: fullMessage,
-        emailType: 'sent' as const,
+        emailType: EmailDirection.SENT as const,
         folderName: sentFolder
       }));
 

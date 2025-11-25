@@ -84,7 +84,7 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
       er.received_date as "receivedDate",
       er.full_message as "fullMessage",
       er.word_count as "wordCount",
-      eat.action_taken as "actionTaken",
+      er.action_taken as "actionTaken",
       dt.context_data as "contextData",
       dt.created_at as "draftCreatedAt",
       dt.generated_content as "draftBody",
@@ -93,9 +93,6 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
     FROM email_received er
     INNER JOIN person_emails pe ON er.sender_person_email_id = pe.id
     INNER JOIN people p ON pe.person_id = p.id
-    INNER JOIN email_action_tracking eat
-      ON eat.message_id = er.email_id
-      AND eat.email_account_id = er.email_account_id
     LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = er.user_id AND pr.is_primary = true
     LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
     LEFT JOIN draft_tracking dt

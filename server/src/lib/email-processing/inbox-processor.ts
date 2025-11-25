@@ -5,17 +5,17 @@
  */
 
 import { ImapOperations } from '../imap-operations';
-import { EmailActionTracker } from '../email-action-tracker';
 import { emailProcessingService } from './email-processing-service';
 import { emailMover } from './email-mover';
 import { withImapContext } from '../imap-context';
 import { emailStorageService } from '../email-storage-service';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../db';
-import { ActionHelpers } from '../email-actions';
+import { EmailActionType, EmailDirection } from '../../types/email-action-tracking';
 import { simpleParser } from 'mailparser';
 import { PoolClient } from 'pg';
 import { EmailActionRouter } from '../email-action-router';
+import { EmailRepository } from '../repositories/email-repository';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -99,6 +99,12 @@ export interface BatchProcessResult {
 }
 
 export class InboxProcessor {
+  private emailRepository: EmailRepository;
+
+  constructor() {
+    this.emailRepository = new EmailRepository(pool);
+  }
+
   /**
    * Process a single email
    * Uses action tracking for deduplication after BullMQ's job ID deduplication
@@ -107,8 +113,9 @@ export class InboxProcessor {
     const { message, accountId, userId } = params;
 
     // Check action tracking - second layer of defense after job deduplication
+    // An email is considered processed if it exists in email_received with action != 'pending'
     if (message.messageId) {
-      const alreadyProcessed = await EmailActionTracker.hasEmailBeenProcessed(
+      const alreadyProcessed = await this.emailRepository.isReceivedEmailProcessed(
         userId,
         accountId,
         message.messageId
@@ -218,12 +225,12 @@ export class InboxProcessor {
   ): Promise<ImapOperationResult> {
     const recommendedAction = draft.meta.recommendedAction;
 
-    if (ActionHelpers.isSilentAction(recommendedAction)) {
+    if (EmailActionType.isSilentAction(recommendedAction)) {
       const result = await emailMover.moveEmail({
         emailAccountId: context.accountId,
         userId: context.userId,
         messageUid: context.message.uid,
-        messageId: context.message.messageId,
+        messageId: context.messageKey,
         sourceFolder: DEFAULT_SOURCE_FOLDER,
         recommendedAction
       });
@@ -267,12 +274,14 @@ export class InboxProcessor {
    * Save email to database
    * @param context - Processing context with email data
    * @param draft - Generated draft email
+   * @param destinationFolder - Destination folder for the email
    * @param client - Transaction client for atomic operations
    * @private
    */
   private async _saveToDatabase(
     context: ProcessingContext,
     draft: DraftEmail,
+    destinationFolder: string,
     client: PoolClient
   ): Promise<void> {
     // Parse email for storage (inbox emails don't come pre-parsed from IMAP)
@@ -309,10 +318,14 @@ export class InboxProcessor {
       userId: context.userId,
       emailAccountId: context.accountId,
       emailData,
-      emailType: 'incoming',
+      emailType: EmailDirection.INCOMING,
       folderName: DEFAULT_SOURCE_FOLDER,
       llmResponse,
-      client
+      client,
+      // Action tracking fields - now stored directly in email_received
+      actionTaken: draft.meta.recommendedAction as EmailActionType,
+      destinationFolder,
+      uid: context.message.uid
     });
   }
 
@@ -391,7 +404,7 @@ export class InboxProcessor {
       // Note: Spam emails return a draft with silent-spam action, not an error
       const draftResult = await this._generateDraft(context, params.generatedDraft as DraftEmail);
       const draft = draftResult.draft;
-      const isSpam = ActionHelpers.isSpamAction(draft.meta.recommendedAction);
+      const isSpam = EmailActionType.isSpamAction(draft.meta.recommendedAction);
 
       // 3. DETERMINE DESTINATION FOLDER (before transaction)
       // This is deterministic based on user preferences and action type
@@ -402,33 +415,15 @@ export class InboxProcessor {
       try {
         await client.query('BEGIN');
 
-        // 4a. Record action tracking in transaction WITH destination
+        // 4a. Save email to database in transaction (action tracking now included)
         try {
-          await EmailActionTracker.recordAction(
-            context.userId,
-            context.accountId,
-            context.messageKey,
-            draft.meta.recommendedAction as any,
-            context.message.subject,
-            destinationFolder,
-            context.message.uid,
-            context.message.from,
-            client
-          );
-        } catch (trackError: unknown) {
-          console.error('[InboxProcessor] EmailActionTracker.recordAction failed:', trackError);
-          throw trackError;
-        }
-
-        // 4b. Save email to database in transaction
-        try {
-          await this._saveToDatabase(context, draft, client);
+          await this._saveToDatabase(context, draft, destinationFolder, client);
         } catch (saveError: unknown) {
           console.error('[InboxProcessor] _saveToDatabase failed:', saveError);
           throw saveError;
         }
 
-        // 4c. COMMIT - all database writes are now atomic
+        // 4b. COMMIT - all database writes are now atomic
         await client.query('COMMIT');
       } catch (dbError) {
         // ROLLBACK on any database error
@@ -530,15 +525,16 @@ export class InboxProcessor {
 
         // Get action tracking for all messages to filter already processed
         const messageIds = fullMessages.map(msg => msg.messageId).filter((id): id is string => !!id);
-        const actionTracking = await EmailActionTracker.getActionsForMessages(accountId, messageIds);
+        const actionTracking = await this.emailRepository.getReceivedEmailActions(accountId, messageIds);
 
         // Filter to unprocessed messages (unless force is true)
+        // An email is considered unprocessed if action is 'pending' or doesn't exist
         const toProcess = fullMessages.filter(msg => {
           if (!msg.messageId) {
             return false;
           }
-          const tracked = actionTracking[msg.messageId];
-          return force || !tracked || tracked.actionTaken === 'none';
+          const tracked = actionTracking.get(msg.messageId);
+          return force || !tracked || tracked.action === EmailActionType.PENDING;
         });
 
         // Process emails in parallel for better throughput

@@ -5,6 +5,7 @@
  */
 
 import { Pool, PoolClient } from 'pg';
+import { EmailActionType } from '../../types/email-action-tracking';
 
 /**
  * Database query executor - uses transaction client if provided, otherwise uses pool
@@ -59,6 +60,9 @@ export interface ReceivedEmailInsertParams {
   semanticVector: number[];
   styleVector: number[];
   fullMessage: string;
+  actionTaken: EmailActionType;
+  destinationFolder: string | null;
+  uid: number;
 }
 
 export class EmailRepository {
@@ -111,9 +115,11 @@ export class EmailRepository {
       INSERT INTO email_received (
         email_id, user_id, email_account_id, raw_text, subject,
         sender_person_email_id, word_count, received_date,
-        semantic_vector, style_vector, full_message, created_at, updated_at
+        semantic_vector, style_vector, full_message,
+        action_taken, destination_folder, uid,
+        created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
     `, [
       normalizedEmailId,
       params.userId,
@@ -125,7 +131,10 @@ export class EmailRepository {
       params.receivedDate,
       params.semanticVector,
       params.styleVector,
-      params.fullMessage
+      params.fullMessage,
+      params.actionTaken,
+      params.destinationFolder,
+      params.uid
     ]);
   }
 
@@ -211,5 +220,115 @@ export class EmailRepository {
     ]);
 
     return result.rowCount || 0;
+  }
+
+  /**
+   * Update the action taken for a received email
+   * @param emailId - The message ID of the email
+   * @param accountId - The email account ID
+   * @param action - The action taken
+   * @param destination - Optional destination folder
+   * @param client - Optional transaction client
+   */
+  async updateReceivedEmailAction(
+    emailId: string,
+    accountId: string,
+    action: EmailActionType,
+    destination?: string,
+    client?: PoolClient
+  ): Promise<void> {
+    const db: QueryExecutor = client || this.pool;
+    const normalizedEmailId = normalizeEmailId(emailId);
+
+    await db.query(`
+      UPDATE email_received
+      SET action_taken = $1,
+          destination_folder = $2,
+          updated_at = NOW()
+      WHERE email_id = $3 AND email_account_id = $4
+    `, [action, destination || null, normalizedEmailId, accountId]);
+  }
+
+  /**
+   * Check if an email has been processed (action != 'pending')
+   * @param userId - The user ID
+   * @param accountId - The email account ID
+   * @param emailId - The message ID of the email
+   * @param client - Optional transaction client
+   * @returns true if the email has been processed
+   */
+  async isReceivedEmailProcessed(
+    userId: string,
+    accountId: string,
+    emailId: string,
+    client?: PoolClient
+  ): Promise<boolean> {
+    const db: QueryExecutor = client || this.pool;
+    const normalizedEmailId = normalizeEmailId(emailId);
+
+    const result = await db.query(`
+      SELECT 1 FROM email_received
+      WHERE user_id = $1
+        AND email_account_id = $2
+        AND email_id = $3
+        AND action_taken != $4
+    `, [userId, accountId, normalizedEmailId, EmailActionType.PENDING]);
+
+    return result.rows.length > 0;
+  }
+
+  /**
+   * Get action information for multiple emails
+   * @param accountId - The email account ID
+   * @param emailIds - Array of message IDs
+   * @param client - Optional transaction client
+   * @returns Map of emailId to action info
+   */
+  async getReceivedEmailActions(
+    accountId: string,
+    emailIds: string[],
+    client?: PoolClient
+  ): Promise<Map<string, { action: EmailActionType; destination?: string }>> {
+    const db: QueryExecutor = client || this.pool;
+    const normalizedIds = emailIds.map(normalizeEmailId);
+
+    const result = await db.query(`
+      SELECT email_id, action_taken, destination_folder
+      FROM email_received
+      WHERE email_account_id = $1
+        AND email_id = ANY($2)
+    `, [accountId, normalizedIds]);
+
+    const map = new Map<string, { action: EmailActionType; destination?: string }>();
+    for (const row of result.rows) {
+      map.set(row.email_id, {
+        action: row.action_taken as EmailActionType,
+        destination: row.destination_folder || undefined
+      });
+    }
+    return map;
+  }
+
+  /**
+   * Reset an email's action to 'pending' (for reprocessing)
+   * @param accountId - The email account ID
+   * @param emailId - The message ID of the email
+   * @param client - Optional transaction client
+   */
+  async resetReceivedEmailAction(
+    accountId: string,
+    emailId: string,
+    client?: PoolClient
+  ): Promise<void> {
+    const db: QueryExecutor = client || this.pool;
+    const normalizedEmailId = normalizeEmailId(emailId);
+
+    await db.query(`
+      UPDATE email_received
+      SET action_taken = $1,
+          destination_folder = NULL,
+          updated_at = NOW()
+      WHERE email_id = $2 AND email_account_id = $3
+    `, [EmailActionType.PENDING, normalizedEmailId, accountId]);
   }
 }
