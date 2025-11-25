@@ -164,6 +164,15 @@ export namespace EmailActionType {
   }
 
   /**
+   * Check if action is system-only (not a valid LLM recommendation)
+   */
+  export function isSystemOnly(action: EmailActionType | string): boolean {
+    return action === EmailActionType.PENDING ||
+           action === EmailActionType.TRAINING ||
+           action === EmailActionType.MANUALLY_HANDLED;
+  }
+
+  /**
    * Get action category
    */
   export function getCategory(action: EmailActionType | string): 'draft' | 'silent' | 'other' {

@@ -126,7 +126,10 @@ export class PromptFormatterV2 {
     await this.initialize();
 
     // Generate dynamic enum values to prevent hardcoded template drift
-    const availableActions = Object.values(EmailActionType).join('|');
+    // Filter out system-only actions (pending, training, manually_handled)
+    const allActions = Object.values(EmailActionType).filter((v): v is EmailActionType => typeof v === 'string');
+    const llmActions = allActions.filter(action => !EmailActionType.isSystemOnly(action));
+    const availableActions = llmActions.join('|');
     const addressedToOptions = 'you|group|someone-else';
     const urgencyOptions = 'low|medium|high|critical';
 

@@ -86,7 +86,10 @@ export class EmailActionRouter {
         };
 
       case EmailActionType.KEEP_IN_INBOX:
-        // Keep-in-inbox emails stay in INBOX for manual review
+      case EmailActionType.MANUALLY_HANDLED:
+      case EmailActionType.PENDING:
+      case EmailActionType.TRAINING:
+        // These actions keep email in INBOX for manual review
         return {
           folder: 'INBOX',
           flags: [],  // Keep unread for user attention
@@ -94,7 +97,13 @@ export class EmailActionRouter {
         };
 
       default:
-        throw new Error(`Unknown action: ${recommendedAction}`);
+        // Log unexpected action but don't crash - treat as keep-in-inbox
+        console.warn(`[EmailActionRouter] Unexpected action: ${recommendedAction}, treating as keep-in-inbox`);
+        return {
+          folder: 'INBOX',
+          flags: [],
+          displayName: 'INBOX'
+        };
     }
   }
 

@@ -202,8 +202,6 @@ export class WritingPatternAnalyzer {
     relationship: string,
     styleClusterName?: string
   ): Promise<SentencePatterns> {
-    const totalStart = Date.now();
-    console.log(`[TIMING] calculateSentenceStats START for ${relationship}`);
 
     // Try to load from cache first (outside transaction)
     const cacheStart = Date.now();
@@ -408,9 +406,6 @@ export class WritingPatternAnalyzer {
         ...result,
         totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
       } as any);
-
-      const totalEnd = Date.now();
-      console.log(`[TIMING] calculateSentenceStats TOTAL: ${totalEnd - totalStart}ms for ${relationship}`);
 
       return result;
     } finally {
@@ -620,27 +615,16 @@ export class WritingPatternAnalyzer {
     // Calculate sentence statistics directly from emails for accuracy
     // Always calculate, even for aggregate (when relationship is undefined)
     const relationshipLabel = relationship || 'aggregate';
-    const statsStart = Date.now();
-    console.log(`[TIMING] calculateSentenceStats START for ${relationshipLabel}`);
     const directSentenceStats = await this.calculateSentenceStats(userId, relationship || 'aggregate');
-    const statsEnd = Date.now();
-    console.log(`[TIMING] calculateSentenceStats COMPLETE: ${statsEnd - statsStart}ms`);
 
     // Calculate structural patterns using NLP
-    const structureStart = Date.now();
-    console.log(`[TIMING] NLP structural analysis START for ${relationshipLabel}`);
 
     const paragraphPatterns = await this.calculateParagraphPatterns(userId, emails);
-    console.log(`[TIMING] Paragraph patterns: ${paragraphPatterns.length} types found`);
 
     const openingPatterns = await this.calculateOpeningPatterns(userId, emails);
-    console.log(`[TIMING] Opening patterns: ${openingPatterns.length} variations found`);
 
     const valedictionPatterns = await this.calculateValedictionPatterns(userId, emails);
-    console.log(`[TIMING] Valediction patterns: ${valedictionPatterns.length} types found`);
 
-    const structureEnd = Date.now();
-    console.log(`[TIMING] NLP structural analysis COMPLETE: ${structureEnd - structureStart}ms`);
 
     // Replace LLM-calculated patterns with NLP calculations
     aggregated.sentencePatterns = directSentenceStats;

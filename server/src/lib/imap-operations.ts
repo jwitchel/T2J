@@ -682,8 +682,6 @@ export class ImapOperations {
         batches.push(uids.slice(i, i + BATCH_SIZE));
       }
 
-      console.log(`[IMAP] Fetching ${uids.length} messages in ${batches.length} batches of up to ${BATCH_SIZE}`);
-
       // PHASE 1: Fetch all raw messages (network I/O only, no parsing)
       interface RawMessage {
         uid: number;
