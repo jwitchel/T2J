@@ -1,5 +1,45 @@
 # Repository Guidelines
 
+## 🚨 MANDATORY Design Principles 🚨
+
+**These principles are NON-NEGOTIABLE. All code changes MUST follow them.**
+
+### 1. Trust the Caller
+- **NEVER validate typed parameters** - If the type is `string`, don't check `if (!param)`
+- The caller is responsible for passing valid data
+- Type errors are caught at compile time, not runtime
+
+### 2. Throw Hard
+- **NO try/catch for "safety"** - Let errors propagate naturally
+- **NO error wrapping** - Don't catch just to re-throw with a different message
+- **NO silent failures** - Never swallow errors with empty catch blocks
+- Only catch when you can actually **handle** the error (retry, fallback, cleanup)
+
+### 3. Named Types
+- **NEVER return anonymous objects** - Define an interface for every return type
+- **NEVER use `any`** - Use proper types or `unknown` if truly dynamic
+- All function parameters with 2+ properties must have a named interface
+
+### 4. Private Method Extraction
+- **Extract helpers WITHIN existing files** - Do NOT create new modules for helpers
+- Use `_` prefix for private methods (e.g., `_parseContent`)
+- Keep files cohesive - decomposition happens inside classes, not across files
+
+### 5. No Defensive Defaults
+- **NEVER use `|| {}` or `|| []`** - If data is missing, that's a bug and let it throw.
+- **NEVER use fallback values for config** - Let missing config fail loudly
+- Trust the database schema - if a field should exist, don't provide a default
+
+### 6. Search Before Creating
+- **🚨 BEFORE writing ANY new function, SEARCH THE CODEBASE 🚨**
+- The solution likely already exists - use Grep/Glob to find it
+- Prefer extending existing code over creating new code
+- See `CLAUDE.md` for list of existing services to use
+
+**Violating these principles is equivalent to introducing a bug.**
+
+---
+
 ## Project Structure & Module Organization
 - `src/`: Next.js app (frontend)
   - `app/` pages (App Router), `components/`, `lib/`, `hooks/`, `types/`

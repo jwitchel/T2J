@@ -3,36 +3,6 @@
 ## Project Overview
 This is an AI Email Assistant application that generates email reply drafts matching the user's personal writing tone. The project is managed through GitHub Issues and Projects.
 
-## Current Project State
-
-### ✅ What's Working
-- **Authentication System**: Full auth flow with better-auth
-  - Sign up, sign in, sign out functionality
-  - Protected routes with automatic redirects
-  - Session persistence with httpOnly cookies
-  - Cross-origin auth between Next.js (3001) and Express (3002)
-- **Frontend**: Next.js with TypeScript on port 3001
-- **Backend**: Express.js API on port 3002
-- **Database**: PostgreSQL on port 5434 (Docker)
-- **Cache**: Redis on port 6380 (Docker)
-- **UI Components**: shadcn/ui with Zinc/Indigo theme
-
-### 🚀 Quick Development Start
-```bash
-# Start Docker services
-docker compose up -d
-
-# Start frontend, backend, and workers
-npm run dev:all
-
-# Seed demo data (creates users, styles, emails, etc.)
-npm run seed
-```
-
-Test users available:
-- test1@example.com / password123
-- test2@example.com / password456
-
 ## GitHub CLI Reference
 
 **IMPORTANT**: The `gh project list` command does NOT accept --repo flag. Only use --owner flag.
@@ -132,6 +102,21 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 
 ## Development Best Practices
 
+### 🚨 MANDATORY Design Principles - READ THIS FIRST 🚨
+
+**These six principles govern ALL code in this project. Violations are treated as bugs.**
+
+| # | Principle | Rule |
+|---|-----------|------|
+| 1 | **Trust the Caller** | NEVER validate typed parameters. If the type is `string`, don't check `if (!param)`. |
+| 2 | **Throw Hard** | NO try/catch for safety. Let errors propagate. Only catch when you can actually handle it. |
+| 3 | **Named Types** | NEVER return anonymous objects. NEVER use `any`. Define interfaces for everything. |
+| 4 | **Private Extraction** | Extract helpers WITHIN existing files. Do NOT create new modules for helpers. |
+| 5 | **No Defensive Defaults** | NEVER use `|| {}` or `|| []`. If data is missing, that's a bug to fix at the source. |
+| 6 | **Search Before Creating** | ALWAYS search the codebase before writing new code. The solution likely exists. |
+
+---
+
 ### Fail-Fast Patterns
 
 **Trust your callers. Type your parameters. Let runtime errors throw naturally.**
@@ -217,6 +202,20 @@ const timeout = config.timeout;
 ```
 If a value is required for the system to operate correctly, let it throw when missing. Don't hide configuration errors with fallback values.
 
+**🚨 NEVER use `|| {}` or `|| []` on database results:**
+```typescript
+// ❌ BAD - hides schema bugs, masks data issues
+const writingPatterns = row.profile_data.writingPatterns || {};
+const emails = result.rows || [];
+const preferences = user.preferences || {};
+
+// ✅ GOOD - trust the schema, let bugs surface
+const writingPatterns = row.profile_data.writingPatterns;
+const emails = result.rows;
+const preferences = user.preferences;
+```
+If data is missing from the database, that's a bug in the data creation code. Fix it at the source, don't paper over it at retrieval time.
+
 ### DRY Principles - CRITICAL
 
 **🚨 BEFORE WRITING NEW CODE: SEARCH THE CODEBASE FIRST 🚨**
@@ -291,7 +290,9 @@ if (!hasReplied) { /* duplicate logic */ }
 - ❌ Writing custom LLM calls (use LLMClient)
 - ❌ Duplicating validation logic (create shared validators)
 
-### Private Methods
+### Private Methods (NO New Module Decomposition)
+
+**CRITICAL: Extract helpers WITHIN existing files. Do NOT create new files/modules for helper functions.**
 
 Use private methods to hide implementation details and expose clean public APIs.
 
@@ -300,6 +301,12 @@ Use private methods to hide implementation details and expose clean public APIs.
 - Step-by-step breakdown of complex public methods
 - Functions that depend on internal state
 - Implementation details that might change
+
+**What NOT to do:**
+- ❌ Create `server/src/lib/utils/my-helper.ts` for a one-off helper
+- ❌ Create `server/src/lib/helpers/` directories
+- ❌ Extract a private method into a separate module "for reuse"
+- ❌ Create new files just to reduce line count in existing files
 
 **Pattern:**
 
@@ -669,7 +676,6 @@ source ~/.zshrc && PGPASSWORD=aiemailpass psql -U aiemailuser -h localhost -p 54
 ### Database Issues
 1. **Connection refused**: Check Docker is running and using port 5434
 2. **Missing tables**: better-auth auto-creates tables on first use
-3. **Test users**: Use `npm run create-test-users` script
 
 ### Development Tips
 1. Use `npm run dev:all` to start both servers

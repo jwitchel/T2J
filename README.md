@@ -4,10 +4,21 @@ An AI-powered email assistant that generates email reply drafts matching your pe
 
 ## 📚 Documentation
 
+- **[AGENTS.md](AGENTS.md)** - **START HERE** - Mandatory design principles for all contributors
 - **[FEATURES.md](docs/FEATURES.md)** - Complete feature reference and API documentation
 - **[TESTING.md](docs/TESTING.md)** - Testing guide and strategies
 - **[CLAUDE.md](CLAUDE.md)** - Instructions for Claude AI assistant
-- **[AGENTS.md](AGENTS.md)** - Guidelines for AI agents working on this project
+
+## ⚠️ Design Principles (Mandatory)
+
+All contributors (human and AI) must follow these principles. See [AGENTS.md](AGENTS.md) for details.
+
+1. **Trust the Caller** - Never validate typed parameters
+2. **Throw Hard** - Let errors propagate; no try/catch for safety
+3. **Named Types** - No anonymous objects; no `any`
+4. **Private Extraction** - Extract helpers within files, not new modules
+5. **No Defensive Defaults** - Never use `|| {}` or `|| []`
+6. **Search Before Creating** - The solution likely already exists
 
 ## 🚀 Quick Start
 
