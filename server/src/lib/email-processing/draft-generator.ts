@@ -281,9 +281,11 @@ export class DraftGenerator {
       }
 
       // Build final relationship
+      // Use detectedRelationship for both type and confidence (not exampleSelection.relationship)
+      // exampleSelection.relationship is only for finding similar historical examples, not the actual relationship
       const finalRelationship = EmailActionType.isSpamAction(combinedMeta.recommendedAction)
         ? { type: RelationshipType.SPAM, confidence: 0.9 }
-        : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence };
+        : { type: detectedRelationship.relationship, confidence: detectedRelationship.confidence };
 
       console.log(`[DraftGenerator] 🎯 Final relationship determination: action=${combinedMeta.recommendedAction}, isSpamAction=${EmailActionType.isSpamAction(combinedMeta.recommendedAction)}, detectedRelationship=${detectedRelationship.relationship}, finalRelationship=${finalRelationship.type}`);
 
