@@ -11,9 +11,9 @@ router.get('/', requireAuth, async (req, res) => {
     const userId = (req as any).user.id;
     
     const result = await pool.query(
-      `SELECT preference_type, target_identifier, profile_data, emails_analyzed, last_updated 
-       FROM tone_preferences 
-       WHERE user_id = $1 
+      `SELECT preference_type, target_identifier, profile_data, emails_analyzed, updated_at
+       FROM tone_preferences
+       WHERE user_id = $1
          AND preference_type IN ('aggregate', 'category', 'individual')
          AND profile_data ? 'writingPatterns'`,
       [userId]
@@ -46,7 +46,7 @@ router.get('/', requireAuth, async (req, res) => {
           } : null
         },
         emails_analyzed: row.emails_analyzed,
-        last_updated: row.last_updated,
+        updated_at: row.updated_at,
         preference_type: row.preference_type
       };
     });
@@ -68,7 +68,7 @@ router.get('/', requireAuth, async (req, res) => {
       totalEmailsAnalyzed,
       totalEmailsLoaded,
       lastUpdated: result.rows.length > 0
-        ? Math.max(...result.rows.map(row => new Date(row.last_updated).getTime()))
+        ? Math.max(...result.rows.map(row => new Date(row.updated_at).getTime()))
         : null,
     });
   } catch (error) {

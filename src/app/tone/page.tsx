@@ -96,7 +96,7 @@ interface ToneProfile extends Partial<WritingPatterns> {
     [key: string]: unknown
   }
   emails_analyzed: number
-  last_updated: string
+  updated_at: string
   preference_type: string
 }
 
@@ -838,7 +838,7 @@ export default function TonePage() {
                   <CardContent>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <Stat label="Emails Analyzed" value={currentProfile.emails_analyzed} />
-                      <Stat label="Last Updated" value={new Date(currentProfile.last_updated).toLocaleDateString()} />
+                      <Stat label="Last Updated" value={new Date(currentProfile.updated_at).toLocaleDateString()} />
                       {(() => {
                         const modelUsed = currentProfile.meta?.modelUsed
                         return modelUsed && typeof modelUsed === 'string' ? (

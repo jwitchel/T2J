@@ -590,17 +590,16 @@ export class EmailStorageService {
               await db.query(`
                 INSERT INTO draft_tracking (
                   user_id, email_account_id, original_message_id,
-                  draft_message_id, generated_content, relationship_type,
+                  draft_message_id, generated_content,
                   context_data, created_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
               `, [
                 userId,
                 emailAccountId,
                 emailData.messageId,
                 params.llmResponse.draftId || null,  // Allow null for silent actions
                 params.llmResponse.generatedContent || null,  // Allow null for silent actions
-                params.llmResponse.relationship.type,
                 JSON.stringify({
                   meta: params.llmResponse.meta,
                   providerId: params.llmResponse.providerId,

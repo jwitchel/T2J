@@ -1074,23 +1074,22 @@ export class WritingPatternAnalyzer {
     }
     
     // Save to unified tone_preferences table
+    // Note: updated_at is auto-updated by database trigger
     const query = `
       INSERT INTO tone_preferences (
-        user_id, 
-        preference_type, 
+        user_id,
+        preference_type,
         target_identifier,
         user_relationship_id,
-        profile_data, 
-        emails_analyzed, 
-        last_updated
+        profile_data,
+        emails_analyzed
       )
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (user_id, preference_type, target_identifier)
-      DO UPDATE SET 
+      DO UPDATE SET
         user_relationship_id = $4,
         profile_data = $5,
-        emails_analyzed = $6,
-        last_updated = NOW()
+        emails_analyzed = $6
     `;
     
     await db.query(query, [

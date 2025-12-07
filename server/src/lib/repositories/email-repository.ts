@@ -82,9 +82,9 @@ export class EmailRepository {
         email_id, user_id, email_account_id, user_reply,
         subject, recipient_person_email_id, word_count, sent_date,
         semantic_vector, style_vector, full_message,
-        vector_generated_at, created_at, updated_at
+        vector_generated_at, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
       RETURNING id
     `, [
       normalizedEmailId,
@@ -188,7 +188,7 @@ export class EmailRepository {
         email_id, user_id, email_account_id, user_reply,
         subject, recipient_person_email_id, word_count, sent_date,
         semantic_vector, style_vector, full_message,
-        vector_generated_at, created_at, updated_at
+        vector_generated_at, created_at
       )
       SELECT * FROM UNNEST(
         $1::text[], $2::text[], $3::uuid[], $4::text[],
