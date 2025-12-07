@@ -11,7 +11,7 @@ An AI-powered email assistant that generates email reply drafts matching your pe
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Prerequisites.
 
 - Node.js 18+ 
 - Docker and Docker Compose
