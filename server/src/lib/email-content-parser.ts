@@ -29,8 +29,8 @@ export class EmailContentParser {
   parseFromMailparser(parsedMail: ParsedMail): ParsedEmailContent {
     // Extract basic metadata
     const messageId = parsedMail.messageId || `generated-${Date.now()}`;
-    const from = this.extractFromAddress(parsedMail);
-    const to = this.extractToAddresses(parsedMail);
+    const from = this._extractFromAddress(parsedMail);
+    const to = this._extractToAddresses(parsedMail);
     const sentDate = parsedMail.date || new Date();
 
     // Extract text content
@@ -65,7 +65,7 @@ export class EmailContentParser {
   /**
    * Extract sender email address
    */
-  private extractFromAddress(parsedMail: ParsedMail): string {
+  private _extractFromAddress(parsedMail: ParsedMail): string {
     if (!parsedMail.from) {
       return 'unknown@email.com';
     }
@@ -95,7 +95,7 @@ export class EmailContentParser {
   /**
    * Extract recipient email addresses
    */
-  private extractToAddresses(parsedMail: ParsedMail): string[] {
+  private _extractToAddresses(parsedMail: ParsedMail): string[] {
     const addresses: string[] = [];
 
     if (parsedMail.to) {

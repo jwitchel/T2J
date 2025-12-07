@@ -125,8 +125,12 @@ describe('EmailActionRouter', () => {
       expect(spamRoute.flags).toContain('\\Seen');
     });
 
-    it('should throw error for unknown actions', () => {
-      expect(() => router.getActionRoute('unknown-action' as any)).toThrow('Unknown action: unknown-action');
+    it('should handle unknown actions by routing to INBOX', () => {
+      // Unknown actions are treated as keep-in-inbox for resilience
+      const result = router.getActionRoute('unknown-action' as any);
+      expect(result.folder).toBe('INBOX');
+      expect(result.displayName).toBe('INBOX');
+      expect(result.flags).toEqual([]);
     });
   });
 

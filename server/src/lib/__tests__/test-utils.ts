@@ -33,7 +33,7 @@ export class TestDataManager {
    * Load predefined test data for a scenario
    */
   async loadScenarioData(userId: string, scenario: TestScenario): Promise<void> {
-    const emails = this.getScenarioEmails(scenario);
+    const emails = this._getScenarioEmails(scenario);
     
     // Process emails through vector store
     for (const _ of emails) {
@@ -74,42 +74,42 @@ export class TestDataManager {
   /**
    * Get predefined emails for different test scenarios
    */
-  private getScenarioEmails(scenario: TestScenario): ProcessedEmail[] {
+  private _getScenarioEmails(scenario: TestScenario): ProcessedEmail[] {
     const scenarios: Record<TestScenario, ProcessedEmail[]> = {
-      'basic': this.createBasicScenarioEmails(),
-      'edge-cases': this.createEdgeCaseEmails(),
-      'multi-relationship': this.createMultiRelationshipEmails(),
-      'insufficient-data': this.createInsufficientDataEmails()
+      'basic': this._createBasicScenarioEmails(),
+      'edge-cases': this._createEdgeCaseEmails(),
+      'multi-relationship': this._createMultiRelationshipEmails(),
+      'insufficient-data': this._createInsufficientDataEmails()
     };
-    
+
     return scenarios[scenario] || [];
   }
   
-  private createBasicScenarioEmails(): ProcessedEmail[] {
+  private _createBasicScenarioEmails(): ProcessedEmail[] {
     return [
-      this.createEmail('basic-1', 'colleague@work.com', 'Meeting notes', 
+      this._createEmail('basic-1', 'colleague@work.com', 'Meeting notes',
         'Here are the notes from our meeting today'),
-      this.createEmail('basic-2', 'spouse@home.com', 'Dinner', 
+      this._createEmail('basic-2', 'spouse@home.com', 'Dinner',
         'I\'ll be home by 7pm tonight. Love you!'),
-      this.createEmail('basic-3', 'friend@gmail.com', 'Weekend plans', 
+      this._createEmail('basic-3', 'friend@gmail.com', 'Weekend plans',
         'Hey! Want to grab coffee on Saturday?'),
-      this.createEmail('basic-4', 'investor@vc.com', 'Monthly update', 
+      this._createEmail('basic-4', 'investor@vc.com', 'Monthly update',
         'Q3 metrics: ARR $2.1M, churn 3.2%')
     ];
   }
   
-  private createEdgeCaseEmails(): ProcessedEmail[] {
+  private _createEdgeCaseEmails(): ProcessedEmail[] {
     return [
-      this.createEmail('edge-1', '', '', ''), // All empty
-      this.createEmail('edge-2', 'test@test.com', 'Subject only', ''), // No body
-      this.createEmail('edge-3', 'long@email.com', 'Long content', 
+      this._createEmail('edge-1', '', '', ''), // All empty
+      this._createEmail('edge-2', 'test@test.com', 'Subject only', ''), // No body
+      this._createEmail('edge-3', 'long@email.com', 'Long content',
         'x'.repeat(10000)), // Very long content
-      this.createEmail('edge-4', 'special@chars.com', 'Special chars', 
+      this._createEmail('edge-4', 'special@chars.com', 'Special chars',
         '🎉 Unicode! @#$%^&*()'), // Special characters
     ];
   }
   
-  private createMultiRelationshipEmails(): ProcessedEmail[] {
+  private _createMultiRelationshipEmails(): ProcessedEmail[] {
     const emails: ProcessedEmail[] = [];
     const relationships = [
       { email: 'colleague@work.com', count: 5 },
@@ -117,10 +117,10 @@ export class TestDataManager {
       { email: 'friend@social.com', count: 5 },
       { email: 'client@business.com', count: 5 }
     ];
-    
+
     relationships.forEach(rel => {
       for (let i = 0; i < rel.count; i++) {
-        emails.push(this.createEmail(
+        emails.push(this._createEmail(
           `multi-${rel.email}-${i}`,
           rel.email,
           `Subject ${i}`,
@@ -128,18 +128,18 @@ export class TestDataManager {
         ));
       }
     });
-    
+
     return emails;
   }
   
-  private createInsufficientDataEmails(): ProcessedEmail[] {
+  private _createInsufficientDataEmails(): ProcessedEmail[] {
     return [
-      this.createEmail('insufficient-1', 'rare@contact.com', 'Rare email', 
+      this._createEmail('insufficient-1', 'rare@contact.com', 'Rare email',
         'This is the only email to this contact')
     ];
   }
   
-  private createEmail(
+  private _createEmail(
     id: string,
     recipient: string,
     subject: string,

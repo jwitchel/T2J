@@ -61,7 +61,7 @@ export class EmailProcessingService {
    * Extract email body, handling HTML if no plain text is available
    * @private
    */
-  private async extractEmailBody(parsed: any): Promise<string> {
+  private async _extractEmailBody(parsed: any): Promise<string> {
     let emailBody = parsed.text || '';
 
     // Handle malformed emails with empty text/plain parts
@@ -89,7 +89,7 @@ export class EmailProcessingService {
    * Parse email exactly once
    * @private
    */
-  private async parseEmail(fullMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
+  private async _parseEmail(fullMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
     const parser = new PostalMime();
     const parsed = await parser.parse(fullMessage);
 
@@ -104,7 +104,7 @@ export class EmailProcessingService {
     const inReplyTo = parsed.inReplyTo || null;
 
     // Extract email body
-    const emailBody = await this.extractEmailBody(parsed);
+    const emailBody = await this._extractEmailBody(parsed);
 
     // Create ProcessedEmail with ORIGINAL fullMessage (unmodified, with all attachments)
     // This will be stored in the database and used for draft generation
@@ -133,7 +133,7 @@ export class EmailProcessingService {
    * Create a minimal draft for spam emails
    * @private
    */
-  private createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext, spamCheckResult: SpamCheckResult): any {
+  private _createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext, spamCheckResult: SpamCheckResult): any {
     const { processedEmail } = parsedData;
 
     return {
@@ -180,7 +180,7 @@ export class EmailProcessingService {
    * Load user context exactly once (single query joining account and user data)
    * @private
    */
-  private async loadUserContext(userId: string, emailAccountId: string): Promise<UserContext> {
+  private async _loadUserContext(userId: string, emailAccountId: string): Promise<UserContext> {
     // Single query to get both account email and user preferences
     const result = await pool.query(`
       SELECT
@@ -220,10 +220,10 @@ export class EmailProcessingService {
 
     try {
       // Step 1: Parse email
-      const parsedData = await this.parseEmail(fullMessage, emailAccountId);
+      const parsedData = await this._parseEmail(fullMessage, emailAccountId);
 
       // Step 2: Load user context
-      const userContext = await this.loadUserContext(userId, emailAccountId);
+      const userContext = await this._loadUserContext(userId, emailAccountId);
 
       // Step 3: Create LLM-safe version (strip ALL attachments for LLM processing)
       // This prevents massive PDFs, images, etc. from bloating token count
@@ -268,7 +268,7 @@ export class EmailProcessingService {
           });
         }
 
-        const spamDraft = this.createSpamDraft(parsedData, userContext, spamCheckResult);
+        const spamDraft = this._createSpamDraft(parsedData, userContext, spamCheckResult);
         draftDuration = Date.now() - draftStartTime;
 
         // Log concise summary

@@ -53,8 +53,8 @@ export class EmailIngestPipeline {
         };
       }
 
-      for await (const batch of this.batchStream(this.asyncIterableFromArray(emails), this.config.batchSize)) {
-        const results = await this.processBatch(userId, emailAccountId, batch);
+      for await (const batch of this._batchStream(this._asyncIterableFromArray(emails), this.config.batchSize)) {
+        const results = await this._processBatch(userId, emailAccountId, batch);
         
         processed += results.success;
         errors += results.errors;
@@ -102,13 +102,13 @@ export class EmailIngestPipeline {
     }
   }
 
-  private async *asyncIterableFromArray<T>(items: T[]): AsyncIterable<T> {
+  private async *_asyncIterableFromArray<T>(items: T[]): AsyncIterable<T> {
     for (const item of items) {
       yield item;
     }
   }
   
-  private async processBatch(userId: string, emailAccountId: string, emails: ProcessedEmail[]): Promise<BatchResult> {
+  private async _processBatch(userId: string, emailAccountId: string, emails: ProcessedEmail[]): Promise<BatchResult> {
     const tasks = emails.map(email => this.processEmail(userId, emailAccountId, email));
     const results = await Promise.allSettled(tasks);
     
@@ -157,7 +157,7 @@ export class EmailIngestPipeline {
     // Process the email for each unique recipient
     const results = await Promise.allSettled(
       uniqueRecipients.map(recipient =>
-        this.processEmailForRecipient(userId, emailAccountId, email, recipient, redactedUserReply, redactionResult)
+        this._processEmailForRecipient(userId, emailAccountId, email, recipient, redactedUserReply, redactionResult)
       )
     );
     
@@ -177,7 +177,7 @@ export class EmailIngestPipeline {
     return { relationship: relationships[0] || 'professional' };
   }
   
-  private async processEmailForRecipient(
+  private async _processEmailForRecipient(
     userId: string,
     emailAccountId: string,
     email: ProcessedEmail,
@@ -306,7 +306,7 @@ Email Details:
     });
   }
 
-  private async *batchStream<T>(
+  private async *_batchStream<T>(
     stream: AsyncIterable<T>,
     batchSize: number
   ): AsyncGenerator<T[], void, unknown> {

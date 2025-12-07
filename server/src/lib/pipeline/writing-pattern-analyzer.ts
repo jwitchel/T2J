@@ -101,8 +101,9 @@ export class WritingPatternAnalyzer {
 
   /**
    * Load sentence statistics from the database if available
+   * @private
    */
-  public async loadSentenceStats(
+  private async _loadSentenceStats(
     userId: string,
     relationship: string
   ): Promise<SentencePatterns | null> {
@@ -145,8 +146,9 @@ export class WritingPatternAnalyzer {
 
   /**
    * Store sentence statistics in the database
+   * @private
    */
-  async storeSentenceStats(
+  private async _storeSentenceStats(
     userId: string,
     relationship: string,
     stats: SentencePatterns & { totalSentences?: number }
@@ -205,7 +207,7 @@ export class WritingPatternAnalyzer {
 
     // Try to load from cache first (outside transaction)
     const cacheStart = Date.now();
-    const cached = await this.loadSentenceStats(userId, relationship);
+    const cached = await this._loadSentenceStats(userId, relationship);
     const cacheEnd = Date.now();
     if (cached) {
       console.log(`[TIMING] calculateSentenceStats cache HIT: ${cacheEnd - cacheStart}ms`);
@@ -215,7 +217,7 @@ export class WritingPatternAnalyzer {
 
     // Use advisory lock to prevent duplicate calculations across processes
     // Advisory locks are lightweight and don't require a row to exist
-    const lockKey = this.getAdvisoryLockKey(userId, relationship);
+    const lockKey = this._getAdvisoryLockKey(userId, relationship);
 
     try {
       // Try to acquire advisory lock (non-blocking)
@@ -229,7 +231,7 @@ export class WritingPatternAnalyzer {
         // Someone else is calculating, wait and retry cache
         console.log(`[SentenceStats] Another process is calculating for ${relationship}, waiting...`);
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-        const cachedAfterWait = await this.loadSentenceStats(userId, relationship);
+        const cachedAfterWait = await this._loadSentenceStats(userId, relationship);
         if (cachedAfterWait) {
           console.log(`[SentenceStats] Cache hit after wait for ${relationship}`);
           return cachedAfterWait;
@@ -242,7 +244,7 @@ export class WritingPatternAnalyzer {
       }
 
       // Double-check cache after acquiring lock
-      const cachedAfterLock = await this.loadSentenceStats(userId, relationship);
+      const cachedAfterLock = await this._loadSentenceStats(userId, relationship);
       if (cachedAfterLock) {
         console.log(`[SentenceStats] Cache hit after lock for ${relationship}`);
         return cachedAfterLock;
@@ -402,7 +404,7 @@ export class WritingPatternAnalyzer {
     });
     
       // Store the stats in the database
-      await this.storeSentenceStats(userId, relationship, {
+      await this._storeSentenceStats(userId, relationship, {
         ...result,
         totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
       } as any);
@@ -423,7 +425,7 @@ export class WritingPatternAnalyzer {
    * PostgreSQL advisory locks use bigint, so we hash the strings to a 64-bit integer
    * @private
    */
-  private getAdvisoryLockKey(userId: string, relationship: string): number {
+  private _getAdvisoryLockKey(userId: string, relationship: string): number {
     // Simple hash function to convert string to integer
     // We use a combination of userId and relationship to ensure uniqueness
     const str = `${userId}:${relationship}`;
@@ -574,7 +576,7 @@ export class WritingPatternAnalyzer {
 
     // Process in batches of 50 emails
     const batchSize = 50;
-    const batches = this.chunkEmails(emails, batchSize);
+    const batches = this._chunkEmails(emails, batchSize);
 
     console.log(`[TIMING] Created ${batches.length} batches of ${batchSize} emails each`);
 
@@ -588,7 +590,7 @@ export class WritingPatternAnalyzer {
       console.log(`[TIMING] Batch ${i + 1}/${batches.length} START`);
 
       try {
-        const analysis = await this.analyzeBatch(batches[i], relationship);
+        const analysis = await this._analyzeBatch(batches[i], relationship);
         batchAnalyses.push(analysis);
         successfulBatches++;
         const batchEnd = Date.now();
@@ -608,7 +610,7 @@ export class WritingPatternAnalyzer {
 
     // Aggregate patterns across all batches
     const aggStart = Date.now();
-    const aggregated = this.aggregatePatterns(batchAnalyses);
+    const aggregated = this._aggregatePatterns(batchAnalyses);
     const aggEnd = Date.now();
     console.log(`[TIMING] aggregatePatterns COMPLETE: ${aggEnd - aggStart}ms`);
 
@@ -619,11 +621,11 @@ export class WritingPatternAnalyzer {
 
     // Calculate structural patterns using NLP
 
-    const paragraphPatterns = await this.calculateParagraphPatterns(userId, emails);
+    const paragraphPatterns = await this._calculateParagraphPatterns(userId, emails);
 
-    const openingPatterns = await this.calculateOpeningPatterns(userId, emails);
+    const openingPatterns = await this._calculateOpeningPatterns(userId, emails);
 
-    const valedictionPatterns = await this.calculateValedictionPatterns(userId, emails);
+    const valedictionPatterns = await this._calculateValedictionPatterns(userId, emails);
 
 
     // Replace LLM-calculated patterns with NLP calculations
@@ -669,7 +671,7 @@ export class WritingPatternAnalyzer {
   /**
    * Analyze a single batch of emails
    */
-  private async analyzeBatch(
+  private async _analyzeBatch(
     emails: ProcessedEmail[],
     relationship?: string
   ): Promise<BatchAnalysisResult> {
@@ -775,7 +777,7 @@ export class WritingPatternAnalyzer {
   /**
    * Chunk emails into batches
    */
-  private chunkEmails(emails: ProcessedEmail[], batchSize: number): ProcessedEmail[][] {
+  private _chunkEmails(emails: ProcessedEmail[], batchSize: number): ProcessedEmail[][] {
     const chunks: ProcessedEmail[][] = [];
     for (let i = 0; i < emails.length; i += batchSize) {
       chunks.push(emails.slice(i, i + batchSize));
@@ -789,7 +791,7 @@ export class WritingPatternAnalyzer {
    * - Handles relationship-specific variations
    * - Identifies context-dependent patterns
    */
-  private aggregatePatterns(batchResults: BatchAnalysisResult[]): WritingPatterns {
+  private _aggregatePatterns(batchResults: BatchAnalysisResult[]): WritingPatterns {
     if (batchResults.length === 1) {
       // If only one batch, return it directly
       const { emailCount, dateRange, ...patterns } = batchResults[0];
@@ -829,25 +831,25 @@ export class WritingPatternAnalyzer {
     const valediction: ValedictionPattern[] = [];
 
     // Aggregate negative patterns (union of all, keep highest confidence)
-    const negativePatterns = this.mergeNegativePatterns(
+    const negativePatterns = this._mergeNegativePatterns(
       batchResults.map(b => b.negativePatterns)
     );
 
     // Aggregate response patterns with email count weighting
     const responsePatterns: ResponsePatterns = {
-      immediate: this.weightedAverage(
+      immediate: this._weightedAverage(
         batchWeights.map(({ batch, weight }) => ({ 
           value: batch.responsePatterns.immediate, 
           weight 
         }))
       ),
-      contemplative: this.weightedAverage(
+      contemplative: this._weightedAverage(
         batchWeights.map(({ batch, weight }) => ({ 
           value: batch.responsePatterns.contemplative, 
           weight 
         }))
       ),
-      questionHandling: this.mostCommonStringWeighted(
+      questionHandling: this._mostCommonStringWeighted(
         batchWeights.map(({ batch, weight }) => ({ 
           value: batch.responsePatterns.questionHandling, 
           weight 
@@ -856,7 +858,7 @@ export class WritingPatternAnalyzer {
     };
 
     // Aggregate unique expressions with context awareness
-    const uniqueExpressions = this.mergeUniqueExpressions(
+    const uniqueExpressions = this._mergeUniqueExpressions(
       batchWeights.map(({ batch, weight }) => ({
         expressions: batch.uniqueExpressions,
         weight
@@ -875,14 +877,14 @@ export class WritingPatternAnalyzer {
   }
 
   // Helper methods for aggregation
-  private weightedAverage(items: { value: number; weight: number }[]): number {
+  private _weightedAverage(items: { value: number; weight: number }[]): number {
     const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
     const weightedSum = items.reduce((sum, item) => sum + item.value * item.weight, 0);
     return weightedSum / totalWeight;
   }
 
 
-  private mergeNegativePatterns(patternArrays: NegativePattern[][]): NegativePattern[] {
+  private _mergeNegativePatterns(patternArrays: NegativePattern[][]): NegativePattern[] {
     const merged = new Map<string, NegativePattern>();
 
     patternArrays.forEach(patterns => {
@@ -902,7 +904,7 @@ export class WritingPatternAnalyzer {
       .slice(0, 10);
   }
 
-  private mergeUniqueExpressions(
+  private _mergeUniqueExpressions(
     batchData: { expressions: UniqueExpression[]; weight: number }[]
   ): UniqueExpression[] {
     const merged = new Map<string, { 
@@ -967,7 +969,7 @@ export class WritingPatternAnalyzer {
   }
 
 
-  private mostCommonStringWeighted(
+  private _mostCommonStringWeighted(
     items: { value: string; weight: number }[]
   ): string {
     const weightedCounts = new Map<string, number>();
@@ -1106,7 +1108,7 @@ export class WritingPatternAnalyzer {
    * Calculate paragraph structure patterns using NLP
    * Categorizes emails into: single-line, brief-multi-line, multi-paragraph, mixed
    */
-  private async calculateParagraphPatterns(
+  private async _calculateParagraphPatterns(
     _userId: string,
     emails: ProcessedEmail[]
   ): Promise<ParagraphPattern[]> {
@@ -1115,7 +1117,7 @@ export class WritingPatternAnalyzer {
     }
 
     // Classify each email's structure
-    const classifications = emails.map(email => this.classifyEmailStructure(email));
+    const classifications = emails.map(email => this._classifyEmailStructure(email));
 
     // Count occurrences of each type
     const counts = new Map<string, number>();
@@ -1128,7 +1130,7 @@ export class WritingPatternAnalyzer {
     const patterns: ParagraphPattern[] = Array.from(counts.entries()).map(([type, count]) => ({
       type,
       percentage: (count / total) * 100,
-      description: this.getParagraphTypeDescription(type)
+      description: this._getParagraphTypeDescription(type)
     }));
 
     // Sort by percentage (most common first)
@@ -1140,7 +1142,7 @@ export class WritingPatternAnalyzer {
   /**
    * Classify a single email's paragraph structure
    */
-  private classifyEmailStructure(email: ProcessedEmail): string {
+  private _classifyEmailStructure(email: ProcessedEmail): string {
     const text = email.userReply;
     if (!text || text.trim() === '') {
       return "single-line response";
@@ -1148,9 +1150,9 @@ export class WritingPatternAnalyzer {
 
     const doc = nlp(text);
     const sentences = doc.sentences().length;
-    const lineBreaks = this.countLineBreaks(text);
-    const hasGreeting = this.hasGreeting(text);
-    const hasClosing = this.hasClosing(text);
+    const lineBreaks = this._countLineBreaks(text);
+    const hasGreeting = this._hasGreeting(text);
+    const hasClosing = this._hasClosing(text);
 
     // Single-line: Very brief, 1-2 sentences, minimal line breaks
     if (sentences <= 2 && lineBreaks <= 1) {
@@ -1174,14 +1176,14 @@ export class WritingPatternAnalyzer {
   /**
    * Count meaningful line breaks in text
    */
-  private countLineBreaks(text: string): number {
+  private _countLineBreaks(text: string): number {
     return text.split('\n').filter(line => line.trim().length > 0).length - 1;
   }
 
   /**
    * Detect if text has a greeting
    */
-  private hasGreeting(text: string): boolean {
+  private _hasGreeting(text: string): boolean {
     const firstLine = text.split('\n')[0]?.toLowerCase() || '';
     const doc = nlp(firstLine);
 
@@ -1192,7 +1194,7 @@ export class WritingPatternAnalyzer {
   /**
    * Detect if text has a closing/valediction
    */
-  private hasClosing(text: string): boolean {
+  private _hasClosing(text: string): boolean {
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length === 0) return false;
 
@@ -1206,7 +1208,7 @@ export class WritingPatternAnalyzer {
   /**
    * Get description for paragraph type
    */
-  private getParagraphTypeDescription(type: string): string {
+  private _getParagraphTypeDescription(type: string): string {
     const descriptions: Record<string, string> = {
       "single-line response": "Very brief emails, 1-2 sentences total, no line breaks",
       "brief-multi-line": "Short emails with 2-4 lines, each line is a distinct point",
@@ -1220,7 +1222,7 @@ export class WritingPatternAnalyzer {
    * Calculate opening patterns using NLP
    * Extracts exact opening text with frequencies
    */
-  private async calculateOpeningPatterns(
+  private async _calculateOpeningPatterns(
     _userId: string,
     emails: ProcessedEmail[]
   ): Promise<OpeningPattern[]> {
@@ -1229,7 +1231,7 @@ export class WritingPatternAnalyzer {
     }
 
     // Extract opening from each email
-    const openings = emails.map(email => this.extractOpening(email));
+    const openings = emails.map(email => this._extractOpening(email));
 
     // Count occurrences
     const counts = new Map<string, number>();
@@ -1254,7 +1256,7 @@ export class WritingPatternAnalyzer {
   /**
    * Extract opening text from email
    */
-  private extractOpening(email: ProcessedEmail): string {
+  private _extractOpening(email: ProcessedEmail): string {
     const lines = email.userReply.split('\n').filter(l => l.trim());
     if (lines.length === 0) {
       return "[right to the point]";
@@ -1279,7 +1281,7 @@ export class WritingPatternAnalyzer {
    * Calculate valediction patterns using NLP
    * Analyzes closing phrases before name
    */
-  private async calculateValedictionPatterns(
+  private async _calculateValedictionPatterns(
     _userId: string,
     emails: ProcessedEmail[]
   ): Promise<ValedictionPattern[]> {
@@ -1288,7 +1290,7 @@ export class WritingPatternAnalyzer {
     }
 
     // Extract valediction from each email
-    const valedictions = emails.map(email => this.extractValediction(email));
+    const valedictions = emails.map(email => this._extractValediction(email));
 
     // Count occurrences
     const counts = new Map<string, number>();
@@ -1319,7 +1321,7 @@ export class WritingPatternAnalyzer {
   /**
    * Extract valediction from email
    */
-  private extractValediction(email: ProcessedEmail): string {
+  private _extractValediction(email: ProcessedEmail): string {
     const lines = email.userReply.split('\n').filter(l => l.trim());
     if (lines.length === 0) {
       return "[None]";
@@ -1328,14 +1330,14 @@ export class WritingPatternAnalyzer {
     // Check last 3 lines for valedictions
     const lastLines = lines.slice(-3).join('\n').toLowerCase();
 
-    const detected = this.detectCommonValedictions(lastLines);
+    const detected = this._detectCommonValedictions(lastLines);
     return detected || "[None]";
   }
 
   /**
    * Detect common valediction phrases using NLP
    */
-  private detectCommonValedictions(text: string): string | null {
+  private _detectCommonValedictions(text: string): string | null {
     const doc = nlp(text);
 
     // Use NLP to find common valediction patterns
@@ -1381,7 +1383,7 @@ export class WritingPatternAnalyzer {
       .map(([type, count]) => ({
         type,
         percentage: (count / accumulatedData.totalEmails) * 100,
-        description: this.getParagraphTypeDescription(type)
+        description: this._getParagraphTypeDescription(type)
       }))
       .sort((a, b) => b.percentage - a.percentage);
 

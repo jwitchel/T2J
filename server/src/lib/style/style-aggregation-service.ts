@@ -110,7 +110,7 @@ export class StyleAggregationService {
     const emails = emailsResult.rows;
 
     if (emails.length === 0) {
-      return this.getDefaultStyle(relationshipType);
+      return this._getDefaultStyle(relationshipType);
     }
 
     // Extract basic features from each email (using stub extractor)
@@ -132,12 +132,12 @@ export class StyleAggregationService {
 
     const aggregated: AggregatedStyle = {
       sentimentProfile: {
-        primaryTone: this.determinePrimaryTone(averageWarmth),
+        primaryTone: this._determinePrimaryTone(averageWarmth),
         averageWarmth,
         averageFormality
       },
       vocabularyProfile: {
-        complexityLevel: this.determineComplexityLevel(averageSentenceLength),
+        complexityLevel: this._determineComplexityLevel(averageSentenceLength),
         technicalTerms: []
       },
       structuralPatterns: {
@@ -147,7 +147,7 @@ export class StyleAggregationService {
       },
       emailCount: emails.length,
       lastUpdated: new Date().toISOString(),
-      confidenceScore: this.calculateConfidence(emails.length)
+      confidenceScore: this._calculateConfidence(emails.length)
       // Future features (greetings, closings, emojis, commonPhrases) omitted until implemented
     };
 
@@ -217,7 +217,7 @@ export class StyleAggregationService {
     return null;
   }
   
-  private calculateConfidence(emailCount: number): number {
+  private _calculateConfidence(emailCount: number): number {
     // Confidence increases with sample size
     if (emailCount < CONFIDENCE_THRESHOLDS.MIN_SAMPLE) return 0.2;
     if (emailCount < CONFIDENCE_THRESHOLDS.LOW_CONFIDENCE) return 0.4;
@@ -226,7 +226,7 @@ export class StyleAggregationService {
     return 0.95;
   }
 
-  private determinePrimaryTone(warmth: number): string {
+  private _determinePrimaryTone(warmth: number): string {
     if (warmth > 0.8) return 'very warm';
     if (warmth > 0.6) return 'warm';
     if (warmth > 0.4) return 'neutral';
@@ -234,14 +234,14 @@ export class StyleAggregationService {
     return 'formal';
   }
 
-  private determineComplexityLevel(avgSentenceLength: number): string {
+  private _determineComplexityLevel(avgSentenceLength: number): string {
     if (avgSentenceLength < 10) return 'simple';
     if (avgSentenceLength < 15) return 'moderate';
     if (avgSentenceLength < 20) return 'complex';
     return 'very complex';
   }
   
-  private getDefaultStyle(_relationshipType: string): AggregatedStyle {
+  private _getDefaultStyle(_relationshipType: string): AggregatedStyle {
     // Return minimal default style when no data exists
     return {
       sentimentProfile: {

@@ -110,15 +110,15 @@ export class ImapOperations {
   /**
    * Get Redis key for storing last processed UID
    */
-  private getLastUidKey(folderName: string): string {
+  private _getLastUidKey(folderName: string): string {
     return `imap:last_uid:${this.account.id}:${folderName}`;
   }
 
   /**
    * Get last processed UID from Redis
    */
-  private async getLastProcessedUid(folderName: string): Promise<number> {
-    const key = this.getLastUidKey(folderName);
+  private async _getLastProcessedUid(folderName: string): Promise<number> {
+    const key = this._getLastUidKey(folderName);
     const value = await redis.get(key);
     return value ? parseInt(value, 10) : 0;
   }
@@ -126,12 +126,12 @@ export class ImapOperations {
   /**
    * Update last processed UID in Redis
    */
-  private async updateLastProcessedUid(folderName: string, uid: number): Promise<void> {
-    const key = this.getLastUidKey(folderName);
+  private async _updateLastProcessedUid(folderName: string, uid: number): Promise<void> {
+    const key = this._getLastUidKey(folderName);
     await redis.set(key, uid.toString());
   }
 
-  private async getConnection(): Promise<ImapConnection> {
+  private async _getConnection(): Promise<ImapConnection> {
     // Prefer context-managed connection if present
     const ctx = getActiveContext();
     if (ctx && ctx.userId === this.account.userId && ctx.accountId === this.account.id && ctx.connection && ctx.connection.isConnected()) {
@@ -218,7 +218,7 @@ export class ImapOperations {
   async testConnection(preserveConnection: boolean = false): Promise<boolean> {
     let success = false;
     try {
-      const conn = await this.getConnection();
+      const conn = await this._getConnection();
       
       // Try to list folders as a test
       await conn.listFolders();
@@ -240,7 +240,7 @@ export class ImapOperations {
    * This is much faster than getFolders() when you only need one folder's count
    */
   async getFolderMessageCount(folderName: string, preserveConnection: boolean = false): Promise<{ total: number; unseen: number }> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       const box = await conn.selectFolder(folderName);
@@ -256,7 +256,7 @@ export class ImapOperations {
   }
 
   async getFolders(preserveConnection: boolean = false): Promise<EmailFolder[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       const imapFolders = await conn.listFolders();
@@ -322,7 +322,7 @@ export class ImapOperations {
       updateLastUid?: boolean;  // Whether to update Redis tracking (default: true)
     } = {}
   ): Promise<EmailMessage[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
 
     try {
       await conn.selectFolder(folderName);
@@ -337,7 +337,7 @@ export class ImapOperations {
         const searchCriteria: any[] = [['SINCE', options.since]];
 
         // Also filter by UID if we have a last processed UID
-        const lastUid = await this.getLastProcessedUid(folderName);
+        const lastUid = await this._getLastProcessedUid(folderName);
         if (lastUid > 0) {
           searchCriteria.push(['UID', `${lastUid + 1}:*`]);
         }
@@ -346,7 +346,7 @@ export class ImapOperations {
         console.log(`[ImapOperations] SINCE search returned ${uids.length} UIDs from ${this.account.email} ${folderName}`);
       } else {
         // Standard mode: Use UID tracking for efficiency
-        const lastUid = await this.getLastProcessedUid(folderName);
+        const lastUid = await this._getLastProcessedUid(folderName);
 
         if (lastUid === 0) {
           // First run - use 15-min lookback to avoid processing ancient emails
@@ -362,7 +362,7 @@ export class ImapOperations {
             const allUids = await conn.search([['ALL']]);
             if (allUids.length > 0) {
               const highestUid = Math.max(...allUids);
-              await this.updateLastProcessedUid(folderName, highestUid);
+              await this._updateLastProcessedUid(folderName, highestUid);
             }
           }
         } else {
@@ -417,7 +417,7 @@ export class ImapOperations {
       // Update last processed UID (if requested)
       if (options.updateLastUid !== false && paginatedUids.length > 0) {
         const highestUid = Math.max(...paginatedUids);
-        await this.updateLastProcessedUid(folderName, highestUid);
+        await this._updateLastProcessedUid(folderName, highestUid);
       }
 
       return messages.map((msg: any) => ({
@@ -446,7 +446,7 @@ export class ImapOperations {
       preserveConnection?: boolean;
     } = {}
   ): Promise<EmailMessage[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -526,7 +526,7 @@ export class ImapOperations {
     criteria: SearchCriteria = {},
     options: { offset?: number; limit?: number } = {}
   ): Promise<number[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
 
     try {
       await conn.selectFolder(folderName);
@@ -598,7 +598,7 @@ export class ImapOperations {
   }
 
   async getMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessage & { body?: string; parsed?: any; fullMessage?: string }> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -669,7 +669,7 @@ export class ImapOperations {
       return [];
     }
 
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
 
     try {
       await conn.selectFolder(folderName);
@@ -785,7 +785,7 @@ export class ImapOperations {
    * This skips the expensive parsing step which includes decoding attachments
    */
   async getMessageRaw(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessageWithRaw> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -844,7 +844,7 @@ export class ImapOperations {
   }
 
   async markAsRead(folderName: string, uid: number, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -864,7 +864,7 @@ export class ImapOperations {
   }
 
   async markAsUnread(folderName: string, uid: number, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -884,7 +884,7 @@ export class ImapOperations {
   }
 
   async deleteMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -912,7 +912,7 @@ export class ImapOperations {
   }
 
   async startIdleMonitoring(folderName: string, callback: (event: any) => void): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -1027,7 +1027,7 @@ export class ImapOperations {
   }
 
   async createFolder(folderPath: string, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await new Promise<void>((resolve, reject) => {
@@ -1054,7 +1054,7 @@ export class ImapOperations {
     flags?: string[],
     preserveConnection: boolean = false
   ): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       // Ensure the message has proper line endings (CRLF)
@@ -1085,7 +1085,7 @@ export class ImapOperations {
     flags?: string[],
     preserveConnection: boolean = false
   ): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
 
     try {
       // Select the source folder
@@ -1198,7 +1198,7 @@ export class ImapOperations {
   }
 
   async findMessageByMessageId(folderName: string, messageId: string, preserveConnection: boolean = false): Promise<number | null> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     let result: number | null = null;
     
     try {

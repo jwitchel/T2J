@@ -30,12 +30,12 @@ export class ImapLogsWebSocketServer {
       }
     });
 
-    this.setupEventHandlers();
-    this.setupHeartbeat();
-    this.setupRealTimeLoggerListeners();
+    this._setupEventHandlers();
+    this._setupHeartbeat();
+    this._setupRealTimeLoggerListeners();
   }
 
-  private setupEventHandlers(): void {
+  private _setupEventHandlers(): void {
     this.wss.on('connection', async (ws: AuthenticatedWebSocket, request) => {
       // Perform authentication check
       try {
@@ -77,7 +77,7 @@ export class ImapLogsWebSocketServer {
         console.log(`WebSocket client connected for user ${userId}`);
 
         // Send initial logs (last 100)
-        this.sendInitialLogs(ws, userId);
+        this._sendInitialLogs(ws, userId);
 
         // Set up ping/pong handlers
         ws.on('pong', () => {
@@ -88,7 +88,7 @@ export class ImapLogsWebSocketServer {
         ws.on('message', (data) => {
           try {
             const message = JSON.parse(data.toString());
-            this.handleClientMessage(ws, message);
+            this._handleClientMessage(ws, message);
           } catch (error) {
             console.error('Invalid WebSocket message:', error);
             ws.send(JSON.stringify({
@@ -100,12 +100,12 @@ export class ImapLogsWebSocketServer {
 
         // Handle disconnection
         ws.on('close', () => {
-          this.handleDisconnection(ws);
+          this._handleDisconnection(ws);
         });
 
         ws.on('error', (error) => {
           console.error(`WebSocket error for user ${userId}:`, error);
-          this.handleDisconnection(ws);
+          this._handleDisconnection(ws);
         });
       } catch (error) {
         console.error('WebSocket authentication error:', error);
@@ -114,7 +114,7 @@ export class ImapLogsWebSocketServer {
     });
   }
 
-  private setupHeartbeat(): void {
+  private _setupHeartbeat(): void {
     // Ping clients every 30 seconds
     this.heartbeatInterval = setInterval(() => {
       this.wss.clients.forEach((ws: AuthenticatedWebSocket) => {
@@ -134,10 +134,10 @@ export class ImapLogsWebSocketServer {
     });
   }
 
-  private setupRealTimeLoggerListeners(): void {
+  private _setupRealTimeLoggerListeners(): void {
     // Listen for all log events
     realTimeLogger.on('log', (logEntry: RealTimeLogEntry) => {
-      this.broadcastToUser(logEntry.userId, {
+      this._broadcastToUser(logEntry.userId, {
         type: 'new-log',  // Changed from 'log' to 'new-log' to match client
         log: logEntry     // Changed from 'data' to 'log' to match client
       });
@@ -145,13 +145,13 @@ export class ImapLogsWebSocketServer {
 
     // Listen for logs cleared events
     realTimeLogger.on('logs-cleared', ({ userId }: { userId: string }) => {
-      this.broadcastToUser(userId, {
+      this._broadcastToUser(userId, {
         type: 'logs-cleared'
       });
     });
   }
 
-  private sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
+  private _sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
     try {
       const logs = realTimeLogger.getLogs(userId, 100);
       ws.send(JSON.stringify({
@@ -167,7 +167,7 @@ export class ImapLogsWebSocketServer {
     }
   }
 
-  private handleClientMessage(ws: AuthenticatedWebSocket, message: any): void {
+  private _handleClientMessage(ws: AuthenticatedWebSocket, message: any): void {
     const { type, ...payload } = message;
 
     switch (type) {
@@ -200,7 +200,7 @@ export class ImapLogsWebSocketServer {
     }
   }
 
-  private handleDisconnection(ws: AuthenticatedWebSocket): void {
+  private _handleDisconnection(ws: AuthenticatedWebSocket): void {
     if (ws.userId) {
       const userClients = this.clients.get(ws.userId);
       if (userClients) {
@@ -213,7 +213,7 @@ export class ImapLogsWebSocketServer {
     }
   }
 
-  private broadcastToUser(userId: string, message: any): void {
+  private _broadcastToUser(userId: string, message: any): void {
     const userClients = this.clients.get(userId);
     if (!userClients) return;
 

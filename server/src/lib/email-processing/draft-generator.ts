@@ -117,7 +117,7 @@ export class DraftGenerator {
 
       // Step 2: Run AI pipeline with timeout protection
       const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
-      const aiResult = await this.runAIPipelineWithTimeout(
+      const aiResult = await this._runAIPipelineWithTimeout(
         orchestrator,
         processedEmail,
         recipientEmail,
@@ -130,18 +130,18 @@ export class DraftGenerator {
       );
 
       // Step 3: Clean any typed name that the LLM may have added
-      const cleanedBody = await this.removeTypedName(aiResult.body, userId);
+      const cleanedBody = await this._removeTypedName(aiResult.body, userId);
 
       // Step 4: Determine if this is a silent action
       const isSilentAction = aiResult.meta && EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
 
       // Step 5: Format complete draft response
       const formattedDraft = isSilentAction
-        ? this.buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
-        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
+        ? this._buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
+        : this._buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
 
       // Step 6: Log completion
-      this.logDraftCompletion(userId, aiResult);
+      this._logDraftCompletion(userId, aiResult);
 
       return {
         success: true,
@@ -161,7 +161,7 @@ export class DraftGenerator {
    * Incorporates: example selection, pattern analysis, LLM calls (meta-context, action, response)
    * @private
    */
-  private async runAIPipelineWithTimeout(
+  private async _runAIPipelineWithTimeout(
     orchestrator: ToneLearningOrchestrator,
     processedEmail: ProcessedEmail,
     recipientEmail: string,
@@ -316,7 +316,7 @@ export class DraftGenerator {
    * Remove typed name signature from draft body
    * @private
    */
-  private async removeTypedName(body: string, userId: string): Promise<string> {
+  private async _removeTypedName(body: string, userId: string): Promise<string> {
     const typedNameRemover = new TypedNameRemover(pool);
     const cleaned = await typedNameRemover.removeTypedName(body, userId);
     return cleaned.cleanedText;
@@ -326,7 +326,7 @@ export class DraftGenerator {
    * Build base draft email structure with common fields
    * @private
    */
-  private buildBaseDraft(
+  private _buildBaseDraft(
     parsed: PostalMimeEmail,
     meta: LLMMetadata,
     relationship: RelationshipResult,
@@ -358,7 +358,7 @@ export class DraftGenerator {
    * Build draft for silent actions (no reply needed)
    * @private
    */
-  private buildSilentDraft(
+  private _buildSilentDraft(
     parsed: PostalMimeEmail,
     meta: LLMMetadata,
     relationship: RelationshipResult,
@@ -367,8 +367,8 @@ export class DraftGenerator {
   ): DraftEmail {
     const fromAddress = extractSingleAddress(parsed.from);
     return {
-      ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
-      to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''),
+      ...this._buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
+      to: this._formatEmailAddress(fromAddress?.name, fromAddress?.address || ''),
       cc: '',
       subject: parsed.subject!,  // Validated at entry point
       body: ''
@@ -379,7 +379,7 @@ export class DraftGenerator {
    * Build draft for reply actions
    * @private
    */
-  private buildReplyDraft(
+  private _buildReplyDraft(
     parsed: PostalMimeEmail,
     emailBody: string,
     cleanedBody: string,
@@ -389,7 +389,7 @@ export class DraftGenerator {
     spamCheckResult: SpamCheckResult
   ): DraftEmail {
     const fromAddress = extractSingleAddress(parsed.from);
-    const formattedReply = this.formatReplyEmail(
+    const formattedReply = this._formatReplyEmail(
       fromAddress?.name || fromAddress?.address || '',
       fromAddress?.address || '',
       parsed.date ? new Date(parsed.date) : new Date(),
@@ -406,11 +406,11 @@ export class DraftGenerator {
 
     const isReplyAll = EmailActionType.isReplyAll(meta.recommendedAction);
     const { to, cc } = isReplyAll
-      ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
-      : { to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''), cc: '' };
+      ? this._calculateReplyAllRecipients(parsed, userContext.userEmail)
+      : { to: this._formatEmailAddress(fromAddress?.name, fromAddress?.address || ''), cc: '' };
 
     return {
-      ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
+      ...this._buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
       to,
       cc,
       subject: replySubject,
@@ -423,7 +423,7 @@ export class DraftGenerator {
    * Format reply email with quoted original message
    * @private
    */
-  private formatReplyEmail(
+  private _formatReplyEmail(
     originalFromName: string,
     originalFromEmail: string,
     originalDate: Date,
@@ -433,7 +433,7 @@ export class DraftGenerator {
     originalHtml?: string,
     signatureBlock?: string
   ): { text: string; html?: string } {
-    const formattedDate = this.formatEmailDate(originalDate);
+    const formattedDate = this._formatEmailDate(originalDate);
     const senderInfo = originalFromName && originalFromName !== originalFromEmail
       ? `${originalFromName} (${originalFromEmail})`
       : originalFromEmail;
@@ -449,7 +449,7 @@ export class DraftGenerator {
 
     // HTML version if original had HTML
     const htmlReply = originalHtml
-      ? this.formatHtmlReply(replyBody, typedName, signatureBlock, formattedDate, originalFromName, originalFromEmail, originalHtml)
+      ? this._formatHtmlReply(replyBody, typedName, signatureBlock, formattedDate, originalFromName, originalFromEmail, originalHtml)
       : undefined;
 
     return { text: textReply, html: htmlReply };
@@ -459,7 +459,7 @@ export class DraftGenerator {
    * Format HTML version of reply
    * @private
    */
-  private formatHtmlReply(
+  private _formatHtmlReply(
     replyBody: string,
     typedName: string | undefined,
     signatureBlock: string | undefined,
@@ -497,21 +497,21 @@ ${originalHtml}
    * Calculate recipients for reply-all
    * @private
    */
-  private calculateReplyAllRecipients(parsed: PostalMimeEmail, userEmail: string): { to: string; cc: string } {
+  private _calculateReplyAllRecipients(parsed: PostalMimeEmail, userEmail: string): { to: string; cc: string } {
     const allTo: string[] = [];
     const allCc: string[] = [];
 
     // Add sender to TO
     const from = extractSingleAddress(parsed.from);
     if (from) {
-      allTo.push(this.formatEmailAddress(from.name, from.address));
+      allTo.push(this._formatEmailAddress(from.name, from.address));
     }
 
     // Add all TO recipients (except the user)
     const toAddresses = extractAddresses(parsed.to);
     toAddresses.forEach(addr => {
       if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
-        allTo.push(this.formatEmailAddress(addr.name, addr.address));
+        allTo.push(this._formatEmailAddress(addr.name, addr.address));
       }
     });
 
@@ -519,7 +519,7 @@ ${originalHtml}
     const ccAddresses = extractAddresses(parsed.cc);
     ccAddresses.forEach(addr => {
       if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
-        allCc.push(this.formatEmailAddress(addr.name, addr.address));
+        allCc.push(this._formatEmailAddress(addr.name, addr.address));
       }
     });
 
@@ -533,7 +533,7 @@ ${originalHtml}
    * Format email address with optional name
    * @private
    */
-  private formatEmailAddress(name: string | undefined, email: string): string {
+  private _formatEmailAddress(name: string | undefined, email: string): string {
     return name && name !== email ? `${name} <${email}>` : email;
   }
 
@@ -541,7 +541,7 @@ ${originalHtml}
    * Format date for email reply header
    * @private
    */
-  private formatEmailDate(date: Date): string {
+  private _formatEmailDate(date: Date): string {
     const formatted = date.toLocaleString('en-US', {
       month: 'long',
       day: 'numeric',
@@ -568,7 +568,7 @@ ${originalHtml}
    * Log draft generation completion
    * @private
    */
-  private logDraftCompletion(
+  private _logDraftCompletion(
     userId: string,
     aiResult: { body: string; meta: LLMMetadata; relationship: RelationshipResult }
   ): void {

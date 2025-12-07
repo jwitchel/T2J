@@ -34,7 +34,7 @@ export class RelationshipService {
    * Returns null if no preference exists
    * @private
    */
-  private async getTonePreference(
+  private async _getTonePreference(
     userId: string,
     relationshipType: string
   ): Promise<any | null> {
@@ -106,7 +106,7 @@ export class RelationshipService {
   
   public async getStylePreferences(userId: string, relationshipType: string): Promise<StylePreferences | null> {
     // First check if user has custom preferences
-    const profileData = await this.getTonePreference(userId, relationshipType);
+    const profileData = await this._getTonePreference(userId, relationshipType);
 
     if (profileData) {
       
@@ -116,7 +116,7 @@ export class RelationshipService {
       // Check if this is AggregatedStyle format (has emailCount property)
       if ('emailCount' in storedData) {
         // Convert AggregatedStyle to StylePreferences
-        return this.convertAggregatedToPreferences(storedData as AggregatedStyle, relationshipType);
+        return this._convertAggregatedToPreferences(storedData as AggregatedStyle, relationshipType);
       } else {
         // Legacy format - merge with defaults
         const defaultPrefs = DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
@@ -129,7 +129,7 @@ export class RelationshipService {
   }
   
   public async getAggregatedStyle(userId: string, relationshipType: string): Promise<AggregatedStyle | null> {
-    const profileData = await this.getTonePreference(userId, relationshipType);
+    const profileData = await this._getTonePreference(userId, relationshipType);
 
     if (profileData) {
       
@@ -312,7 +312,7 @@ export class RelationshipService {
     return parts.join(' ');
   }
 
-  private convertAggregatedToPreferences(aggregated: AggregatedStyle, relationshipType: string): StylePreferences {
+  private _convertAggregatedToPreferences(aggregated: AggregatedStyle, relationshipType: string): StylePreferences {
     // Start with defaults as base
     const defaults = DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
     

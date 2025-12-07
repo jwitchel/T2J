@@ -50,7 +50,7 @@ export class WorkerManager {
   async initialize(): Promise<void> {
     try {
       // Clean up stale jobs from any previous crashed workers
-      await this.cleanupStaleJobs();
+      await this._cleanupStaleJobs();
 
       // CLEAN START: Always use ENV variables as source of truth on startup
       // This ensures consistent behavior and allows env changes to take effect
@@ -84,7 +84,7 @@ export class WorkerManager {
    * This runs ONCE at startup, not periodically
    * Grace periods are longer than lock durations to only catch truly abandoned jobs
    */
-  private async cleanupStaleJobs(): Promise<void> {
+  private async _cleanupStaleJobs(): Promise<void> {
     console.log('[WorkerManager] Cleaning up stale jobs from previous runs...');
 
     try {

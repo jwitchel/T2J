@@ -133,7 +133,7 @@ export class PersonService {
   /**
    * Validate email format
    */
-  private validateEmail(email: string): void {
+  private _validateEmail(email: string): void {
     if (!email || typeof email !== 'string') {
       throw new ValidationError('Email is required');
     }
@@ -152,7 +152,7 @@ export class PersonService {
   /**
    * Validate person name
    */
-  private validateName(name: string): void {
+  private _validateName(name: string): void {
     if (!name || typeof name !== 'string') {
       throw new ValidationError('Name is required');
     }
@@ -171,7 +171,7 @@ export class PersonService {
   /**
    * Validate UUID format
    */
-  private validateUUID(id: string, fieldName: string): void {
+  private _validateUUID(id: string, fieldName: string): void {
     // Allow standard UUID v4 format or all zeros for testing
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!id || !uuidRegex.test(id)) {
@@ -182,7 +182,7 @@ export class PersonService {
   /**
    * Log operation for debugging
    */
-  private logOperation(operation: string, userId: string, details?: any): void {
+  private _logOperation(operation: string, userId: string, details?: any): void {
     if (!this.suppressLogs) {
       console.log(`PersonService.${operation}:`, {
         userId,
@@ -198,8 +198,8 @@ export class PersonService {
       throw new ValidationError('User ID is required');
     }
     
-    this.validateName(params.name);
-    this.validateEmail(params.emailAddress);
+    this._validateName(params.name);
+    this._validateEmail(params.emailAddress);
     
     if (params.confidence !== undefined && (params.confidence < 0 || params.confidence > 1)) {
       throw new ValidationError('Confidence must be between 0 and 1');
@@ -208,7 +208,7 @@ export class PersonService {
     const client = await this._beginTransaction();
     
     try {
-      this.logOperation('createPerson', params.userId, { name: params.name, email: params.emailAddress });
+      this._logOperation('createPerson', params.userId, { name: params.name, email: params.emailAddress });
       
       // Check if email already exists for this user
       const normalizedEmail = this._normalizeEmail(params.emailAddress);
@@ -301,13 +301,13 @@ export class PersonService {
       throw new ValidationError('User ID is required');
     }
     
-    this.validateUUID(personId, 'person ID');
-    this.validateEmail(emailAddress);
+    this._validateUUID(personId, 'person ID');
+    this._validateEmail(emailAddress);
     
     const client = await this._beginTransaction();
     
     try {
-      this.logOperation('addEmailToPerson', userId, { personId, email: emailAddress });
+      this._logOperation('addEmailToPerson', userId, { personId, email: emailAddress });
       
       // Verify person belongs to user
       const personCheck = await client.query(
@@ -384,8 +384,8 @@ export class PersonService {
       throw new ValidationError('User ID is required');
     }
 
-    this.validateName(params.name);
-    this.validateEmail(params.emailAddress);
+    this._validateName(params.name);
+    this._validateEmail(params.emailAddress);
 
     const normalizedEmail = this._normalizeEmail(params.emailAddress);
 
@@ -514,10 +514,10 @@ export class PersonService {
       throw new ValidationError('User ID is required');
     }
     
-    this.validateEmail(emailAddress);
-    
+    this._validateEmail(emailAddress);
+
     try {
-      // this.logOperation('findPersonByEmail', userId, { email: emailAddress });
+      // this._logOperation('findPersonByEmail', userId, { email: emailAddress });
       
       const normalizedEmail = this._normalizeEmail(emailAddress);
       
@@ -611,7 +611,7 @@ export class PersonService {
       throw new ValidationError('User ID is required');
     }
 
-    this.validateUUID(personId, 'person ID');
+    this._validateUUID(personId, 'person ID');
 
     const db = client || this.pool;
 
@@ -675,7 +675,7 @@ export class PersonService {
     const offset = Math.max(params.offset || 0, 0); // Non-negative
     
     try {
-      this.logOperation('listPeopleForUser', params.userId, { limit, offset });
+      this._logOperation('listPeopleForUser', params.userId, { limit, offset });
       
       // Get people with their primary email and relationship
       const result = await this.pool.query(
@@ -726,8 +726,8 @@ export class PersonService {
       throw new ValidationError('User ID is required');
     }
     
-    this.validateUUID(params.sourcePersonId, 'source person ID');
-    this.validateUUID(params.targetPersonId, 'target person ID');
+    this._validateUUID(params.sourcePersonId, 'source person ID');
+    this._validateUUID(params.targetPersonId, 'target person ID');
     
     if (params.sourcePersonId === params.targetPersonId) {
       throw new ValidationError('Cannot merge a person with themselves');
@@ -736,7 +736,7 @@ export class PersonService {
     const client = await this._beginTransaction();
     
     try {
-      this.logOperation('mergePeople', params.userId, {
+      this._logOperation('mergePeople', params.userId, {
         sourcePersonId: params.sourcePersonId,
         targetPersonId: params.targetPersonId
       });

@@ -33,7 +33,7 @@ export class ReplyExtractor {
 
     try {
       // Pre-process to handle special quote patterns that email-reply-parser misses
-      const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
+      const preprocessed = this._preprocessQuotePatterns(emailBody, subject);
 
       // If preprocessing returned just a marker, return it directly
       // Don't pass markers through email-reply-parser as they may be filtered out
@@ -45,7 +45,7 @@ export class ReplyExtractor {
       const parsed = this.parser.read(preprocessed);
 
       // Post-process fragments to handle code continuation issues
-      const fragments = this.mergeCodeContinuations(parsed.getFragments());
+      const fragments = this._mergeCodeContinuations(parsed.getFragments());
 
       // Get only the non-quoted fragments
       // We now check both isQuoted() and isHidden() but with special handling
@@ -57,7 +57,7 @@ export class ReplyExtractor {
           // For hidden fragments, check if it's actually a quote pattern
           if (fragment.isHidden()) {
             const content = fragment.getContent();
-            return !this.isQuotePattern(content);
+            return !this._isQuotePattern(content);
           }
 
           return true;
@@ -85,7 +85,7 @@ export class ReplyExtractor {
 
     try {
       // Pre-process to handle special quote patterns
-      const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
+      const preprocessed = this._preprocessQuotePatterns(emailBody, subject);
 
       // If preprocessing returned just a marker, return it directly
       // Don't pass markers through email-reply-parser as they may be filtered out
@@ -96,14 +96,14 @@ export class ReplyExtractor {
       }
 
       const parsed = this.parser.read(preprocessed);
-      const fragments = this.mergeCodeContinuations(parsed.getFragments());
+      const fragments = this._mergeCodeContinuations(parsed.getFragments());
 
       // Get only the non-quoted fragments with special handling for hidden fragments
       const visibleFragments = fragments
         .filter(fragment => {
           if (fragment.isQuoted()) return false;
           if (fragment.isHidden()) {
-            return !this.isQuotePattern(fragment.getContent());
+            return !this._isQuotePattern(fragment.getContent());
           }
           return true;
         })
@@ -153,7 +153,7 @@ export class ReplyExtractor {
   /**
    * Merge code continuation fragments that were incorrectly split
    */
-  private mergeCodeContinuations(fragments: any[]): any[] {
+  private _mergeCodeContinuations(fragments: any[]): any[] {
     if (fragments.length < 2) return fragments;
     
     const merged: any[] = [];
@@ -168,16 +168,16 @@ export class ReplyExtractor {
         const next = fragments[i + 1];
         
         // If the next fragment is non-quoted, starts with spaces, and looks like code
-        if (!next.isQuoted() && 
-            !next.isHidden() && 
-            this.looksLikeCodeContinuation(next.getContent())) {
+        if (!next.isQuoted() &&
+            !next.isHidden() &&
+            this._looksLikeCodeContinuation(next.getContent())) {
           
           // Check if there's a pattern suggesting this is a continuation
           const currentContent = current.getContent();
           const nextContent = next.getContent();
           
           // If the current fragment ends with an opening brace or incomplete statement
-          if (this.isIncompleteCodeBlock(currentContent)) {
+          if (this._isIncompleteCodeBlock(currentContent)) {
             // Merge the next fragment into the current one
             current._content = currentContent + '\n' + nextContent;
             i++; // Skip the next fragment since we merged it
@@ -194,7 +194,7 @@ export class ReplyExtractor {
   /**
    * Check if text looks like a code continuation
    */
-  private looksLikeCodeContinuation(text: string): boolean {
+  private _looksLikeCodeContinuation(text: string): boolean {
     // Starts with 2+ spaces (common code indentation)
     if (!/^\s{2,}/.test(text)) return false;
     
@@ -214,7 +214,7 @@ export class ReplyExtractor {
   /**
    * Check if a code block appears incomplete
    */
-  private isIncompleteCodeBlock(text: string): boolean {
+  private _isIncompleteCodeBlock(text: string): boolean {
     // Count opening and closing braces
     const openBraces = (text.match(/{/g) || []).length;
     const closeBraces = (text.match(/}/g) || []).length;
@@ -243,7 +243,7 @@ export class ReplyExtractor {
    * 1. email-forward-parser (detects forwards from major clients)
    * 2. Custom regex patterns (catches remaining edge cases)
    */
-  private preprocessQuotePatterns(emailBody: string, subject?: string): string {
+  private _preprocessQuotePatterns(emailBody: string, subject?: string): string {
     let processed = emailBody;
 
     // Step 1: Use email-forward-parser to detect and remove forwarded content
@@ -330,7 +330,7 @@ export class ReplyExtractor {
   /**
    * Check if a hidden fragment is actually a quote pattern
    */
-  private isQuotePattern(content: string): boolean {
+  private _isQuotePattern(content: string): boolean {
     const trimmed = content.trim();
     const quotePatterns = [
       /^-{3,}\s*Original Message\s*-{3,}/i,
@@ -359,7 +359,7 @@ export class ReplyExtractor {
 
     try {
       // Pre-process to handle special quote patterns
-      const preprocessed = this.preprocessQuotePatterns(emailBody, subject);
+      const preprocessed = this._preprocessQuotePatterns(emailBody, subject);
 
       // If preprocessing returned just a marker, return it directly
       // Don't pass markers through email-reply-parser as they may be filtered out
@@ -383,7 +383,7 @@ export class ReplyExtractor {
         if (preprocessed.includes(marker)) {
           preservedMarker = marker;
           // Remove the marker temporarily so email-reply-parser doesn't filter it
-          textToProcess = preprocessed.replace(new RegExp(`\\n\\n${this.escapeRegex(marker)}$`), '').trim();
+          textToProcess = preprocessed.replace(new RegExp(`\\n\\n${this._escapeRegex(marker)}$`), '').trim();
           break;
         }
       }
@@ -392,7 +392,7 @@ export class ReplyExtractor {
       const parsed = this.parser.read(textToProcess);
 
       // Post-process fragments to handle code continuation issues
-      const fragments = this.mergeCodeContinuations(parsed.getFragments());
+      const fragments = this._mergeCodeContinuations(parsed.getFragments());
 
       // Separate user reply from quoted content
       const userFragments: string[] = [];
@@ -403,7 +403,7 @@ export class ReplyExtractor {
 
         if (fragment.isQuoted()) {
           quotedFragments.push(content);
-        } else if (fragment.isHidden() && this.isQuotePattern(content)) {
+        } else if (fragment.isHidden() && this._isQuotePattern(content)) {
           quotedFragments.push(content);
         } else if (!fragment.isHidden()) {
           userFragments.push(content);
@@ -430,21 +430,21 @@ export class ReplyExtractor {
     } catch (error: unknown) {
       console.error('Failed to split email:', error);
       // Fallback: try to split on common patterns
-      return this.fallbackSplit(emailBody);
+      return this._fallbackSplit(emailBody);
     }
   }
 
   /**
    * Escape special regex characters
    */
-  private escapeRegex(str: string): string {
+  private _escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   /**
    * Fallback method to split email on common patterns
    */
-  private fallbackSplit(emailBody: string): SplitReplyResult {
+  private _fallbackSplit(emailBody: string): SplitReplyResult {
     // Look for common reply markers
     const replyMarkers = [
       /\nOn .+ wrote:\s*\n/i,
@@ -470,24 +470,6 @@ export class ReplyExtractor {
       userReply: '',
       respondedTo: ''
     };
-  }
-
-
-  /**
-   * Test the extraction with a sample email
-   */
-  static testExtraction(): void {
-    const extractor = new ReplyExtractor();
-    
-    const sampleEmail = `Thanks for the invite!
-
-> The birthday is Saturday
->> When is the birthday?`;
-
-    const result = extractor.extractUserText(sampleEmail);
-    console.log('Sample extraction result:', result);
-    console.log('Expected: "Thanks for the invite!"');
-    console.log('Match:', result === 'Thanks for the invite!');
   }
 }
 

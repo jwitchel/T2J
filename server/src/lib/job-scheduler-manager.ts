@@ -42,7 +42,7 @@ export class JobSchedulerManager {
   private constructor() {
 
     // Initialize scheduler configurations
-    this.initializeSchedulerConfigs();
+    this._initializeSchedulerConfigs();
   }
 
   static getInstance(): JobSchedulerManager {
@@ -52,7 +52,7 @@ export class JobSchedulerManager {
     return JobSchedulerManager.instance;
   }
 
-  private initializeSchedulerConfigs(): void {
+  private _initializeSchedulerConfigs(): void {
     // Check Mail scheduler configuration
     this.schedulerConfigs.set(SchedulerId.CHECK_MAIL, {
       id: SchedulerId.CHECK_MAIL,

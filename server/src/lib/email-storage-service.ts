@@ -364,7 +364,7 @@ export class EmailStorageService {
         for (const recipient of uniqueRecipients) {
           if (!recipient.address) continue;
 
-          const saved = await this.saveEmailEntry({
+          const saved = await this._saveEmailEntry({
             userId,
             emailAccountId,
             emailData,
@@ -396,7 +396,7 @@ export class EmailStorageService {
           };
         }
 
-        const saved = await this.saveEmailEntry({
+        const saved = await this._saveEmailEntry({
           userId,
           emailAccountId,
           emailData,
@@ -529,7 +529,7 @@ export class EmailStorageService {
         for (const recipient of uniqueRecipients) {
           if (!recipient.address) continue;
 
-          const saved = await this.saveEmailEntry({
+          const saved = await this._saveEmailEntry({
             userId,
             emailAccountId,
             emailData,
@@ -561,7 +561,7 @@ export class EmailStorageService {
           };
         }
 
-        const saved = await this.saveEmailEntry({
+        const saved = await this._saveEmailEntry({
           userId,
           emailAccountId,
           emailData,
@@ -634,7 +634,7 @@ export class EmailStorageService {
    * Save a single email entry to PostgreSQL with vector embeddings
    * (For sent emails with multiple recipients, this is called once per recipient)
    */
-  private async saveEmailEntry(params: {
+  private async _saveEmailEntry(params: {
     userId: string;
     emailAccountId: string;
     emailData: EmailMessageWithRaw;

@@ -173,13 +173,13 @@ class MonitorInstance {
     }
 
     this.isRunning = true;
-    await this.connect();
+    await this._connect();
   }
 
   /**
    * Connect to IMAP server and start IDLE
    */
-  private async connect(): Promise<void> {
+  private async _connect(): Promise<void> {
     try {
       console.log(`Connecting to IMAP for account ${this.accountId}`);
 
@@ -202,7 +202,7 @@ class MonitorInstance {
 
       // Start IDLE monitoring
       await this.operations.startIdleMonitoring('INBOX', async (event) => {
-        await this.handleImapEvent(event);
+        await this._handleImapEvent(event);
       });
 
       // Update status
@@ -211,10 +211,10 @@ class MonitorInstance {
       this.status.reconnectAttempts = 0;
 
       // Start heartbeat
-      this.startHeartbeat();
+      this._startHeartbeat();
 
       // Start IDLE timeout timer
-      this.resetIdleTimer();
+      this._resetIdleTimer();
 
       // Emit connection established event
       this.parent.emit('connection:established', this.accountId);
@@ -252,14 +252,14 @@ class MonitorInstance {
       });
 
       // Attempt reconnection
-      await this.scheduleReconnect();
+      await this._scheduleReconnect();
     }
   }
 
   /**
    * Handle IMAP events (new mail, expunge, etc.)
    */
-  private async handleImapEvent(event: any): Promise<void> {
+  private async _handleImapEvent(event: any): Promise<void> {
     try {
       if (event.type === 'new_mail') {
         console.log(`New mail detected for account ${this.accountId}: ${event.count} messages`);
@@ -268,7 +268,7 @@ class MonitorInstance {
         this.parent.emit('email:new', this.accountId, event.count);
         
         // Queue new emails for processing
-        await this.queueNewEmails(event.count);
+        await this._queueNewEmails(event.count);
         
         // Update statistics
         this.status.messagesProcessed += event.count;
@@ -286,8 +286,8 @@ class MonitorInstance {
       }
       
       // Reset IDLE timer on any activity
-      this.resetIdleTimer();
-      
+      this._resetIdleTimer();
+
     } catch (error: unknown) {
       console.error(`Error handling IMAP event for account ${this.accountId}:`, error);
       this.parent.emit('error', this.accountId, error as Error);
@@ -297,7 +297,7 @@ class MonitorInstance {
   /**
    * Queue new emails for processing
    */
-  private async queueNewEmails(count: number): Promise<void> {
+  private async _queueNewEmails(count: number): Promise<void> {
     try {
       if (!this.operations) {
         throw new Error('IMAP operations not initialized');
@@ -350,8 +350,8 @@ class MonitorInstance {
   /**
    * Start heartbeat to check connection health
    */
-  private startHeartbeat(): void {
-    this.stopHeartbeat();
+  private _startHeartbeat(): void {
+    this._stopHeartbeat();
     
     this.heartbeatTimer = setInterval(async () => {
       if (!this.operations || !this.isRunning) {
@@ -366,7 +366,7 @@ class MonitorInstance {
         }
       } catch (error: unknown) {
         console.error(`Heartbeat failed for account ${this.accountId}:`, error);
-        await this.handleConnectionLoss(error as Error);
+        await this._handleConnectionLoss(error as Error);
       }
     }, this.config.heartbeatInterval);
   }
@@ -374,7 +374,7 @@ class MonitorInstance {
   /**
    * Stop heartbeat timer
    */
-  private stopHeartbeat(): void {
+  private _stopHeartbeat(): void {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -384,26 +384,26 @@ class MonitorInstance {
   /**
    * Reset IDLE timer (IDLE connections timeout after 29 minutes typically)
    */
-  private resetIdleTimer(): void {
+  private _resetIdleTimer(): void {
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
     }
 
     this.idleTimer = setTimeout(async () => {
       console.log(`IDLE timeout for account ${this.accountId}, reconnecting...`);
-      await this.reconnect();
+      await this._reconnect();
     }, this.config.idleTimeout);
   }
 
   /**
    * Handle connection loss
    */
-  private async handleConnectionLoss(error: Error): Promise<void> {
+  private async _handleConnectionLoss(error: Error): Promise<void> {
     this.status.status = 'disconnected';
     this.status.lastError = error.message;
-    
+
     // Stop monitoring
-    this.stopHeartbeat();
+    this._stopHeartbeat();
     
     // Release connection
     if (this.operations) {
@@ -414,15 +414,15 @@ class MonitorInstance {
 
     // Emit connection lost event
     this.parent.emit('connection:lost', this.accountId, error);
-    
+
     // Schedule reconnection
-    await this.scheduleReconnect();
+    await this._scheduleReconnect();
   }
 
   /**
    * Schedule reconnection attempt
    */
-  private async scheduleReconnect(): Promise<void> {
+  private async _scheduleReconnect(): Promise<void> {
     if (!this.isRunning || this.isReconnecting) {
       return;
     }
@@ -447,14 +447,14 @@ class MonitorInstance {
     
     this.reconnectTimer = setTimeout(async () => {
       this.isReconnecting = false;
-      await this.connect();
+      await this._connect();
     }, delay);
   }
 
   /**
    * Reconnect to IMAP server
    */
-  private async reconnect(): Promise<void> {
+  private async _reconnect(): Promise<void> {
     console.log(`Reconnecting IMAP for account ${this.accountId}`);
     
     // Clean up existing connection
@@ -465,14 +465,14 @@ class MonitorInstance {
     }
 
     // Clear timers
-    this.stopHeartbeat();
+    this._stopHeartbeat();
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
 
     // Reconnect
-    await this.connect();
+    await this._connect();
   }
 
   /**
@@ -482,9 +482,9 @@ class MonitorInstance {
     console.log(`Stopping IMAP monitoring for account ${this.accountId}`);
     
     this.isRunning = false;
-    
+
     // Clear all timers
-    this.stopHeartbeat();
+    this._stopHeartbeat();
     
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);

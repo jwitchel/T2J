@@ -70,7 +70,7 @@ export class SpamDetector {
    * Uses JOIN through person_emails to find responses to this sender
    * @private
    */
-  private async getResponseCount(userId: string, senderEmail: string): Promise<number> {
+  private async _getResponseCount(userId: string, senderEmail: string): Promise<number> {
     const result = await pool.query(
       `SELECT COUNT(*)::int as total
        FROM email_sent es
@@ -98,10 +98,10 @@ export class SpamDetector {
     // Use the maximum count (if user replied to either address, it's not spam)
     // For Google Docs: From=noreply@google.com (0 replies), Reply-To=workmate@foo.com (5 replies)
     // We want to use the 5 replies from the actual person
-    let responseCount = await this.getResponseCount(userId, senderEmail);
+    let responseCount = await this._getResponseCount(userId, senderEmail);
 
     if (replyTo && replyTo !== senderEmail) {
-      const replyToResponseCount = await this.getResponseCount(userId, replyTo);
+      const replyToResponseCount = await this._getResponseCount(userId, replyTo);
       responseCount = Math.max(responseCount, replyToResponseCount);
     }
 

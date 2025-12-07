@@ -108,7 +108,7 @@ export class NameRedactor {
       // - Captures optional possessive 's
       // - Doesn't match if preceded by @ (email)
       const nameRegex = new RegExp(
-        `(?<!@)\\b${this.escapeRegex(name)}(?:'s)?\\b`,
+        `(?<!@)\\b${this._escapeRegex(name)}(?:'s)?\\b`,
         'gi'
       );
       
@@ -156,8 +156,8 @@ export class NameRedactor {
   clearCustomNames(): void {
     this.customNames.clear();
   }
-  
-  private escapeRegex(str: string): string {
+
+  private _escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

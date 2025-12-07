@@ -62,7 +62,7 @@ export class RealTimeLogger extends EventEmitter {
     };
 
     // Sanitize the log entry
-    const sanitizedEntry = this.sanitizeLogEntry(logEntry);
+    const sanitizedEntry = this._sanitizeLogEntry(logEntry);
 
     // Store the log
     if (!this.logs.has(userId)) {
@@ -111,19 +111,19 @@ export class RealTimeLogger extends EventEmitter {
   /**
    * Sanitize log entry to remove sensitive information
    */
-  private sanitizeLogEntry(entry: RealTimeLogEntry): RealTimeLogEntry {
+  private _sanitizeLogEntry(entry: RealTimeLogEntry): RealTimeLogEntry {
     const sanitized = { ...entry };
-    
+
     if (sanitized.data.raw) {
-      sanitized.data.raw = this.sanitizeString(sanitized.data.raw);
+      sanitized.data.raw = this._sanitizeString(sanitized.data.raw);
     }
-    
+
     if (sanitized.data.response) {
-      sanitized.data.response = this.sanitizeString(sanitized.data.response);
+      sanitized.data.response = this._sanitizeString(sanitized.data.response);
     }
 
     if (sanitized.data.parsed) {
-      sanitized.data.parsed = this.sanitizeObject(sanitized.data.parsed);
+      sanitized.data.parsed = this._sanitizeObject(sanitized.data.parsed);
     }
 
     return sanitized;
@@ -132,7 +132,7 @@ export class RealTimeLogger extends EventEmitter {
   /**
    * Sanitize a string to remove passwords and sensitive data
    */
-  private sanitizeString(str: string): string {
+  private _sanitizeString(str: string): string {
     // Replace passwords in LOGIN commands
     let sanitized = str.replace(
       /(\bLOGIN\s+[^\s]+\s+)([^\s]+)/gi,
@@ -163,26 +163,26 @@ export class RealTimeLogger extends EventEmitter {
   /**
    * Sanitize an object recursively
    */
-  private sanitizeObject(obj: any): any {
+  private _sanitizeObject(obj: any): any {
     if (typeof obj !== 'object' || obj === null) {
       return obj;
     }
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.sanitizeObject(item));
+      return obj.map(item => this._sanitizeObject(item));
     }
 
     const sanitized: any = {};
     for (const [key, value] of Object.entries(obj)) {
       // Redact password fields
-      if (key.toLowerCase().includes('password') || 
+      if (key.toLowerCase().includes('password') ||
           key.toLowerCase().includes('passwd') ||
           key.toLowerCase().includes('auth')) {
         sanitized[key] = '****';
       } else if (typeof value === 'string') {
-        sanitized[key] = this.sanitizeString(value);
+        sanitized[key] = this._sanitizeString(value);
       } else if (typeof value === 'object') {
-        sanitized[key] = this.sanitizeObject(value);
+        sanitized[key] = this._sanitizeObject(value);
       } else {
         sanitized[key] = value;
       }

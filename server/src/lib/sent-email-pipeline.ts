@@ -77,7 +77,7 @@ export class SentEmailPipeline {
       })
       // Process emails with configurable concurrency (default: 1 for single-stream)
       .map((email: ParsedMail) => {
-        return _(this.processEmail(email));
+        return _(this._processEmail(email));
       })
       .parallel(PIPELINE_CONCURRENCY)
       // Handle errors gracefully
@@ -119,7 +119,7 @@ export class SentEmailPipeline {
               batchSize: batch.length,
               totalProcessed: this.metrics.processedCount,
               totalErrors: this.metrics.errorCount,
-              avgReduction: this.calculateAverageReduction(batch)
+              avgReduction: this._calculateAverageReduction(batch)
             }
           }
         });
@@ -136,7 +136,7 @@ export class SentEmailPipeline {
   /**
    * Process a single email
    */
-  private async processEmail(email: ParsedMail): Promise<ProcessedEmail | null> {
+  private async _processEmail(email: ParsedMail): Promise<ProcessedEmail | null> {
     try {
       const result = await this.emailProcessor.processEmail(email, this.context);
       return result;
@@ -149,7 +149,7 @@ export class SentEmailPipeline {
   /**
    * Calculate average text reduction percentage for a batch
    */
-  private calculateAverageReduction(batch: ProcessedEmail[]): number {
+  private _calculateAverageReduction(batch: ProcessedEmail[]): number {
     if (batch.length === 0) return 0;
     
     // Since we no longer track originalPlainLength, return 0

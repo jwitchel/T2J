@@ -40,8 +40,9 @@ export class RegexSignatureDetector {
 
   /**
    * Get default signature patterns
+   * @private
    */
-  getDefaultPatterns(): string[] {
+  private _getDefaultPatterns(): string[] {
     // No default patterns - users must configure their own
     return [];
   }
@@ -62,7 +63,7 @@ export class RegexSignatureDetector {
     
     // If still no patterns, use defaults
     if (patterns.length === 0) {
-      patterns = this.getDefaultPatterns();
+      patterns = this._getDefaultPatterns();
     }
 
     let cleanedText = emailText;

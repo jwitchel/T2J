@@ -35,10 +35,10 @@ export class ImapConnectionPool extends EventEmitter {
     };
 
     // Start idle connection cleanup
-    this.startIdleCleanup();
+    this._startIdleCleanup();
   }
 
-  private getPoolKey(userId: string, accountId: string): string {
+  private _getPoolKey(userId: string, accountId: string): string {
     return `${userId}:${accountId}`;
   }
 
@@ -47,7 +47,7 @@ export class ImapConnectionPool extends EventEmitter {
     userId: string,
     accountId: string
   ): Promise<ImapConnection> {
-    const poolKey = this.getPoolKey(userId, accountId);
+    const poolKey = this._getPoolKey(userId, accountId);
     
     // Log pool stats before getting connection
     const stats = this.getPoolStats();
@@ -62,7 +62,7 @@ export class ImapConnectionPool extends EventEmitter {
     if (available) {
       available.inUse = true;
       available.lastUsed = new Date();
-      this.logPoolEvent('connection_reused', userId, accountId, {
+      this._logPoolEvent('connection_reused', userId, accountId, {
         poolSize: pool.length,
         inUse: pool.filter(p => p.inUse).length
       });
@@ -71,7 +71,7 @@ export class ImapConnectionPool extends EventEmitter {
 
     // Check if we can create a new connection
     if (pool.length < this.options.maxConnections) {
-      const connection = await this.createConnection(config, userId, accountId);
+      const connection = await this._createConnection(config, userId, accountId);
       const pooled: PooledConnection = {
         connection,
         accountId,
@@ -83,7 +83,7 @@ export class ImapConnectionPool extends EventEmitter {
       pool.push(pooled);
       this.connections.set(poolKey, pool);
 
-      this.logPoolEvent('connection_created', userId, accountId, {
+      this._logPoolEvent('connection_created', userId, accountId, {
         poolSize: pool.length,
         inUse: pool.filter(p => p.inUse).length
       });
@@ -92,10 +92,10 @@ export class ImapConnectionPool extends EventEmitter {
     }
 
     // Wait for a connection to become available
-    return this.waitForConnection(poolKey, config, userId, accountId);
+    return this._waitForConnection(poolKey, config, userId, accountId);
   }
 
-  private async createConnection(
+  private async _createConnection(
     config: ImapConfig,
     userId: string,
     accountId: string
@@ -108,29 +108,29 @@ export class ImapConnectionPool extends EventEmitter {
         
         // Set up connection event handlers
         connection.on('error', (err) => {
-          this.logPoolEvent('connection_error', userId, accountId, {
+          this._logPoolEvent('connection_error', userId, accountId, {
             error: err.message,
             attempt
           });
         });
 
         connection.on('close', (hadError) => {
-          this.handleConnectionClose(userId, accountId, connection, hadError);
+          this._handleConnectionClose(userId, accountId, connection, hadError);
         });
 
         await connection.connect();
         return connection;
       } catch (err) {
         lastError = err as Error;
-        
-        this.logPoolEvent('connection_failed', userId, accountId, {
+
+        this._logPoolEvent('connection_failed', userId, accountId, {
           error: lastError.message,
           attempt,
           willRetry: attempt < this.options.retryAttempts
         });
 
         if (attempt < this.options.retryAttempts) {
-          await this.delay(this.options.retryDelay * attempt); // Exponential backoff
+          await this._delay(this.options.retryDelay * attempt); // Exponential backoff
         }
       }
     }
@@ -141,7 +141,7 @@ export class ImapConnectionPool extends EventEmitter {
     );
   }
 
-  private async waitForConnection(
+  private async _waitForConnection(
     poolKey: string,
     _config: ImapConfig,
     _userId: string,
@@ -160,7 +160,7 @@ export class ImapConnectionPool extends EventEmitter {
       }
 
       // Wait a bit before checking again
-      await this.delay(100);
+      await this._delay(100);
     }
 
     throw new ImapConnectionError(
@@ -170,28 +170,28 @@ export class ImapConnectionPool extends EventEmitter {
   }
 
   releaseConnection(connection: ImapConnection, userId: string, accountId: string): void {
-    const poolKey = this.getPoolKey(userId, accountId);
+    const poolKey = this._getPoolKey(userId, accountId);
     const pool = this.connections.get(poolKey) || [];
     const pooled = pool.find(p => p.connection === connection);
 
     if (pooled) {
       pooled.inUse = false;
       pooled.lastUsed = new Date();
-      
-      this.logPoolEvent('connection_released', userId, accountId, {
+
+      this._logPoolEvent('connection_released', userId, accountId, {
         poolSize: pool.length,
         inUse: pool.filter(p => p.inUse).length
       });
     }
   }
 
-  private handleConnectionClose(
+  private _handleConnectionClose(
     userId: string,
     accountId: string,
     connection: ImapConnection,
     hadError: boolean
   ): void {
-    const poolKey = this.getPoolKey(userId, accountId);
+    const poolKey = this._getPoolKey(userId, accountId);
     const pool = this.connections.get(poolKey) || [];
     const index = pool.findIndex(p => p.connection === connection);
 
@@ -204,14 +204,14 @@ export class ImapConnectionPool extends EventEmitter {
         this.connections.set(poolKey, pool);
       }
 
-      this.logPoolEvent('connection_removed', userId, accountId, {
+      this._logPoolEvent('connection_removed', userId, accountId, {
         poolSize: pool.length,
         hadError
       });
     }
   }
 
-  private startIdleCleanup(): void {
+  private _startIdleCleanup(): void {
     setInterval(() => {
       const now = new Date();
 
@@ -236,7 +236,7 @@ export class ImapConnectionPool extends EventEmitter {
             pool.splice(index, 1);
           }
 
-          this.logPoolEvent('connection_idle_closed', pooled.userId, pooled.accountId, {
+          this._logPoolEvent('connection_idle_closed', pooled.userId, pooled.accountId, {
             idleTime: now.getTime() - pooled.lastUsed.getTime()
           });
         }
@@ -259,8 +259,8 @@ export class ImapConnectionPool extends EventEmitter {
 
     await Promise.allSettled(promises);
     this.connections.clear();
-    
-    this.logPoolEvent('pool_closed', '', '', {
+
+    this._logPoolEvent('pool_closed', '', '', {
       totalClosed: promises.length
     });
   }
@@ -285,11 +285,11 @@ export class ImapConnectionPool extends EventEmitter {
     };
   }
 
-  private delay(ms: number): Promise<void> {
+  private _delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private logPoolEvent(
+  private _logPoolEvent(
     event: string,
     userId: string,
     accountId: string,

@@ -63,7 +63,7 @@ export class RelationshipDetector {
    * Fetch user's relationship configuration from preferences
    * Caches result for performance
    */
-  private async getUserRelationshipConfig(userId: string): Promise<RelationshipConfig> {
+  private async _getUserRelationshipConfig(userId: string): Promise<RelationshipConfig> {
     // Check cache first
     if (this.configCache.has(userId)) {
       return this.configCache.get(userId)!;
@@ -77,9 +77,9 @@ export class RelationshipDetector {
 
     const preferences = result.rows[0]?.preferences || {};
     const config: RelationshipConfig = {
-      workDomains: this.parseCSV(preferences.workDomainsCSV || ''),
-      familyEmails: this.parseCSV(preferences.familyEmailsCSV || ''),
-      spouseEmails: this.parseCSV(preferences.spouseEmailsCSV || '')
+      workDomains: this._parseCSV(preferences.workDomainsCSV || ''),
+      familyEmails: this._parseCSV(preferences.familyEmailsCSV || ''),
+      spouseEmails: this._parseCSV(preferences.spouseEmailsCSV || '')
     };
 
     // Cache it
@@ -90,7 +90,7 @@ export class RelationshipDetector {
   /**
    * Parse CSV string into array of normalized values
    */
-  private parseCSV(csv: string): string[] {
+  private _parseCSV(csv: string): string[] {
     if (!csv || csv.trim().length === 0) return [];
     return csv
       .split(',')
@@ -139,7 +139,7 @@ export class RelationshipDetector {
    * Check if email matches user's configured relationship categories
    * Instance wrapper for static helper
    */
-  private checkConfiguredRelationship(
+  private _checkConfiguredRelationship(
     email: string,
     config: RelationshipConfig
   ): { relationship: string; confidence: number } | null {
@@ -195,15 +195,15 @@ export class RelationshipDetector {
 
     // Step 2: Check configured relationships for BOTH addresses
     // Priority: spouse > family > colleague
-    const config = await this.getUserRelationshipConfig(userId);
+    const config = await this._getUserRelationshipConfig(userId);
 
     let replyToMatch = null;
     let fromMatch = null;
 
     if (replyToEmail) {
-      replyToMatch = this.checkConfiguredRelationship(replyToEmail, config);
+      replyToMatch = this._checkConfiguredRelationship(replyToEmail, config);
     }
-    fromMatch = this.checkConfiguredRelationship(recipientEmail, config);
+    fromMatch = this._checkConfiguredRelationship(recipientEmail, config);
 
     // Choose the higher priority match (spouse > family > colleague)
     const configuredMatch = RelationshipType.selectHigherPriorityMatch(replyToMatch, fromMatch);
