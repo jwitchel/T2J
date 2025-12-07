@@ -166,11 +166,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
 
     // Aggregate styles after all emails are processed
       const aggregationStart = Date.now();
-      try {
-        await orchestrator.aggregateStyles(userId);
-      } catch (err) {
-        console.error('Style aggregation error:', err);
-      }
+      await orchestrator.aggregateStyles(userId);
       const aggregationDuration = Date.now() - aggregationStart;
 
       const duration = Date.now() - startTime;

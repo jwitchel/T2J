@@ -16,6 +16,14 @@ export interface BulkPersonResult {
 }
 
 /**
+ * Result from bulk person creation
+ */
+export interface BulkCreateResult {
+  created: Map<string, PersonWithDetails>;
+  failed: Map<string, string>;  // email -> error message
+}
+
+/**
  * Cache for person lookups during batch processing
  */
 export class PersonCache {
@@ -141,13 +149,14 @@ export class PersonCache {
    * Bulk create persons for emails that don't exist
    * @param params - Array of person creation parameters
    * @param client - Optional transaction client
-   * @returns Map of email -> PersonWithDetails for created persons
+   * @returns BulkCreateResult with created persons and any failures
    */
   async bulkCreate(
     params: CreatePersonParams[],
     client?: PoolClient
-  ): Promise<Map<string, PersonWithDetails>> {
+  ): Promise<BulkCreateResult> {
     const created = new Map<string, PersonWithDetails>();
+    const failed = new Map<string, string>();
 
     // Create persons one at a time (person-service handles conflicts)
     // Note: Could be further optimized with bulk INSERT but adds complexity
@@ -162,11 +171,14 @@ export class PersonCache {
 
         created.set(normalizedEmail, person);
       } catch (error) {
+        const normalizedEmail = this._normalizeEmail(param.emailAddress);
+        const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`[PersonCache] Failed to create person for ${param.emailAddress}:`, error);
+        failed.set(normalizedEmail, errorMsg);
       }
     }
 
-    return created;
+    return { created, failed };
   }
 
   /**
@@ -202,11 +214,17 @@ export class PersonCache {
         };
       });
 
-      const created = await this.bulkCreate(createParams, client);
+      const { created, failed } = await this.bulkCreate(createParams, client);
 
       // Merge created persons into result
       for (const [email, person] of created) {
         found.set(email, person);
+      }
+
+      // Log failures but don't block - caller will have partial results
+      if (failed.size > 0) {
+        console.warn(`[PersonCache] ${failed.size} person(s) failed to create:`,
+          Array.from(failed.entries()).map(([e, err]) => `${e}: ${err}`).join(', '));
       }
     }
 

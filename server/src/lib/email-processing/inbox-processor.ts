@@ -143,16 +143,11 @@ export class InboxProcessor {
     const { message, accountId, userId, providerId } = params;
 
     // Fetch account email for logging
-    let accountEmail: string | undefined;
-    try {
-      const result = await pool.query(
-        'SELECT email_address FROM email_accounts WHERE id = $1',
-        [accountId]
-      );
-      accountEmail = result.rows[0]?.email_address;
-    } catch (error: unknown) {
-      console.error('[InboxProcessor] Failed to fetch account email:', error);
-    }
+    const result = await pool.query(
+      'SELECT email_address FROM email_accounts WHERE id = $1',
+      [accountId]
+    );
+    const accountEmail = result.rows[0]?.email_address;
 
     return {
       message,
