@@ -15,7 +15,7 @@ router.use(async (req: Request, res: Response, next) => {
     }
     
     // Attach user to request
-    (req as any).user = session.user;
+    req.user = session.user;
     return next();
   } catch (error) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -25,7 +25,7 @@ router.use(async (req: Request, res: Response, next) => {
 // Get all user relationships
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const relationships = await userRelationshipService.getAllRelationships(userId);
     
     return res.json({ relationships });
@@ -38,7 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
 // Create a new relationship type
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { relationshipType, displayName } = req.body;
     
     if (!relationshipType || !displayName) {
@@ -61,7 +61,7 @@ router.post('/', async (req: Request, res: Response) => {
 // Update a relationship type
 router.put('/:type', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { type } = req.params;
     const { displayName, isActive } = req.body;
     
@@ -90,7 +90,7 @@ router.put('/:type', async (req: Request, res: Response) => {
 // Delete a relationship type
 router.delete('/:type', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { type } = req.params;
     
     // First find the relationship by type
@@ -117,7 +117,7 @@ router.delete('/:type', async (req: Request, res: Response) => {
 // Get all people
 router.get('/people', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const limit = parseInt(req.query.limit as string);
     const offset = parseInt(req.query.offset as string);
     
@@ -137,7 +137,7 @@ router.get('/people', async (req: Request, res: Response) => {
 // Get a specific person
 router.get('/people/:id', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     
     const person = await personService.getPersonById(id, userId);
@@ -160,7 +160,7 @@ router.get('/people/:id', async (req: Request, res: Response) => {
 // Create a new person
 router.post('/people', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { name, emailAddress, relationshipType, confidence } = req.body;
     
     if (!name || !emailAddress) {
@@ -191,7 +191,7 @@ router.post('/people', async (req: Request, res: Response) => {
 // Add email to person
 router.post('/people/:id/emails', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     const { emailAddress } = req.body;
     
@@ -219,7 +219,7 @@ router.post('/people/:id/emails', async (req: Request, res: Response) => {
 // Assign relationship to person
 router.post('/people/:id/relationships', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     const { relationshipType, isPrimary, confidence } = req.body;
     
@@ -277,7 +277,7 @@ router.post('/people/:id/relationships', async (req: Request, res: Response) => 
 // Merge two people
 router.post('/people/merge', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { sourcePersonId, targetPersonId } = req.body;
     
     if (!sourcePersonId || !targetPersonId) {

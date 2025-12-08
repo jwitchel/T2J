@@ -8,7 +8,7 @@ const router = express.Router();
 // Get user's tone profile
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     const result = await pool.query(
       `SELECT preference_type, target_identifier, profile_data, emails_analyzed, updated_at
@@ -80,7 +80,7 @@ router.get('/', requireAuth, async (req, res) => {
 // Trigger tone profile building
 router.post('/build', requireAuth, async (_req, res) => {
   try {
-    // const userId = (req as any).user.id;
+    // const userId = req.user.id;
     
     // TODO: Queue background job for tone profile building
     // For now, just return success

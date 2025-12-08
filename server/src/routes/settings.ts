@@ -12,7 +12,7 @@ const router = express.Router();
 // Get profile preferences
 router.get('/profile', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     // Query both user prefs and email accounts to get drafts folder
     const userResult = await pool.query(
@@ -64,7 +64,7 @@ router.get('/profile', requireAuth, async (req, res) => {
 // Update profile preferences (folderPreferences no longer user-configurable)
 router.post('/profile', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { name, nicknames, signatureBlock, workDomainsCSV, familyEmailsCSV, spouseEmailsCSV } = req.body;
 
     // Helper to parse CSV and handle empty values
@@ -140,7 +140,7 @@ router.post('/profile', requireAuth, async (req, res) => {
 // Get typed name preferences
 router.get('/typed-name', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     const result = await pool.query(
       `SELECT preferences->'typedName' as typed_name_prefs
@@ -171,7 +171,7 @@ router.get('/typed-name', requireAuth, async (req, res) => {
 // Save typed name preferences
 router.post('/typed-name', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { preferences } = req.body;
     
     // Validate preferences
@@ -212,7 +212,7 @@ router.post('/typed-name', requireAuth, async (req, res) => {
 // Test and create email folders (uses saved configuration; no user input)
 router.post('/test-folders', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     // Get all email accounts for the user
     const accountsResult = await pool.query(
@@ -301,7 +301,7 @@ router.post('/test-folders', requireAuth, async (req, res): Promise<void> => {
 // Create missing folders (based on saved configuration)
 router.post('/create-folders', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     // Get all email accounts for the user
     const accountsResult = await pool.query(

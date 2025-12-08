@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Process a single inbox email (used by UI to upload draft/file email)
 router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const {
     emailAccountId,
     messageUid,
@@ -72,7 +72,7 @@ router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
 
 // Get a specific email by messageId from database
 router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, messageId } = req.params;
 
   const emailResult = await pool.query(`

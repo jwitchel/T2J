@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Get folders for an email account
 router.get('/accounts/:accountId/folders', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId } = req.params as any;
   await withImapJson(res, accountId, userId, async () => {
     const imapOps = await ImapOperations.fromAccountId(accountId, userId);
@@ -18,7 +18,7 @@ router.get('/accounts/:accountId/folders', requireAuth, async (req, res): Promis
 
 // Get messages from a folder
 router.get('/accounts/:accountId/folders/:folderName/messages', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, folderName } = req.params as any;
   const { limit = 50, offset = 0, sort = 'date', descending = 'true' } = req.query as any;
   await withImapJson(res, accountId, userId, async () => {
@@ -36,7 +36,7 @@ router.get('/accounts/:accountId/folders/:folderName/messages', requireAuth, asy
 
 // Search messages
 router.post('/accounts/:accountId/folders/:folderName/search', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, folderName } = req.params as any;
   const { limit = 50, offset = 0 } = req.query as any;
   const criteria = req.body;
@@ -51,7 +51,7 @@ router.post('/accounts/:accountId/folders/:folderName/search', requireAuth, asyn
 
 // Get a single message
 router.get('/accounts/:accountId/folders/:folderName/messages/:uid', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, folderName, uid } = req.params as any;
   await withImapJson(res, accountId, userId, async () => {
     const imapOps = await ImapOperations.fromAccountId(accountId, userId);
@@ -61,7 +61,7 @@ router.get('/accounts/:accountId/folders/:folderName/messages/:uid', requireAuth
 
 // Mark message as read
 router.put('/accounts/:accountId/folders/:folderName/messages/:uid/read', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, folderName, uid } = req.params as any;
   await withImapJson(res, accountId, userId, async () => {
     const imapOps = await ImapOperations.fromAccountId(accountId, userId);
@@ -72,7 +72,7 @@ router.put('/accounts/:accountId/folders/:folderName/messages/:uid/read', requir
 
 // Mark message as unread
 router.put('/accounts/:accountId/folders/:folderName/messages/:uid/unread', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, folderName, uid } = req.params as any;
   await withImapJson(res, accountId, userId, async () => {
     const imapOps = await ImapOperations.fromAccountId(accountId, userId);
@@ -83,7 +83,7 @@ router.put('/accounts/:accountId/folders/:folderName/messages/:uid/unread', requ
 
 // Delete message
 router.delete('/accounts/:accountId/folders/:folderName/messages/:uid', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const { accountId, folderName, uid } = req.params as any;
   try {
     await withImapContext(accountId, userId, async () => {

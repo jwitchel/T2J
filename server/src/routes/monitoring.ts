@@ -56,7 +56,7 @@ router.get('/imap-pool', requireAuth, async (_req, res): Promise<void> => {
 // Performance benchmark endpoint - tests IMAP performance
 router.post('/benchmark', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { accountId } = req.body;
     
     if (!accountId) {

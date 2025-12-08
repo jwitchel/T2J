@@ -15,7 +15,7 @@ const router = express.Router();
 // Load sent emails into DB
 router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { emailAccountId, limit, startDate } = req.body;
 
     // Initialize services
@@ -219,7 +219,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
 // Wipe user's email data
 router.post('/wipe', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     // Delete all sent emails (CASCADE will handle related data)
     await pool.query(`
@@ -263,7 +263,7 @@ router.post('/wipe', requireAuth, async (req, res): Promise<void> => {
 
 // Analyze writing patterns
 router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> => {
-  const userId = (req as any).user.id;
+  const userId = req.user.id;
   const startTime = Date.now();
   
   try {

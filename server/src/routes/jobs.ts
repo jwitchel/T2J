@@ -15,7 +15,7 @@ const router = express.Router();
 // Queue a new job
 router.post('/queue', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { type, data, priority = 'normal', force = false } = req.body;
 
     if (!type || !data) {

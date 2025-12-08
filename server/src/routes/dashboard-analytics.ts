@@ -10,7 +10,7 @@ const router = Router();
  */
 router.get('/actions-summary', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     // Query all time periods in parallel from email_received
     const [last15min, lastHour, last24Hours, last30Days] = await Promise.all([
@@ -82,7 +82,7 @@ router.get('/actions-summary', requireAuth, async (req, res) => {
  */
 router.get('/recent-actions', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
 
