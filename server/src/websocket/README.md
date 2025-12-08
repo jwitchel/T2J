@@ -1,10 +1,10 @@
-# WebSocket IMAP Logs
+# Unified WebSocket Server
 
-This WebSocket server provides real-time streaming of IMAP operation logs to authenticated users.
+Real-time streaming of logs and job events to authenticated users.
 
 ## Endpoint
 
-`ws://localhost:3002/ws/imap-logs`
+`ws://localhost:3002/ws`
 
 ## Authentication
 
@@ -19,22 +19,24 @@ Send a ping to check connection health.
 ```
 Response: `{ "type": "pong" }`
 
-### `get-logs`
-Request historical logs for the authenticated user.
-```json
-{ 
-  "type": "get-logs",
-  "limit": 100  // optional, defaults to 100
-}
-```
-Response: `{ "type": "logs", "data": [...] }`
-
 ### `clear-logs`
 Clear all logs for the authenticated user.
 ```json
 { "type": "clear-logs" }
 ```
 Response: `{ "type": "logs-cleared" }`
+
+### `subscribe`
+Subscribe to a specific channel.
+```json
+{ "type": "subscribe", "channel": "jobs" }
+```
+
+### `unsubscribe`
+Unsubscribe from a channel.
+```json
+{ "type": "unsubscribe", "channel": "jobs" }
+```
 
 ## Server Message Types
 
@@ -43,16 +45,17 @@ Sent immediately after connection with the last 100 logs.
 ```json
 {
   "type": "initial-logs",
-  "data": [/* array of RealTimeLogEntry */]
+  "logs": [/* array of RealTimeLogEntry */],
+  "timestamp": "2024-01-01T00:00:00.000Z"
 }
 ```
 
 ### `log`
-Real-time log entry as IMAP operations occur.
+Real-time log entry as operations occur.
 ```json
 {
   "type": "log",
-  "data": {
+  "log": {
     "id": "uuid",
     "timestamp": "2024-01-01T00:00:00.000Z",
     "userId": "user-id",
@@ -66,14 +69,30 @@ Real-time log entry as IMAP operations occur.
       "duration": 150,
       "error": null
     }
-  }
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### `job-event`
+Job state change notification.
+```json
+{
+  "type": "job-event",
+  "channel": "jobs",
+  "data": {
+    "jobId": "job-123",
+    "status": "completed",
+    "...": "..."
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
 }
 ```
 
 ### `logs-cleared`
 Notification that logs have been cleared.
 ```json
-{ "type": "logs-cleared" }
+{ "type": "logs-cleared", "timestamp": "2024-01-01T00:00:00.000Z" }
 ```
 
 ### `error`
@@ -92,13 +111,13 @@ Error message for invalid requests.
 - Authenticates using better-auth sessions
 - Maintains per-user connection pools
 - Implements ping/pong for connection health monitoring
-- Sanitizes log data to remove sensitive information
+- Supports channel-based subscriptions (defaults to 'all')
 - Gracefully handles server shutdown
 
 ## Usage Example
 
 ```typescript
-const ws = new WebSocket('ws://localhost:3002/ws/imap-logs', {
+const ws = new WebSocket('ws://localhost:3002/ws', {
   headers: {
     cookie: document.cookie // Pass session cookie
   }
@@ -107,7 +126,9 @@ const ws = new WebSocket('ws://localhost:3002/ws/imap-logs', {
 ws.on('message', (data) => {
   const message = JSON.parse(data);
   if (message.type === 'log') {
-    console.log('New IMAP log:', message.data);
+    console.log('New log:', message.log);
+  } else if (message.type === 'job-event') {
+    console.log('Job event:', message.data);
   }
 });
 ```
