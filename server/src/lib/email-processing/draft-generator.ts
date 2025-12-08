@@ -210,9 +210,9 @@ export class DraftGenerator {
       const enhancedProfile = aggregatedStyle ? {
         // Basic relationship profile fields (all optional for now)
         typicalFormality: aggregatedStyle.sentimentProfile.averageFormality.toFixed(2),
-        commonGreetings: aggregatedStyle.greetings?.map(g => g.text) || [],
-        commonClosings: aggregatedStyle.closings?.map(c => c.text) || [],
-        useEmojis: (aggregatedStyle.emojis?.length || 0) > 0,
+        commonGreetings: aggregatedStyle.greetings?.map(g => g.text) ?? [],
+        commonClosings: aggregatedStyle.closings?.map(c => c.text) ?? [],
+        useEmojis: (aggregatedStyle.emojis?.length ?? 0) > 0,
         useHumor: false,  // Not detected in current system
         preferredTopics: [],
         avoidTopics: [],

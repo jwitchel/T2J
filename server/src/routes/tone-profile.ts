@@ -61,7 +61,8 @@ router.get('/', requireAuth, async (req, res) => {
       'SELECT COUNT(*) as total FROM email_sent WHERE user_id = $1',
       [userId]
     );
-    const totalEmailsLoaded = parseInt(emailCountResult.rows[0]?.total || '0');
+    // COUNT(*) always returns exactly one row
+    const totalEmailsLoaded = parseInt(emailCountResult.rows[0].total);
 
     res.json({
       profiles,

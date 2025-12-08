@@ -226,12 +226,13 @@ router.post('/test-folders', requireAuth, async (req, res): Promise<void> => {
     }
     
     // Get saved folder preferences (during setup)
+    // User exists (validated by auth); folder_prefs may be null if not configured
     const userResult = await pool.query(
       'SELECT preferences->\'folderPreferences\' as folder_prefs, preferences->\'folderPreferences\'->\'draftsFolderPath\' as drafts_path FROM "user" WHERE id = $1',
       [userId]
     );
-    const folderPrefs = userResult.rows[0]?.folder_prefs || EmailActionRouter.getDefaultFolders();
-    const draftsFolderPath = userResult.rows[0]?.drafts_path;
+    const folderPrefs = userResult.rows[0].folder_prefs ?? EmailActionRouter.getDefaultFolders();
+    const draftsFolderPath = userResult.rows[0].drafts_path;
     
     // Create router with user's preferences and drafts folder path
     const router = new EmailActionRouter(folderPrefs, draftsFolderPath);
@@ -315,12 +316,13 @@ router.post('/create-folders', requireAuth, async (req, res): Promise<void> => {
     }
     
     // Get saved folder preferences
+    // User exists (validated by auth); folder_prefs may be null if not configured
     const userResult = await pool.query(
       'SELECT preferences->\'folderPreferences\' as folder_prefs, preferences->\'folderPreferences\'->\'draftsFolderPath\' as drafts_path FROM "user" WHERE id = $1',
       [userId]
     );
-    const folderPrefs = userResult.rows[0]?.folder_prefs || EmailActionRouter.getDefaultFolders();
-    const draftsFolderPath = userResult.rows[0]?.drafts_path;
+    const folderPrefs = userResult.rows[0].folder_prefs ?? EmailActionRouter.getDefaultFolders();
+    const draftsFolderPath = userResult.rows[0].drafts_path;
     
     // Create router with user's preferences and drafts folder path
     const router = new EmailActionRouter(folderPrefs, draftsFolderPath);

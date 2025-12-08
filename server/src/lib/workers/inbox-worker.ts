@@ -59,12 +59,12 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
   }
 
   // Regular single-account inbox processing
-  // Get email account info for logging
+  // Get email account info for logging (account exists - job created with valid accountId)
   const accountResult = await pool.query(
     'SELECT email_address FROM email_accounts WHERE id = $1',
     [accountId]
   );
-  const emailAddress = accountResult.rows[0]?.email_address || 'unknown';
+  const emailAddress = accountResult.rows[0].email_address;
 
   // Log start
   realTimeLogger.log(userId, {

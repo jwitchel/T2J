@@ -19,7 +19,6 @@ type QueryExecutor = Pool | PoolClient;
  * @returns Normalized message ID without angle brackets
  */
 function normalizeEmailId(emailId: string): string {
-  if (!emailId) return emailId;
   return emailId
     .trim()
     .replace(/^</, '')  // Remove leading angle bracket

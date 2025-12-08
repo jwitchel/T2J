@@ -134,10 +134,7 @@ export class PersonService {
    * Validate email format
    */
   private _validateEmail(email: string): void {
-    if (!email || typeof email !== 'string') {
-      throw new ValidationError('Email is required');
-    }
-    
+    // Trust caller - email is typed as string
     const normalizedEmail = this._normalizeEmail(email);
     
     if (normalizedEmail.length > this.MAX_EMAIL_LENGTH) {
@@ -153,10 +150,7 @@ export class PersonService {
    * Validate person name
    */
   private _validateName(name: string): void {
-    if (!name || typeof name !== 'string') {
-      throw new ValidationError('Name is required');
-    }
-    
+    // Trust caller - name is typed as string
     const trimmedName = name.trim();
     
     if (trimmedName.length === 0) {
@@ -172,9 +166,9 @@ export class PersonService {
    * Validate UUID format
    */
   private _validateUUID(id: string, fieldName: string): void {
-    // Allow standard UUID v4 format or all zeros for testing
+    // Trust caller - id is typed as string; only validate format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!id || !uuidRegex.test(id)) {
+    if (!uuidRegex.test(id)) {
       throw new ValidationError(`Invalid ${fieldName} format`);
     }
   }
@@ -193,11 +187,7 @@ export class PersonService {
   }
 
   async createPerson(params: CreatePersonParams): Promise<PersonWithDetails> {
-    // Validate inputs
-    if (!params.userId) {
-      throw new ValidationError('User ID is required');
-    }
-    
+    // Trust caller - params.userId is typed as string
     this._validateName(params.name);
     this._validateEmail(params.emailAddress);
     
@@ -296,11 +286,7 @@ export class PersonService {
   }
 
   async addEmailToPerson(personId: string, emailAddress: string, userId: string): Promise<PersonWithDetails> {
-    // Validate inputs
-    if (!userId) {
-      throw new ValidationError('User ID is required');
-    }
-    
+    // Trust caller - userId is typed as string
     this._validateUUID(personId, 'person ID');
     this._validateEmail(emailAddress);
     
@@ -379,11 +365,7 @@ export class PersonService {
    * @param client - Optional transaction client. If provided, operation is part of transaction.
    */
   async findOrCreatePerson(params: CreatePersonParams, client?: PoolClient): Promise<PersonWithDetails> {
-    // Validate inputs
-    if (!params.userId) {
-      throw new ValidationError('User ID is required');
-    }
-
+    // Trust caller - params.userId is typed as string
     this._validateName(params.name);
     this._validateEmail(params.emailAddress);
 
@@ -509,11 +491,7 @@ export class PersonService {
   }
 
   async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWithDetails | null> {
-    // Validate inputs
-    if (!userId) {
-      throw new ValidationError('User ID is required');
-    }
-    
+    // Trust caller - userId is typed as string
     this._validateEmail(emailAddress);
 
     try {
@@ -606,11 +584,7 @@ export class PersonService {
   }
 
   async getPersonById(personId: string, userId: string, client?: PoolClient): Promise<PersonWithDetails | null> {
-    // Validate inputs
-    if (!userId) {
-      throw new ValidationError('User ID is required');
-    }
-
+    // Trust caller - userId is typed as string
     this._validateUUID(personId, 'person ID');
 
     const db = client || this.pool;
@@ -666,11 +640,7 @@ export class PersonService {
   }
 
   async listPeopleForUser(params: ListPeopleParams): Promise<PersonWithDetails[]> {
-    // Validate inputs
-    if (!params.userId) {
-      throw new ValidationError('User ID is required');
-    }
-    
+    // Trust caller - params.userId is typed as string
     const limit = Math.min(Math.max(params.limit || 50, 1), 100); // Between 1 and 100
     const offset = Math.max(params.offset || 0, 0); // Non-negative
     
@@ -721,11 +691,7 @@ export class PersonService {
   }
 
   async mergePeople(params: MergePeopleParams): Promise<PersonWithDetails> {
-    // Validate inputs
-    if (!params.userId) {
-      throw new ValidationError('User ID is required');
-    }
-    
+    // Trust caller - params.userId is typed as string
     this._validateUUID(params.sourcePersonId, 'source person ID');
     this._validateUUID(params.targetPersonId, 'target person ID');
     

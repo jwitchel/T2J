@@ -195,7 +195,8 @@ Email Details:
       'SELECT COUNT(*) as count FROM email_sent WHERE user_id = $1',
       [userId]
     );
-    const totalEmails = parseInt(totalResult.rows[0]?.count || '0');
+    // COUNT(*) always returns exactly one row
+    const totalEmails = parseInt(totalResult.rows[0].count);
 
     // Get relationship breakdown
     const relationshipsResult = await pool.query(
