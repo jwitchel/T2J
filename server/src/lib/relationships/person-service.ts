@@ -490,7 +490,7 @@ export class PersonService {
     }, client);
   }
 
-  async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWithDetails | null> {
+async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWithDetails | null> {
     // Trust caller - userId is typed as string
     this._validateEmail(emailAddress);
 

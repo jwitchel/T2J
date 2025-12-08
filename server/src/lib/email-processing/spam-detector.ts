@@ -7,6 +7,8 @@ import { PromptFormatterV2 } from '../pipeline/prompt-formatter-v2';
 import { LLMClient } from '../llm-client';
 import { pool } from '../db';
 import { SpamCheckResult } from '../pipeline/types';
+import { RelationshipType } from '../relationships/types';
+import { personService } from '../relationships/person-service';
 
 export interface SpamCheckParams {
   senderEmail: string;
@@ -82,6 +84,7 @@ export class SpamDetector {
     return result.rows[0]?.total;
   }
 
+
   /**
    * Check if an email is spam or unsolicited commercial content
    * @param params - Sender email, raw message, and user context
@@ -117,13 +120,32 @@ export class SpamDetector {
       return result;
     }
 
-    // Step 3: Prepare response history context for LLM
+    // Step 3: Check existing relationship - skip LLM if already classified
+    const person = await personService.findPersonByEmail(senderEmail, userId);
+    if (person) {
+      const relationshipType = person.relationships.find(r => r.is_primary)!.relationship_type;
+
+      if (relationshipType === RelationshipType.SPAM) {
+        return {
+          isSpam: true,
+          indicators: ['Sender previously classified as spam'],
+          senderResponseCount: responseCount
+        };
+      }
+      return {
+        isSpam: false,
+        indicators: [`Sender has existing ${relationshipType} relationship`],
+        senderResponseCount: responseCount
+      };
+    }
+
+    // Step 4: Prepare response history context for LLM
     const responseHistory = {
       responseCount,
       hasRespondedBefore: responseCount > 0
     };
 
-    // Step 4: Format prompt for spam check with response history
+    // Step 5: Format prompt for spam check with response history
     // Note: Truncation happens in LLMClient right before sending to LLM
     const spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
       rawEmail: fullMessage,
@@ -131,7 +153,7 @@ export class SpamDetector {
       responseHistory
     });
 
-    // Step 5: Perform spam check (with retry logic)
+    // Step 6: Perform spam check (with retry logic)
     const spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
 
     const isSpam = spamCheckResult.meta.isSpam;
