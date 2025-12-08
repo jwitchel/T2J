@@ -150,6 +150,77 @@ export class EmailStorageService {
   }
 
   /**
+   * Extract unique recipient addresses from parsed email (to/cc/bcc)
+   */
+  private _getRecipientAddresses(parsedEmail: ParsedMail): Array<{ address?: string; name?: string }> {
+    const getAddresses = (field: any) => {
+      if (!field) return [];
+      if (Array.isArray(field)) {
+        return field.flatMap(f => f.value);
+      }
+      return field.value;
+    };
+
+    const allRecipients = [
+      ...getAddresses(parsedEmail.to),
+      ...getAddresses(parsedEmail.cc),
+      ...getAddresses(parsedEmail.bcc)
+    ];
+
+    // Remove duplicates by email address
+    return Array.from(
+      new Map(allRecipients.map(r => [r.address?.toLowerCase(), r])).values()
+    );
+  }
+
+  /**
+   * Save sent email to all recipients, returns count saved
+   */
+  private async _saveSentEmailToRecipients(params: {
+    userId: string;
+    emailAccountId: string;
+    emailData: EmailMessageWithRaw;
+    parsedEmail: ParsedMail;
+    subject: string;
+    redactedUserReply: string;
+    features: EmailFeatures | null;
+    semanticVector: number[];
+    styleVector: number[];
+    client?: PoolClient;
+  }): Promise<{ count: number; error?: string }> {
+    const recipients = this._getRecipientAddresses(params.parsedEmail);
+
+    if (recipients.length === 0) {
+      return { count: 0, error: 'No recipients found for sent email' };
+    }
+
+    let savedCount = 0;
+    for (const recipient of recipients) {
+      if (!recipient.address) continue;
+
+      const saved = await this._saveEmailEntry({
+        userId: params.userId,
+        emailAccountId: params.emailAccountId,
+        emailData: params.emailData,
+        parsedEmail: params.parsedEmail,
+        subject: params.subject,
+        redactedUserReply: params.redactedUserReply,
+        features: params.features,
+        semanticVector: params.semanticVector,
+        styleVector: params.styleVector,
+        emailType: EmailDirection.SENT,
+        otherPartyEmail: recipient.address,
+        otherPartyName: recipient.name,
+        client: params.client
+      });
+
+      if (saved) savedCount++;
+    }
+
+    return { count: savedCount };
+  }
+
+  /**
    * Save multiple emails in batch with optimized embedding generation
    * Batches embedding generation to reduce overhead and improve performance
    *
@@ -334,54 +405,28 @@ export class EmailStorageService {
 
       if (emailType === EmailDirection.SENT) {
         // For sent emails: Create one entry per recipient
-        const getAddresses = (field: any) => {
-          if (!field) return [];
-          if (Array.isArray(field)) {
-            return field.flatMap(f => f.value);
-          }
-          return field.value;
-        };
+        const result = await this._saveSentEmailToRecipients({
+          userId,
+          emailAccountId,
+          emailData,
+          parsedEmail,
+          subject,
+          redactedUserReply,
+          features,
+          semanticVector,
+          styleVector,
+          client: undefined
+        });
 
-        const allRecipients = [
-          ...getAddresses(parsedEmail.to),
-          ...getAddresses(parsedEmail.cc),
-          ...getAddresses(parsedEmail.bcc)
-        ];
-
-        const uniqueRecipients = Array.from(
-          new Map(allRecipients.map(r => [r.address?.toLowerCase(), r])).values()
-        );
-
-        if (uniqueRecipients.length === 0) {
+        if (result.error && result.count === 0) {
           return {
             success: false,
             skipped: false,
-            error: 'No recipients found for sent email'
+            error: result.error
           };
         }
 
-        // Save one entry per recipient
-        for (const recipient of uniqueRecipients) {
-          if (!recipient.address) continue;
-
-          const saved = await this._saveEmailEntry({
-            userId,
-            emailAccountId,
-            emailData,
-            parsedEmail,
-            subject: subject!,
-            redactedUserReply,
-            features,
-            semanticVector,
-            styleVector,
-            emailType,
-            otherPartyEmail: recipient.address,
-            otherPartyName: recipient.name,
-            client: undefined
-          });
-
-          if (saved) savedCount++;
-        }
+        savedCount = result.count;
 
       } else {
         // For incoming emails: Create one entry with sender
@@ -497,56 +542,28 @@ export class EmailStorageService {
 
       if (emailType === EmailDirection.SENT) {
         // For sent emails: Create one entry per recipient
-        // parsedEmail.to/cc/bcc can be AddressObject or AddressObject[]
-        const getAddresses = (field: any) => {
-          if (!field) return [];
-          if (Array.isArray(field)) {
-            return field.flatMap(f => f.value);
-          }
-          return field.value;
-        };
+        const result = await this._saveSentEmailToRecipients({
+          userId,
+          emailAccountId,
+          emailData,
+          parsedEmail,
+          subject: subject!,
+          redactedUserReply,
+          features,
+          semanticVector,
+          styleVector,
+          client
+        });
 
-        const allRecipients = [
-          ...getAddresses(parsedEmail.to),
-          ...getAddresses(parsedEmail.cc),
-          ...getAddresses(parsedEmail.bcc)
-        ];
-
-        // Remove duplicates
-        const uniqueRecipients = Array.from(
-          new Map(allRecipients.map(r => [r.address?.toLowerCase(), r])).values()
-        );
-
-        if (uniqueRecipients.length === 0) {
+        if (result.error && result.count === 0) {
           return {
             success: false,
             skipped: false,
-            error: 'No recipients found for sent email'
+            error: result.error
           };
         }
 
-        // Save one entry per recipient
-        for (const recipient of uniqueRecipients) {
-          if (!recipient.address) continue;
-
-          const saved = await this._saveEmailEntry({
-            userId,
-            emailAccountId,
-            emailData,
-            parsedEmail,
-            subject: subject!,
-            redactedUserReply,
-            features,
-            semanticVector,
-            styleVector,
-            emailType,
-            otherPartyEmail: recipient.address,
-            otherPartyName: recipient.name,
-            client
-          });
-
-          if (saved) savedCount++;
-        }
+        savedCount = result.count;
 
       } else {
         // For incoming emails: Create one entry with sender

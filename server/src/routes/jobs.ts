@@ -1,4 +1,5 @@
 import express from 'express';
+import { Queue } from 'bullmq';
 import { requireAuth } from '../middleware/auth';
 import {
   inboxQueue,
@@ -11,6 +12,24 @@ import {
 import { pool } from '../lib/db';
 
 const router = express.Router();
+
+/**
+ * Get queue by name, returns null if invalid name
+ */
+function getQueue(queueName: string): Queue | null {
+  if (queueName === 'email-processing') return inboxQueue;
+  if (queueName === 'tone-profile') return trainingQueue;
+  return null;
+}
+
+/**
+ * Sum total job count across all states from BullMQ getJobCounts() result
+ * BullMQ always returns these keys, they're just typed as index signature
+ */
+function getTotalJobCount(counts: { [key: string]: number }): number {
+  return counts['waiting'] + counts['active'] + counts['completed'] + counts['failed'] +
+         counts['delayed'] + counts['paused'] + counts['prioritized'];
+}
 
 // Queue a new job
 router.post('/queue', requireAuth, async (req, res): Promise<void> => {
@@ -86,13 +105,8 @@ router.get('/:queueName/:jobId/status', requireAuth, async (req, res): Promise<v
   try {
     const { queueName, jobId } = req.params;
 
-    // Get the appropriate queue
-    let queue;
-    if (queueName === 'email-processing') {
-      queue = inboxQueue;
-    } else if (queueName === 'tone-profile') {
-      queue = trainingQueue;
-    } else {
+    const queue = getQueue(queueName);
+    if (!queue) {
       res.status(400).json({ error: 'Invalid queue name. Must be "email-processing" or "tone-profile"' });
       return;
     }
@@ -210,13 +224,8 @@ router.delete('/:queueName/:jobId', requireAuth, async (req, res): Promise<void>
   try {
     const { queueName, jobId } = req.params;
 
-    // Get the appropriate queue
-    let queue;
-    if (queueName === 'email-processing') {
-      queue = inboxQueue;
-    } else if (queueName === 'tone-profile') {
-      queue = trainingQueue;
-    } else {
+    const queue = getQueue(queueName);
+    if (!queue) {
       res.status(400).json({ error: 'Invalid queue name. Must be "email-processing" or "tone-profile"' });
       return;
     }
@@ -249,13 +258,8 @@ router.post('/:queueName/:jobId/retry', requireAuth, async (req, res): Promise<v
   try {
     const { queueName, jobId } = req.params;
 
-    // Get the appropriate queue
-    let queue;
-    if (queueName === 'email-processing') {
-      queue = inboxQueue;
-    } else if (queueName === 'tone-profile') {
-      queue = trainingQueue;
-    } else {
+    const queue = getQueue(queueName);
+    if (!queue) {
       res.status(400).json({ error: 'Invalid queue name. Must be "email-processing" or "tone-profile"' });
       return;
     }
@@ -429,23 +433,18 @@ router.post('/clear-all-queues', requireAuth, async (_req, res): Promise<void> =
     // Get counts before clearing
     const emailCounts = await inboxQueue.getJobCounts();
     const toneCounts = await trainingQueue.getJobCounts();
-    
-    const totalBefore = 
-      emailCounts.waiting + emailCounts.active + emailCounts.completed + emailCounts.failed + 
-      emailCounts.delayed + emailCounts.paused + emailCounts.prioritized +
-      toneCounts.waiting + toneCounts.active + toneCounts.completed + toneCounts.failed + 
-      toneCounts.delayed + toneCounts.paused + toneCounts.prioritized;
-    
+    const totalBefore = getTotalJobCount(emailCounts) + getTotalJobCount(toneCounts);
+
     // Clean both queues using BullMQ's obliterate (removes ALL jobs and data unconditionally)
     console.log('Obliterating all queues (lock renewal errors after this are expected and harmless)...');
     await inboxQueue.obliterate({ force: true });
     await trainingQueue.obliterate({ force: true });
     console.log('Queues obliterated successfully');
-    
+
     // Note: Workers may log "could not renew lock" errors after obliteration
     // This is expected and harmless - workers are trying to renew locks on jobs that no longer exist
     console.log('Note: Any subsequent lock renewal errors are expected and can be ignored');
-    
+
     // Broadcast queue cleared event to update UI
     const { getUnifiedWebSocketServer } = await import('../websocket/unified-websocket');
     const wsServer = getUnifiedWebSocketServer();
@@ -455,16 +454,11 @@ router.post('/clear-all-queues', requireAuth, async (_req, res): Promise<void> =
         timestamp: new Date().toISOString()
       });
     }
-    
+
     // Verify cleanup
     const emailCountsAfter = await inboxQueue.getJobCounts();
     const toneCountsAfter = await trainingQueue.getJobCounts();
-    
-    const totalAfter = 
-      emailCountsAfter.waiting + emailCountsAfter.active + emailCountsAfter.completed + 
-      emailCountsAfter.failed + emailCountsAfter.delayed + emailCountsAfter.paused + emailCountsAfter.prioritized +
-      toneCountsAfter.waiting + toneCountsAfter.active + toneCountsAfter.completed + 
-      toneCountsAfter.failed + toneCountsAfter.delayed + toneCountsAfter.paused + toneCountsAfter.prioritized;
+    const totalAfter = getTotalJobCount(emailCountsAfter) + getTotalJobCount(toneCountsAfter);
     
     console.log(`Queue cleanup complete. Removed ${totalBefore} jobs. Remaining: ${totalAfter}`);
     
@@ -488,17 +482,12 @@ router.post('/clear-all-queues', requireAuth, async (_req, res): Promise<void> =
 router.post('/clear-queue', requireAuth, async (_req, res): Promise<void> => {
   try {
     console.log('Legacy /clear-queue endpoint called, redirecting to /clear-all-queues');
-    
+
     // Get counts before clearing
     const emailCounts = await inboxQueue.getJobCounts();
     const toneCounts = await trainingQueue.getJobCounts();
-    
-    const totalBefore = 
-      emailCounts.waiting + emailCounts.active + emailCounts.completed + emailCounts.failed + 
-      emailCounts.delayed + emailCounts.paused + emailCounts.prioritized +
-      toneCounts.waiting + toneCounts.active + toneCounts.completed + toneCounts.failed + 
-      toneCounts.delayed + toneCounts.paused + toneCounts.prioritized;
-    
+    const totalBefore = getTotalJobCount(emailCounts) + getTotalJobCount(toneCounts);
+
     // Clean both queues using BullMQ's obliterate
     await inboxQueue.obliterate({ force: true });
     await trainingQueue.obliterate({ force: true });

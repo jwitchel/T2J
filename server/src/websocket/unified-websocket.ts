@@ -9,16 +9,20 @@ interface AuthenticatedWebSocket extends WebSocket {
   sessionId?: string;
   isAlive?: boolean;
   subscribedChannels?: Set<string>;
+  connectionPath?: string; // Track which path client connected on (/ws or /ws/imap-logs)
 }
 
-export type EventType = 
+export type EventType =
   | 'log'           // General log entries (IMAP, jobs, monitoring, etc.)
+  | 'new-log'       // Legacy: log entry for /ws/imap-logs clients
   | 'job-event'     // Job state changes
   | 'ping'          // Keep-alive
   | 'pong'          // Keep-alive response
   | 'subscribe'     // Subscribe to specific channels
   | 'unsubscribe'   // Unsubscribe from channels
   | 'clear-logs'    // Clear log history
+  | 'get-logs'      // Legacy: request logs (for /ws/imap-logs clients)
+  | 'logs'          // Legacy: response to get-logs
   | 'initial-logs'  // Initial log dump on connection
   | 'logs-cleared'  // Logs were cleared notification
   | 'error';        // Error messages
@@ -51,13 +55,15 @@ export class UnifiedWebSocketServer extends EventEmitter {
       noServer: true
     });
     
-    // Handle upgrade requests for the unified WebSocket path
+    // Handle upgrade requests for WebSocket paths
+    // Supports both /ws (unified) and /ws/imap-logs (legacy) for backwards compatibility
     server.on('upgrade', (request, socket, head) => {
       const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
-      
-      // Only handle the unified WebSocket path
-      if (pathname === '/ws') {
+
+      if (pathname === '/ws' || pathname === '/ws/imap-logs') {
         this.wss.handleUpgrade(request, socket, head, (ws) => {
+          // Track which path the client connected on
+          (ws as AuthenticatedWebSocket).connectionPath = pathname;
           this.wss.emit('connection', ws, request);
         });
       }
@@ -101,7 +107,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
         ws.userId = userId;
         ws.sessionId = sessionId;
         ws.isAlive = true;
-        ws.subscribedChannels = new Set(['all']); // Subscribe to all events by default
+        // Only set up subscriptions for /ws clients (not legacy /ws/imap-logs)
+        if (ws.connectionPath !== '/ws/imap-logs') {
+          ws.subscribedChannels = new Set(['all']); // Subscribe to all events by default
+        }
 
         // Add to clients map
         if (!this.clients.has(userId)) {
@@ -189,11 +198,11 @@ export class UnifiedWebSocketServer extends EventEmitter {
   private _sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
     try {
       const logs = realTimeLogger.getLogs(userId, 100);
-      ws.send(JSON.stringify({
-        type: 'initial-logs',
-        logs: logs,
-        timestamp: new Date().toISOString()
-      }));
+      // Legacy clients don't expect timestamps
+      const message = ws.connectionPath === '/ws/imap-logs'
+        ? { type: 'initial-logs', logs }
+        : { type: 'initial-logs', logs, timestamp: new Date().toISOString() };
+      ws.send(JSON.stringify(message));
     } catch (error) {
       console.error('Error sending initial logs:', error);
       ws.send(JSON.stringify({
@@ -229,6 +238,18 @@ export class UnifiedWebSocketServer extends EventEmitter {
         }
         break;
 
+      case 'get-logs':
+        // Legacy support for /ws/imap-logs clients
+        if (ws.userId) {
+          const limit = (payload as any).limit || 100;
+          const logs = realTimeLogger.getLogs(ws.userId, limit);
+          ws.send(JSON.stringify({
+            type: 'logs',
+            data: logs
+          }));
+        }
+        break;
+
       default:
         ws.send(JSON.stringify({
           type: 'error',
@@ -254,17 +275,27 @@ export class UnifiedWebSocketServer extends EventEmitter {
     const userClients = this.clients.get(userId);
     if (!userClients) return;
 
-    const messageStr = JSON.stringify(message);
     userClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        // Check if client is subscribed to this type of message
-        if (message.channel && client.subscribedChannels) {
-          if (!client.subscribedChannels.has('all') && 
-              !client.subscribedChannels.has(message.channel)) {
-            return; // Skip if not subscribed
+        // For legacy /ws/imap-logs clients, use different message format
+        if (client.connectionPath === '/ws/imap-logs') {
+          // Convert 'log' to 'new-log' and strip timestamp for legacy clients
+          const legacyMessage = { ...message };
+          if (legacyMessage.type === 'log') {
+            legacyMessage.type = 'new-log';
           }
+          delete legacyMessage.timestamp;
+          client.send(JSON.stringify(legacyMessage));
+        } else {
+          // Check if client is subscribed to this type of message
+          if (message.channel && client.subscribedChannels) {
+            if (!client.subscribedChannels.has('all') &&
+                !client.subscribedChannels.has(message.channel)) {
+              return; // Skip if not subscribed
+            }
+          }
+          client.send(JSON.stringify(message));
         }
-        client.send(messageStr);
       }
     });
   }
