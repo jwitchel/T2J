@@ -223,6 +223,22 @@ const preferences = user.preferences;
 ```
 If data is missing from the database, that's a bug in the data creation code. Fix it at the source, don't paper over it at retrieval time.
 
+**Use `??` for protocol-defined optional fields:**
+```typescript
+// RFC 5322: To, Cc, Reply-To are optional headers in valid emails.
+// Marketing emails often use Bcc (empty To), and most emails lack Cc/Reply-To.
+// This is NOT a defensive default - these are legitimately optional per protocol.
+
+// ✅ Good - nullish coalescing for protocol-optional fields
+const to = (parsed.to ?? []).map(addr => addr.address);
+const cc = (parsed.cc ?? []).map(addr => addr.address);
+const replyTo = (parsed.replyTo ?? []).map(addr => addr.address);
+
+// ❌ Bad - using || which also triggers on empty arrays
+const to = (parsed.to || []).map(addr => addr.address);
+```
+Use `??` (nullish coalescing) instead of `||` when the field is legitimately optional per protocol/spec. The `??` operator only triggers on `null`/`undefined`, not on empty strings, empty arrays, or `0`.
+
 ### DRY Principles - CRITICAL
 
 **🚨 BEFORE WRITING NEW CODE: SEARCH THE CODEBASE FIRST 🚨**
