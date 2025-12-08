@@ -29,15 +29,22 @@ gh issue list --repo jwitchel/test-repo --json number,title,body,labels --limit 
 ```
 
 ### Managing Tasks
+
+**🚨 IMPORTANT: Always add new issues to the project!**
+When creating a new issue, you MUST also add it to project 3. The `--project` flag on `gh issue create` does not reliably add issues to projects, so always follow up with `gh project item-add`:
+
 ```bash
-# Create a new issue and add to project
-gh issue create --repo jwitchel/test-repo --title "Task Title" --body "Task description" --project PROJECT_NUMBER
+# Create a new issue
+gh issue create --repo jwitchel/T2J --title "Task Title" --body "Task description"
+
+# REQUIRED: Add the issue to project 3 (issues not in the project won't appear in the backlog!)
+gh project item-add 3 --owner jwitchel --url https://github.com/jwitchel/T2J/issues/ISSUE_NUMBER
 
 # Edit issue body/description (preferred method for updating subtasks)
-gh issue edit ISSUE_NUMBER --repo jwitchel/test-repo --body "New content here"
+gh issue edit ISSUE_NUMBER --repo jwitchel/T2J --body "New content here"
 
 # Add comments ONLY when explicitly requested by user
-gh issue comment ISSUE_NUMBER --repo jwitchel/test-repo --body "Progress update..."
+gh issue comment ISSUE_NUMBER --repo jwitchel/T2J --body "Progress update..."
 ```
 
 ### Project Management
