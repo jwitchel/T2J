@@ -111,11 +111,12 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
   const parser = new PostalMime();
   const parsed = await parser.parse(email.fullMessage);
 
-  const toAddresses = parsed.to!
+  // RFC 5322: To and Cc are optional headers in valid emails
+  const toAddresses = (parsed.to ?? [])
     .map(addr => addr.address!)
     .filter(addr => addr.length > 0);
 
-  const ccAddresses = parsed.cc!
+  const ccAddresses = (parsed.cc ?? [])
     .map(addr => addr.address!)
     .filter(addr => addr.length > 0);
 

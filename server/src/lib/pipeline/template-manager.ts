@@ -260,10 +260,13 @@ export class TemplateManager {
         ) / params.examples.length)
       : 50;
     
-    const avgFormality = params.examples.length > 0
-      ? params.examples.reduce((sum, ex) =>
+    // Some examples may not have features/stats if they weren't analyzed yet
+    // (e.g. any email that recently arrived but hasn't been incorporated into the next learning run)
+    const examplesWithFormality = params.examples.filter(ex => ex.metadata.features?.stats?.formalityScore !== undefined);
+    const avgFormality = examplesWithFormality.length > 0
+      ? examplesWithFormality.reduce((sum, ex) =>
           sum + ex.metadata.features!.stats!.formalityScore, 0
-        ) / params.examples.length
+        ) / examplesWithFormality.length
       : 0.5;
     
     return {

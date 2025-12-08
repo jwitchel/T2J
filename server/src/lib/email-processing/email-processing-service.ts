@@ -96,9 +96,12 @@ export class EmailProcessingService {
     const fromAddress = parsed.from!.address!;
     const fromName = parsed.from!.name || parsed.from!.address!;
     const subject = parsed.subject!;
-    const to = (parsed.to!).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
-    const cc = (parsed.cc!).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
-    const replyTo = (parsed.replyTo!).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    // RFC 5322: To, Cc, and Reply-To are optional headers in valid emails.
+    // Marketing emails often have empty To (using Bcc), and most emails lack Cc/Reply-To.
+    // This is NOT a defensive default - these are legitimately optional per email protocol.
+    const to = (parsed.to ?? []).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const cc = (parsed.cc ?? []).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const replyTo = (parsed.replyTo ?? []).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
     const messageId = normalizeMessageId(parsed.messageId) || `${Date.now()}@${emailAccountId}`;
     const messageDate = parsed.date ? new Date(parsed.date) : new Date();
     const inReplyTo = parsed.inReplyTo || null;
