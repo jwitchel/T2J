@@ -492,8 +492,55 @@ function handleWebhook(payload: unknown): void {
 // Server types
 server/src/types/email.ts         // Email-related types
 server/src/types/llm.ts           // LLM provider types
+server/src/types/express.d.ts     // Express Request extensions (user, session, isServiceToken)
 server/src/lib/vector/types.ts    // Vector search types
 server/src/lib/email-processing/types.ts  // Processing result types
+```
+
+### Extending Express Request Type
+
+The Express Request type is extended globally in `server/src/types/express.d.ts` to add typed properties set by auth middleware:
+
+```typescript
+// server/src/types/express.d.ts
+declare global {
+  namespace Express {
+    interface Request {
+      user: { id: string; };      // Always set by requireAuth middleware
+      session?: unknown;          // Set for session-based auth only
+      isServiceToken?: boolean;   // Set for service token auth only
+    }
+  }
+}
+export {};
+```
+
+**Usage in route handlers:**
+```typescript
+// ✅ Good - use typed req.user directly
+router.get('/', requireAuth, async (req, res) => {
+  const userId = req.user.id;  // Typed!
+});
+
+// ❌ Bad - casting to any
+router.get('/', requireAuth, async (req, res) => {
+  const userId = (req as any).user.id;  // Loses type safety
+});
+```
+
+**Important:** Files that set these properties (like `server/src/middleware/auth.ts`) must include a triple-slash reference to ensure ts-node picks up the type declaration at runtime:
+```typescript
+/// <reference path="../types/express.d.ts" />
+import express from 'express';
+```
+
+The `server/tsconfig.json` includes `typeRoots` configuration to make these types available:
+```json
+{
+  "compilerOptions": {
+    "typeRoots": ["../node_modules/@types", "./src/types"]
+  }
+}
 ```
 
 **Examples:**
