@@ -64,17 +64,20 @@ export class EmailProcessingService {
   private async _extractEmailBody(parsed: any): Promise<string> {
     let emailBody = parsed.text;
 
-    // Handle malformed emails with empty text/plain parts
-    if (emailBody.trim().length === 0 && parsed.html) {
-      const { convert } = await import('html-to-text');
-      emailBody = convert(parsed.html, {
-        wordwrap: false,
-        preserveNewlines: true,
-        selectors: [
-          { selector: 'a', options: { ignoreHref: true } },
-          { selector: 'img', format: 'skip' }
-        ]
-      });
+    // MIME allows emails with only HTML content (no text/plain part)
+    // This is common for marketing emails and rich-text newsletters
+    if (!emailBody || emailBody.trim().length === 0) {
+      if (parsed.html) {
+        const { convert } = await import('html-to-text');
+        emailBody = convert(parsed.html, {
+          wordwrap: false,
+          preserveNewlines: true,
+          selectors: [
+            { selector: 'a', options: { ignoreHref: true } },
+            { selector: 'img', format: 'skip' }
+          ]
+        });
+      }
     }
 
     if (!emailBody || emailBody.trim().length === 0) {

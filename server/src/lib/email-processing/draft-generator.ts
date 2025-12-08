@@ -93,67 +93,59 @@ export class DraftGenerator {
     const recipientEmail = processedEmail.from[0].address;
     const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
 
-    try {
-      // Step 1: Get provider-specific orchestrator (cached, already initialized)
-      const orchestrator = await getOrchestrator(providerId);
+    // Step 1: Get provider-specific orchestrator (cached, already initialized)
+    const orchestrator = await getOrchestrator(providerId);
 
-      // Validate required fields for draft generation (fail fast)
-      if (!parsed.messageId) {
-        throw new Error('Email missing message-id, cannot generate draft');
-      }
-      if (!parsed.subject) {
-        throw new Error('Email missing subject, cannot generate draft');
-      }
-
-      // Initialize constants
-      const incomingEmailMetadata = {
-        from: processedEmail.from,
-        to: processedEmail.to,
-        cc: processedEmail.cc,
-        subject: processedEmail.subject,
-        date: processedEmail.date,
-        fullMessage: processedEmail.fullMessage
-      };
-
-      // Step 2: Run AI pipeline with timeout protection
-      const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
-      const aiResult = await this._runAIPipelineWithTimeout(
-        orchestrator,
-        processedEmail,
-        recipientEmail,
-        userId,
-        userContext,
-        maxExamples,
-        incomingEmailMetadata,
-        spamCheckResult,
-        llmTimeout
-      );
-
-      // Step 3: Clean any typed name that the LLM may have added
-      const cleanedBody = await this._removeTypedName(aiResult.body, userId);
-
-      // Step 4: Determine if this is a silent action
-      const isSilentAction = aiResult.meta && EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
-
-      // Step 5: Format complete draft response
-      const formattedDraft = isSilentAction
-        ? this._buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
-        : this._buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
-
-      // Step 6: Log completion
-      this._logDraftCompletion(userId, aiResult);
-
-      return {
-        success: true,
-        draft: formattedDraft
-      };
-
-    } catch (error: unknown) {
-      console.error('[DraftGenerator] Error generating draft:', error);
-
-      // Re-throw - let caller handle errors (already marked as permanent if applicable)
-      throw error;
+    // Validate required fields for draft generation (fail fast)
+    if (!parsed.messageId) {
+      throw new Error('Email missing message-id, cannot generate draft');
     }
+    if (!parsed.subject) {
+      throw new Error('Email missing subject, cannot generate draft');
+    }
+
+    // Initialize constants
+    const incomingEmailMetadata = {
+      from: processedEmail.from,
+      to: processedEmail.to,
+      cc: processedEmail.cc,
+      subject: processedEmail.subject,
+      date: processedEmail.date,
+      fullMessage: processedEmail.fullMessage
+    };
+
+    // Step 2: Run AI pipeline with timeout protection
+    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
+    const aiResult = await this._runAIPipelineWithTimeout(
+      orchestrator,
+      processedEmail,
+      recipientEmail,
+      userId,
+      userContext,
+      maxExamples,
+      incomingEmailMetadata,
+      spamCheckResult,
+      llmTimeout
+    );
+
+    // Step 3: Clean any typed name that the LLM may have added
+    const cleanedBody = await this._removeTypedName(aiResult.body, userId);
+
+    // Step 4: Determine if this is a silent action
+    const isSilentAction = aiResult.meta && EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
+
+    // Step 5: Format complete draft response
+    const formattedDraft = isSilentAction
+      ? this._buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
+      : this._buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
+
+    // Step 6: Log completion
+    this._logDraftCompletion(userId, aiResult);
+
+    return {
+      success: true,
+      draft: formattedDraft
+    };
   }
 
   /**

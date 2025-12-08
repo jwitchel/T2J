@@ -40,66 +40,60 @@ export class EmailIngestPipeline {
     let errors = 0;
     const relationshipStats: Record<string, number> = {};
 
-    try {
-      // For now, we'll process emails passed in directly
-      // In the future, this will stream from IMAP
-      if (!emails || emails.length === 0) {
-        console.log('No emails provided for processing');
-        return {
-          processed: 0,
-          errors: 0,
-          duration: Date.now() - startTime,
-          relationshipDistribution: {}
-        };
+    // For now, we'll process emails passed in directly
+    // In the future, this will stream from IMAP
+    if (!emails || emails.length === 0) {
+      console.log('No emails provided for processing');
+      return {
+        processed: 0,
+        errors: 0,
+        duration: Date.now() - startTime,
+        relationshipDistribution: {}
+      };
+    }
+
+    for await (const batch of this._batchStream(this._asyncIterableFromArray(emails), this.config.batchSize)) {
+      const results = await this._processBatch(userId, emailAccountId, batch);
+
+      processed += results.success;
+      errors += results.errors;
+
+      results.relationships.forEach(rel => {
+        relationshipStats[rel] = (relationshipStats[rel] || 0) + 1;
+      });
+
+      if (processed > 0 && errors / processed > this.config.errorThreshold) {
+        throw new Error(`Error rate exceeded threshold: ${errors}/${processed}`);
       }
 
-      for await (const batch of this._batchStream(this._asyncIterableFromArray(emails), this.config.batchSize)) {
-        const results = await this._processBatch(userId, emailAccountId, batch);
-        
-        processed += results.success;
-        errors += results.errors;
-        
-        results.relationships.forEach(rel => {
-          relationshipStats[rel] = (relationshipStats[rel] || 0) + 1;
-        });
-        
-        if (processed > 0 && errors / processed > this.config.errorThreshold) {
-          throw new Error(`Error rate exceeded threshold: ${errors}/${processed}`);
-        }
-        
-        if (processed % 100 === 0) {
-          console.log(`Processed ${processed} emails. Relationships: ${JSON.stringify(relationshipStats)}`);
-        }
+      if (processed % 100 === 0) {
+        console.log(`Processed ${processed} emails. Relationships: ${JSON.stringify(relationshipStats)}`);
       }
-      
-      console.log(`Historical processing complete. Total: ${processed}, Errors: ${errors}`);
-      console.log('Relationship distribution:', relationshipStats);
-      
-      // Aggregate styles for each relationship type after all emails are processed
-      console.log('Aggregating styles for each relationship type...');
-      for (const [relationshipType, count] of Object.entries(relationshipStats)) {
-        if (count > 0) {
-          try {
-            const aggregated = await this.styleAggregation.aggregateStyleForUser(userId, relationshipType);
-            await this.styleAggregation.updateStylePreferences(userId, relationshipType, aggregated);
-            console.log(`Updated style for ${userId} -> ${relationshipType}: ${aggregated.emailCount} emails`);
-          } catch (error: unknown) {
-            console.error(`Style aggregation failed for ${relationshipType}:`, error);
-          }
-        }
-      }
-      
-      return {
-        processed,
-        errors,
-        duration: Date.now() - startTime,
-        relationshipDistribution: relationshipStats
-      };
-      
-    } catch (error: unknown) {
-      console.error('Pipeline failed:', error);
-      throw error;
     }
+
+    console.log(`Historical processing complete. Total: ${processed}, Errors: ${errors}`);
+    console.log('Relationship distribution:', relationshipStats);
+
+    // Aggregate styles for each relationship type after all emails are processed
+    console.log('Aggregating styles for each relationship type...');
+    for (const [relationshipType, count] of Object.entries(relationshipStats)) {
+      if (count > 0) {
+        try {
+          const aggregated = await this.styleAggregation.aggregateStyleForUser(userId, relationshipType);
+          await this.styleAggregation.updateStylePreferences(userId, relationshipType, aggregated);
+          console.log(`Updated style for ${userId} -> ${relationshipType}: ${aggregated.emailCount} emails`);
+        } catch (error: unknown) {
+          console.error(`Style aggregation failed for ${relationshipType}:`, error);
+        }
+      }
+    }
+
+    return {
+      processed,
+      errors,
+      duration: Date.now() - startTime,
+      relationshipDistribution: relationshipStats
+    };
   }
 
   private async *_asyncIterableFromArray<T>(items: T[]): AsyncIterable<T> {

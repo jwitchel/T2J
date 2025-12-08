@@ -95,71 +95,65 @@ export class OAuthTokenService {
       throw new Error(`Token refresh not implemented for provider: ${provider}`);
     }
 
-    try {
-      
-      // Google OAuth token refresh endpoint
-      const tokenEndpoint = 'https://oauth2.googleapis.com/token';
-      
-      // Get client credentials from environment
-      const clientId = process.env.GOOGLE_CLIENT_ID;
-      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      
-      if (!clientId || !clientSecret) {
-        throw new Error('Google OAuth client credentials not configured');
-      }
-      
-      // Prepare refresh request
-      const params = new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token'
-      });
-      
-      const response = await fetch(tokenEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: params.toString()
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[OAuthTokenService] Token refresh failed:', errorText);
-        
-        // Parse error response
-        let errorData: any = {};
-        try {
-          errorData = JSON.parse(errorText);
-        } catch {
-          // Not JSON, use raw text
-        }
-        
-        // Check for specific error types
-        if (errorData.error === 'invalid_grant' || response.status === 400) {
-          // Refresh token is invalid or expired
-          throw new Error('REFRESH_TOKEN_INVALID: The refresh token is invalid or expired. Please re-authenticate.');
-        }
-        
-        throw new Error(`Token refresh failed: ${response.status} - ${errorData.error || errorText}`);
-      }
-      
-      const data: any = await response.json();
-      
-      const newTokens: OAuthTokens = {
-        accessToken: data.access_token,
-        refreshToken: refreshToken, // Google doesn't always return a new refresh token
-        expiresAt: new Date(Date.now() + data.expires_in * 1000)
-      };
-      
-      // Store the new tokens
-      await this.storeTokens(emailAccountId, newTokens, '');
-      
-      return newTokens;
-    } catch (error: unknown) {
-      console.error('[OAuthTokenService] Error refreshing tokens:', error);
-      throw error;
+    // Google OAuth token refresh endpoint
+    const tokenEndpoint = 'https://oauth2.googleapis.com/token';
+
+    // Get client credentials from environment
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      throw new Error('Google OAuth client credentials not configured');
     }
+
+    // Prepare refresh request
+    const params = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    });
+
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[OAuthTokenService] Token refresh failed:', errorText);
+
+      // Parse error response
+      let errorData: any = {};
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use raw text
+      }
+
+      // Check for specific error types
+      if (errorData.error === 'invalid_grant' || response.status === 400) {
+        // Refresh token is invalid or expired
+        throw new Error('REFRESH_TOKEN_INVALID: The refresh token is invalid or expired. Please re-authenticate.');
+      }
+
+      throw new Error(`Token refresh failed: ${response.status} - ${errorData.error || errorText}`);
+    }
+
+    const data: any = await response.json();
+
+    const newTokens: OAuthTokens = {
+      accessToken: data.access_token,
+      refreshToken: refreshToken, // Google doesn't always return a new refresh token
+      expiresAt: new Date(Date.now() + data.expires_in * 1000)
+    };
+
+    // Store the new tokens
+    await this.storeTokens(emailAccountId, newTokens, '');
+
+    return newTokens;
   }
 }

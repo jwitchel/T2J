@@ -490,86 +490,80 @@ export class InboxProcessor {
     // 2. Guaranteed connection cleanup even on errors
     // 3. Nested operations (emailMover calls) share the same connection
     return await withImapContext(accountId, userId, async () => {
-      try {
-        const imapOps = await ImapOperations.fromAccountId(accountId, userId);
+      const imapOps = await ImapOperations.fromAccountId(accountId, userId);
 
-        // Fetch messages from inbox with pagination
-        const messages = await imapOps.getMessages('INBOX', {
-          offset: Number(offset),
-          limit: Number(batchSize),
-          descending: true,
-          since: since  // Pass through for Look Back feature
-        });
+      // Fetch messages from inbox with pagination
+      const messages = await imapOps.getMessages('INBOX', {
+        offset: Number(offset),
+        limit: Number(batchSize),
+        descending: true,
+        since: since  // Pass through for Look Back feature
+      });
 
-        if (messages.length === 0) {
-          return {
-            success: true,
-            processed: 0,
-            results: [],
-            hasMore: false,
-            nextOffset: offset,
-            elapsed: Date.now() - startTime
-          };
-        }
-
-        // Batch fetch full message details
-        const uids = messages.map(msg => msg.uid);
-        const fullMessages = await imapOps.getMessagesRaw('INBOX', uids);
-
-        // Get action tracking for all messages to filter already processed
-        const messageIds = fullMessages.map(msg => msg.messageId).filter((id): id is string => !!id);
-        const actionTracking = await this.emailRepository.getReceivedEmailActions(accountId, messageIds);
-
-        // Filter to unprocessed messages (unless force is true)
-        // An email is considered unprocessed if action is 'pending' or doesn't exist
-        const toProcess = fullMessages.filter(msg => {
-          if (!msg.messageId) {
-            return false;
-          }
-          const tracked = actionTracking.get(msg.messageId);
-          return force || !tracked || tracked.action === EmailActionType.PENDING;
-        });
-
-        // Process emails in parallel for better throughput
-        // Note: processEmail now handles database storage internally (DRY)
-        const processingPromises = toProcess.map(msg =>
-          this.processEmail({
-            message: {
-              uid: msg.uid,
-              messageId: msg.messageId,
-              subject: msg.subject,
-              from: msg.from,
-              to: msg.to,
-              cc: msg.parsed?.cc ? [msg.parsed.cc].flat().map(addr => addr.text || '').filter(Boolean) : [],
-              date: msg.date,
-              flags: msg.flags,
-              fullMessage: msg.fullMessage
-            },
-            accountId,
-            userId,
-            providerId
-          })
-        );
-
-        const results = await Promise.all(processingPromises);
-
-        // Check if there are more messages to process
-        const hasMore = messages.length === batchSize;
-        const nextOffset = offset + messages.length;
-
+      if (messages.length === 0) {
         return {
           success: true,
-          processed: results.length,
-          results,
-          hasMore,
-          nextOffset,
+          processed: 0,
+          results: [],
+          hasMore: false,
+          nextOffset: offset,
           elapsed: Date.now() - startTime
         };
-
-      } catch (error: unknown) {
-        console.error('[InboxProcessor] Batch processing error:', error);
-        throw error;
       }
+
+      // Batch fetch full message details
+      const uids = messages.map(msg => msg.uid);
+      const fullMessages = await imapOps.getMessagesRaw('INBOX', uids);
+
+      // Get action tracking for all messages to filter already processed
+      const messageIds = fullMessages.map(msg => msg.messageId).filter((id): id is string => !!id);
+      const actionTracking = await this.emailRepository.getReceivedEmailActions(accountId, messageIds);
+
+      // Filter to unprocessed messages (unless force is true)
+      // An email is considered unprocessed if action is 'pending' or doesn't exist
+      const toProcess = fullMessages.filter(msg => {
+        if (!msg.messageId) {
+          return false;
+        }
+        const tracked = actionTracking.get(msg.messageId);
+        return force || !tracked || tracked.action === EmailActionType.PENDING;
+      });
+
+      // Process emails in parallel for better throughput
+      // Note: processEmail now handles database storage internally (DRY)
+      const processingPromises = toProcess.map(msg =>
+        this.processEmail({
+          message: {
+            uid: msg.uid,
+            messageId: msg.messageId,
+            subject: msg.subject,
+            from: msg.from,
+            to: msg.to,
+            cc: msg.parsed?.cc ? [msg.parsed.cc].flat().map(addr => addr.text || '').filter(Boolean) : [],
+            date: msg.date,
+            flags: msg.flags,
+            fullMessage: msg.fullMessage
+          },
+          accountId,
+          userId,
+          providerId
+        })
+      );
+
+      const results = await Promise.all(processingPromises);
+
+      // Check if there are more messages to process
+      const hasMore = messages.length === batchSize;
+      const nextOffset = offset + messages.length;
+
+      return {
+        success: true,
+        processed: results.length,
+        results,
+        hasMore,
+        nextOffset,
+        elapsed: Date.now() - startTime
+      };
     });
   }
 }

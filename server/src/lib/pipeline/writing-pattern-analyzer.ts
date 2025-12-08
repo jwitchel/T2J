@@ -735,41 +735,35 @@ export class WritingPatternAnalyzer {
     writeFileSync(responseFile, response, 'utf8');
     console.log(`[LLM] Response written to: ${responseFile}`);
 
-    // Parse the response
-    try {
-      // Extract JSON from response, handling various formats
-      let cleanResponse = response.trim();
-      
-      // Try to find JSON content within the response
-      // First, check if entire response is wrapped in markdown
-      const markdownJsonMatch = cleanResponse.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (markdownJsonMatch) {
-        cleanResponse = markdownJsonMatch[1].trim();
-      }
-      
-      // If still not valid JSON, try to extract JSON object
-      if (!cleanResponse.startsWith('{')) {
-        const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          cleanResponse = jsonMatch[0];
-        }
-      }
-      
-      const parsed = JSON.parse(cleanResponse);
+    // Parse the response - extract JSON from response, handling various formats
+    let cleanResponse = response.trim();
 
-      // Add metadata
-      return {
-        ...parsed,
-        emailCount: emails.length,
-        dateRange: {
-          start: emails[0].date,
-          end: emails[emails.length - 1].date
-        }
-      };
-    } catch (error) {
-      console.error('Failed to parse LLM response:', response);
-      throw error;
+    // Try to find JSON content within the response
+    // First, check if entire response is wrapped in markdown
+    const markdownJsonMatch = cleanResponse.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (markdownJsonMatch) {
+      cleanResponse = markdownJsonMatch[1].trim();
     }
+
+    // If still not valid JSON, try to extract JSON object
+    if (!cleanResponse.startsWith('{')) {
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanResponse = jsonMatch[0];
+      }
+    }
+
+    const parsed = JSON.parse(cleanResponse);
+
+    // Add metadata
+    return {
+      ...parsed,
+      emailCount: emails.length,
+      dateRange: {
+        start: emails[0].date,
+        end: emails[emails.length - 1].date
+      }
+    };
   }
 
   // Remove buildAnalysisPrompt method - no longer needed since we use templates
