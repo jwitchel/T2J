@@ -36,13 +36,13 @@ export class NameRedactor {
     
     // Step 3: Clean and process each person found
     peopleMatches.forEach((match: any) => {
-      const terms = match.terms || [];
+      const terms = match.terms;
       
       // Extract just the name parts, excluding punctuation
       const nameParts = terms
         .filter((term: any) => {
           // Keep only terms tagged as names or proper nouns
-          const tags = term.tags || [];
+          const tags = term.tags;
           return tags.includes('Person') || 
                  tags.includes('FirstName') || 
                  tags.includes('LastName') ||

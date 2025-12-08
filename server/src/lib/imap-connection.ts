@@ -259,7 +259,7 @@ export class ImapConnection extends EventEmitter {
       const folder: ImapFolder = {
         name: parent ? `${parent}${boxObj.delimiter}${name}` : name,
         delimiter: boxObj.delimiter || '.',
-        flags: boxObj.attribs || []
+        flags: boxObj.attribs
       };
 
       if (boxObj.children) {

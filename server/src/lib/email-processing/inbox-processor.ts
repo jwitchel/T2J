@@ -199,7 +199,7 @@ export class InboxProcessor {
       'SELECT preferences FROM "user" WHERE id = $1',
       [context.userId]
     );
-    const preferences = userResult.rows[0]?.preferences || {};
+    const preferences = userResult.rows[0]?.preferences;
     const folderPrefs = preferences.folderPreferences;
     const draftsFolderPath = folderPrefs?.draftsFolderPath;
 
@@ -290,10 +290,10 @@ export class InboxProcessor {
       subject: context.message.subject,
       from: context.message.from,
       fullMessage: context.message.fullMessage, // ORIGINAL - complete with all attachments
-      to: context.message.to || [],
-      cc: context.message.cc || [],
+      to: context.message.to!,
+      cc: context.message.cc!,
       date: context.message.date || parsed.date || new Date(), // IMAP date already prefers parsed > envelope > now
-      flags: context.message.flags || [],
+      flags: context.message.flags!,
       size: context.message.fullMessage.length,
       parsed  // Include parsed email for storage service
     };

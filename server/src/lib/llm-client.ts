@@ -129,8 +129,8 @@ export class LLMClient {
   async generate(prompt: string, options?: {
     temperature?: number;
   }): Promise<string> {
-    const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
-    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
+    const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES!);
+    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT!);
     let lastError: any;
 
     // Truncate prompt if it exceeds model's context window

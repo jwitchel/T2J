@@ -140,9 +140,9 @@ export class EmailIngestPipeline {
 
     // Get all unique recipients (TO, CC, and BCC)
     const allRecipients = [
-      ...(email.to || []),
-      ...(email.cc || []),
-      ...(email.bcc || [])
+      ...email.to,
+      ...email.cc,
+      ...email.bcc
     ];
 
     // Remove duplicates based on email address
@@ -189,8 +189,8 @@ export class EmailIngestPipeline {
     // Extract NLP features from the redacted user reply ONLY
     // We ONLY analyze what the user actually wrote, not quoted content
     const features = extractEmailFeatures(redactedUserReply, {
-      email: recipient.address || '',
-      name: recipient.name || ''
+      email: recipient.address,
+      name: recipient.name
     });
 
     // Generate semantic embedding with retry - use the redacted user reply ONLY
@@ -226,8 +226,8 @@ export class EmailIngestPipeline {
         const { personService } = await import('../relationships/person-service');
         const person = await personService.findOrCreatePerson({
           userId,
-          name: NameExtractor.extractName(recipient.address || '', recipient.name),
-          emailAddress: recipient.address || '',
+          name: NameExtractor.extractName(recipient.address, recipient.name),
+          emailAddress: recipient.address,
           relationshipType: email.relationship.type,
           confidence: email.relationship.confidence
         }, client);
@@ -246,7 +246,7 @@ export class EmailIngestPipeline {
         // Detect relationship from email content and context
         relationship = await this.relationshipDetector.detectRelationship({
           userId,
-          recipientEmail: recipient.address || '',
+          recipientEmail: recipient.address,
           recipientName: recipient.name,
           subject: email.subject,
           historicalContext: {

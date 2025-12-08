@@ -89,7 +89,7 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
   }
 
   const providerId = providerResult.rows[0].id;
-  const batchSize = parseInt(process.env.NEXT_PUBLIC_INBOX_BATCH_SIZE || '10', 10);
+  const batchSize = parseInt(process.env.NEXT_PUBLIC_INBOX_BATCH_SIZE!, 10);
 
   // Process batch
   const result = await inboxProcessor.processBatch({

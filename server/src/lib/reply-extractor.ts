@@ -255,7 +255,7 @@ export class ReplyExtractor {
       if (forwardResult.forwarded) {
         // If email was forwarded, keep only the forwarding message (user's added text)
         // and replace the original forwarded content with a marker
-        processed = forwardResult.message || '';
+        processed = forwardResult.message!;
 
         // Add marker to indicate forwarded content was removed
         // Note: Don't use '>' prefix as email-reply-parser treats it as quoted content

@@ -23,21 +23,21 @@ router.get('/', requireAuth, async (req, res) => {
     const profiles: any = {};
     result.rows.forEach(row => {
       // Always return a consistent structure with writingPatterns at the root
-      const writingPatterns = row.profile_data.writingPatterns || {};
-      
+      const writingPatterns = row.profile_data.writingPatterns;
+
       profiles[row.target_identifier] = {
         // Writing pattern fields at root level
-        sentencePatterns: writingPatterns.sentencePatterns || null,
-        paragraphPatterns: writingPatterns.paragraphPatterns || [],
-        openingPatterns: writingPatterns.openingPatterns || [],
-        valediction: writingPatterns.valediction || [],
-        negativePatterns: writingPatterns.negativePatterns || [],
-        responsePatterns: writingPatterns.responsePatterns || null,
-        uniqueExpressions: writingPatterns.uniqueExpressions || [],
-        
+        sentencePatterns: writingPatterns.sentencePatterns,
+        paragraphPatterns: writingPatterns.paragraphPatterns,
+        openingPatterns: writingPatterns.openingPatterns,
+        valediction: writingPatterns.valediction,
+        negativePatterns: writingPatterns.negativePatterns,
+        responsePatterns: writingPatterns.responsePatterns,
+        uniqueExpressions: writingPatterns.uniqueExpressions,
+
         // Metadata fields
         meta: {
-          ...(row.profile_data.meta || {}),
+          ...row.profile_data.meta,
           // Include sentence stats metadata if available
           sentenceStats: row.profile_data.sentenceStats ? {
             lastCalculated: row.profile_data.sentenceStats.lastCalculated,

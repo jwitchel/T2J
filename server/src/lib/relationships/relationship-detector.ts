@@ -75,11 +75,11 @@ export class RelationshipDetector {
       [userId]
     );
 
-    const preferences = result.rows[0]?.preferences || {};
+    const preferences = result.rows[0]?.preferences;
     const config: RelationshipConfig = {
-      workDomains: this._parseCSV(preferences.workDomainsCSV || ''),
-      familyEmails: this._parseCSV(preferences.familyEmailsCSV || ''),
-      spouseEmails: this._parseCSV(preferences.spouseEmailsCSV || '')
+      workDomains: this._parseCSV(preferences.workDomainsCSV),
+      familyEmails: this._parseCSV(preferences.familyEmailsCSV),
+      spouseEmails: this._parseCSV(preferences.spouseEmailsCSV)
     };
 
     // Cache it

@@ -249,7 +249,7 @@ export const userRelationshipService = {
   },
   // Proxy methods to maintain backward compatibility
   async getAllRelationships(userId?: string): Promise<UserRelationship[]> {
-    return this.instance.getUserRelationships(userId || '');
+    return this.instance.getUserRelationships(userId!);
   },
   async getRelationshipById(relationshipId: string): Promise<UserRelationship | null> {
     // Need to fetch all relationships to find by ID

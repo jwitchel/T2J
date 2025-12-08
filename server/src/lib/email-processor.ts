@@ -36,7 +36,7 @@ export class EmailProcessor {
     const parsedContent = emailContentParser.parseFromMailparser(parsedMail);
 
     // Get subject for forward detection (email-forward-parser uses it to improve accuracy)
-    const subject = parsedMail.subject || '';
+    const subject = parsedMail.subject;
 
     // Extract the user's reply from the plain text
     let plainResult = replyExtractor.extractWithMetadata(parsedContent.userTextPlain, subject);
@@ -58,7 +58,7 @@ export class EmailProcessor {
       // If this was a forward and we have no content left after signature/name removal,
       // mark it as forwarded content removed
       if (splitResult.wasForwarded && userReplyClean.trim().length === 0) {
-        userReplyClean = splitResult.forwardMarker || '';
+        userReplyClean = splitResult.forwardMarker!;
       }
     }
 

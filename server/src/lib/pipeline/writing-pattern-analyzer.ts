@@ -279,7 +279,7 @@ export class WritingPatternAnalyzer {
 
     const nlpStart = Date.now();
     emails.forEach(email => {
-      const userReply = email.metadata.userReply || '';
+      const userReply = email.metadata.userReply;
       if (!userReply || userReply === '[ForwardedWithoutComment]') return;
 
       // Use compromise to split into sentences
@@ -334,8 +334,8 @@ export class WritingPatternAnalyzer {
     const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
 
     // Get sentence length breakpoints from env
-    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX || '10');
-    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN || '25');
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
 
     // Calculate distribution
     const shortCount = wordCountsPerSentence.filter(c => c < shortMax).length;
@@ -965,7 +965,7 @@ export class WritingPatternAnalyzer {
         };
       })
       .sort((a, b) => b.occurrenceRate - a.occurrenceRate)
-      .slice(0, parseInt(process.env.PATTERN_UNIQUE_EXPRESSIONS_COUNT || '15'));
+      .slice(0, parseInt(process.env.PATTERN_UNIQUE_EXPRESSIONS_COUNT!));
   }
 
 
@@ -979,7 +979,7 @@ export class WritingPatternAnalyzer {
     });
     
     let maxWeight = 0;
-    let mostCommon = items[0]?.value || '';
+    let mostCommon = items[0]?.value;
     weightedCounts.forEach((weight, value) => {
       if (weight > maxWeight) {
         maxWeight = weight;
@@ -1184,7 +1184,7 @@ export class WritingPatternAnalyzer {
    * Detect if text has a greeting
    */
   private _hasGreeting(text: string): boolean {
-    const firstLine = text.split('\n')[0]?.toLowerCase() || '';
+    const firstLine = text.split('\n')[0]?.toLowerCase();
     const doc = nlp(firstLine);
 
     // Check for common greeting patterns
@@ -1467,8 +1467,8 @@ export class WritingPatternAnalyzer {
     const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
 
     // Get sentence length breakpoints from env
-    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX || '10');
-    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN || '25');
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
 
     // Calculate distribution
     const shortCount = wordCounts.filter(c => c < shortMax).length;

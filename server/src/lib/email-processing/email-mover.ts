@@ -152,7 +152,7 @@ export class EmailMover {
         'SELECT preferences FROM "user" WHERE id = $1',
         [userId]
       );
-      const preferences = userResult.rows[0]?.preferences || {};
+      const preferences = userResult.rows[0]?.preferences;
       const folderPrefs = preferences.folderPreferences;
 
       // Determine saved Drafts folder path from user preferences
@@ -217,7 +217,7 @@ export class EmailMover {
         'SELECT preferences FROM "user" WHERE id = $1',
         [userId]
       );
-      const preferences = userResult.rows[0]?.preferences || {};
+      const preferences = userResult.rows[0]?.preferences;
       const folderPrefs = preferences.folderPreferences;
       const draftsFolderPath = folderPrefs?.draftsFolderPath;
 

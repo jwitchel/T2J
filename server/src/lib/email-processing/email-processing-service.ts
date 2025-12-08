@@ -62,7 +62,7 @@ export class EmailProcessingService {
    * @private
    */
   private async _extractEmailBody(parsed: any): Promise<string> {
-    let emailBody = parsed.text || '';
+    let emailBody = parsed.text;
 
     // Handle malformed emails with empty text/plain parts
     if (emailBody.trim().length === 0 && parsed.html) {
@@ -93,12 +93,12 @@ export class EmailProcessingService {
     const parser = new PostalMime();
     const parsed = await parser.parse(fullMessage);
 
-    const fromAddress = parsed.from?.address || '';
-    const fromName = parsed.from?.name || parsed.from?.address || '';
-    const subject = parsed.subject || '';
-    const to = (parsed.to || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
-    const cc = (parsed.cc || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
-    const replyTo = (parsed.replyTo || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
+    const fromAddress = parsed.from!.address!;
+    const fromName = parsed.from!.name || parsed.from!.address!;
+    const subject = parsed.subject!;
+    const to = (parsed.to!).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const cc = (parsed.cc!).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const replyTo = (parsed.replyTo!).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
     const messageId = normalizeMessageId(parsed.messageId) || `${Date.now()}@${emailAccountId}`;
     const messageDate = parsed.date ? new Date(parsed.date) : new Date();
     const inReplyTo = parsed.inReplyTo || null;
@@ -141,7 +141,7 @@ export class EmailProcessingService {
       from: userContext.userEmail,
       to: processedEmail.from[0].address,
       cc: '',
-      subject: processedEmail.subject || '',
+      subject: processedEmail.subject!,
       body: '',
       bodyHtml: undefined,
       inReplyTo: processedEmail.messageId || `<${Date.now()}>`,
@@ -197,16 +197,16 @@ export class EmailProcessingService {
     }
 
     const row = result.rows[0];
-    const preferences = row.preferences || {};
+    const preferences = row.preferences;
 
     return {
       userEmail: row.email_address,
       userNames: {
-        name: preferences.name || row.name || '',
-        nicknames: preferences.nicknames || ''
+        name: preferences.name,
+        nicknames: preferences.nicknames
       },
-      typedNameSignature: preferences.typedName?.appendString || '',
-      signatureBlock: preferences.signatureBlock || ''
+      typedNameSignature: preferences.typedName?.appendString,
+      signatureBlock: preferences.signatureBlock
     };
   }
 
@@ -232,7 +232,7 @@ export class EmailProcessingService {
 
       // Step 4: Check for spam (using stripped version for LLM)
       const spamCheckStartTime = Date.now();
-      const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase() || '';
+      const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase();
       const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
       const spamDetector = await getSpamDetector(providerId);
       const spamCheckResult = await spamDetector.checkSpam({

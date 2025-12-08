@@ -182,17 +182,17 @@ export class TemplateManager {
 
   async renderSystemPrompt(templateName: string = 'default', data?: any): Promise<string> {
     const template = await this.loadTemplate(templateName, 'system');
-    return template(data || {});
+    return template(data);
   }
 
   formatExamplesForTemplate(examples: SelectedExample[]): FormattedExample[] {
     return examples.map(ex => ({
       text: this._transformExampleText(ex.text),
       relationship: ex.metadata.relationship?.type || ex.metadata.relationship || 'unknown',
-      score: ex.scores?.combined || (ex as any).score || 0,  // Backwards compat
-      semanticScore: ex.scores?.semantic || 0,  // NEW: Semantic similarity
-      styleScore: ex.scores?.style || 0,        // NEW: Style similarity
-      combinedScore: ex.scores?.combined || (ex as any).score || 0,  // NEW: Combined score
+      score: ex.scores?.combined || (ex as any).score,  // Backwards compat
+      semanticScore: ex.scores?.semantic,  // NEW: Semantic similarity
+      styleScore: ex.scores?.style,        // NEW: Style similarity
+      combinedScore: ex.scores?.combined || (ex as any).score,  // NEW: Combined score
       subject: ex.metadata.subject,
       formalityScore: ex.metadata.features?.stats?.formalityScore,
       sentiment: ex.metadata.features?.sentiment?.dominant,
@@ -261,8 +261,8 @@ export class TemplateManager {
       : 50;
     
     const avgFormality = params.examples.length > 0
-      ? params.examples.reduce((sum, ex) => 
-          sum + (ex.metadata.features?.stats?.formalityScore || 0.5), 0
+      ? params.examples.reduce((sum, ex) =>
+          sum + ex.metadata.features!.stats!.formalityScore, 0
         ) / params.examples.length
       : 0.5;
     

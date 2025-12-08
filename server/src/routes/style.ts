@@ -69,13 +69,13 @@ router.post('/api/style/aggregate/:relationshipType', async (req: Request, res: 
       confidenceScore: aggregated.confidenceScore,
       lastUpdated: aggregated.lastUpdated,
       patterns: {
-        greetings: (aggregated.greetings || []).slice(0, 5),
-        closings: (aggregated.closings || []).slice(0, 5),
-        emojis: (aggregated.emojis || []).slice(0, 10),
+        greetings: aggregated.greetings!.slice(0, 5),
+        closings: aggregated.closings!.slice(0, 5),
+        emojis: aggregated.emojis!.slice(0, 10),
         sentimentProfile: aggregated.sentimentProfile,
         vocabularyProfile: {
           complexityLevel: aggregated.vocabularyProfile.complexityLevel,
-          commonPhrases: (aggregated.commonPhrases || []).slice(0, 10)
+          commonPhrases: aggregated.commonPhrases!.slice(0, 10)
         }
       }
     });

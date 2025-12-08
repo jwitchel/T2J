@@ -4,37 +4,35 @@ import { EmailActionType } from '../../types/email-action-tracking';
 describe('EmailActionRouter', () => {
   describe('default configuration', () => {
     it('should use getDefaultFolders to retrieve configuration', () => {
-      // The static fields are initialized when the module loads,
-      // so we can't test env var changes at runtime.
-      // Instead, we test that the method returns the expected structure
+      // The static fields are initialized when the module loads from env vars.
+      // Without env vars set, these will be undefined (fail-fast behavior).
       const defaults = EmailActionRouter.getDefaultFolders();
 
       expect(defaults).toHaveProperty('rootFolder');
       expect(defaults).toHaveProperty('noActionFolder');
       expect(defaults).toHaveProperty('spamFolder');
-
-      // Check that values are strings (either from env or defaults)
-      expect(typeof defaults.rootFolder).toBe('string');
-      expect(typeof defaults.noActionFolder).toBe('string');
-      expect(typeof defaults.spamFolder).toBe('string');
+      expect(defaults).toHaveProperty('todoFolder');
+      expect(defaults).toHaveProperty('draftsFolderPath');
     });
 
-    it('should have sensible default values', () => {
+    it('should return undefined for env vars not set in test environment', () => {
+      // Without env vars set, getDefaultFolders returns undefined values
+      // This is intentional fail-fast behavior - env vars must be set in production
       const defaults = EmailActionRouter.getDefaultFolders();
 
-      // These will be either from env vars or fallback values
-      // We just check they exist and make sense
-      expect(defaults.noActionFolder).toBeTruthy();
-      expect(defaults.spamFolder).toBeTruthy();
-      // Root folder can be empty (meaning root level)
-      expect(defaults.rootFolder).toBeDefined();
+      // In test environment, env vars are not set, so these are undefined
+      // In production, these would be set via .env file
+      expect(defaults.noActionFolder).toBeUndefined();
+      expect(defaults.spamFolder).toBeUndefined();
+      expect(defaults.rootFolder).toBeUndefined();
     });
 
     it('should handle empty root folder correctly', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       const requiredFolders = router.getRequiredFolders();
@@ -51,7 +49,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: 'Prescreen',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       const requiredFolders = router.getRequiredFolders();
@@ -74,7 +73,8 @@ describe('EmailActionRouter', () => {
       router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       }, testDraftsPath);
     });
 
@@ -139,7 +139,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       // Mock IMAP operations
@@ -160,7 +161,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       // Mock IMAP operations
@@ -181,7 +183,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       // Mock IMAP operations

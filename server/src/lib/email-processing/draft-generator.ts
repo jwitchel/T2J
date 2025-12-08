@@ -41,7 +41,7 @@ function extractAddresses(field: Address[] | undefined): EmailAddress[] {
   if (!field) return [];
 
   return field.map(addr => ({
-    address: addr.address || '',
+    address: addr.address!,
     name: addr.name
   }));
 }
@@ -368,7 +368,7 @@ export class DraftGenerator {
     const fromAddress = extractSingleAddress(parsed.from);
     return {
       ...this._buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
-      to: this._formatEmailAddress(fromAddress?.name, fromAddress?.address || ''),
+      to: this._formatEmailAddress(fromAddress?.name, fromAddress!.address),
       cc: '',
       subject: parsed.subject!,  // Validated at entry point
       body: ''
@@ -390,8 +390,8 @@ export class DraftGenerator {
   ): DraftEmail {
     const fromAddress = extractSingleAddress(parsed.from);
     const formattedReply = this._formatReplyEmail(
-      fromAddress?.name || fromAddress?.address || '',
-      fromAddress?.address || '',
+      fromAddress?.name || fromAddress!.address,
+      fromAddress!.address,
       parsed.date ? new Date(parsed.date) : new Date(),
       emailBody,
       cleanedBody,
@@ -407,7 +407,7 @@ export class DraftGenerator {
     const isReplyAll = EmailActionType.isReplyAll(meta.recommendedAction);
     const { to, cc } = isReplyAll
       ? this._calculateReplyAllRecipients(parsed, userContext.userEmail)
-      : { to: this._formatEmailAddress(fromAddress?.name, fromAddress?.address || ''), cc: '' };
+      : { to: this._formatEmailAddress(fromAddress?.name, fromAddress!.address), cc: '' };
 
     return {
       ...this._buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),

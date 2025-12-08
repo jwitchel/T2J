@@ -11,8 +11,8 @@ const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       redirectURI: `${process.env.BACKEND_URL!}/api/auth/callback/google`,
       scope: ['openid', 'email', 'profile', 'https://mail.google.com/'],
       accessType: 'offline',
@@ -32,7 +32,7 @@ const auth = betterAuth({
     afterSignIn: process.env.OAUTH_CALLBACK_URI!,
     afterError: process.env.OAUTH_ERROR_REDIRECT_URI!,
   },
-  trustedOrigins: (process.env.TRUSTED_ORIGINS || 'http://localhost:3001,http://localhost:3002').split(','),
+  trustedOrigins: process.env.TRUSTED_ORIGINS!.split(','),
 });
 
 // Named export

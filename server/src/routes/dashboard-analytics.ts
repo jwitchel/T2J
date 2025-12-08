@@ -125,16 +125,16 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
         id: row.id,
         messageId: row.message_id,
         actionTaken: row.action_taken,
-        subject: row.subject || '(No subject)',
+        subject: row.subject,
         senderEmail: row.sender_email,
         senderName: row.person_name,
         destinationFolder: row.destination_folder,
         updatedAt: row.updated_at,
         emailAccountId: row.email_account_id,
         emailAccount: row.email_address,
-        relationship: row.relationship_type || 'unknown'
+        relationship: row.relationship_type
       })),
-      total: countResult.rows[0]?.total || 0
+      total: countResult.rows[0]?.total
     });
   } catch (error) {
     console.error('Error fetching recent actions:', error);

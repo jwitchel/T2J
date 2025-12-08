@@ -79,7 +79,7 @@ export class SpamDetector {
       [userId, senderEmail.toLowerCase()]
     );
 
-    return result.rows[0]?.total || 0;
+    return result.rows[0]?.total;
   }
 
   /**
@@ -135,7 +135,7 @@ export class SpamDetector {
     const spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
 
     const isSpam = spamCheckResult.meta.isSpam;
-    const indicators = spamCheckResult.meta.spamIndicators || [];
+    const indicators = spamCheckResult.meta.spamIndicators;
 
     const result: SpamCheckResult = {
       isSpam,

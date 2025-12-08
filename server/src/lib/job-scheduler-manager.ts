@@ -57,7 +57,7 @@ export class JobSchedulerManager {
     this.schedulerConfigs.set(SchedulerId.CHECK_MAIL, {
       id: SchedulerId.CHECK_MAIL,
       queue: inboxQueue,
-      interval: parseInt(process.env.CHECK_MAIL_INTERVAL || '60000'), // Default 60 seconds
+      interval: parseInt(process.env.CHECK_MAIL_INTERVAL!),
       jobType: JobType.PROCESS_INBOX,
       jobData: async (userId: string, accountId: string) => ({
         userId,
@@ -72,7 +72,7 @@ export class JobSchedulerManager {
     this.schedulerConfigs.set(SchedulerId.UPDATE_TONE, {
       id: SchedulerId.UPDATE_TONE,
       queue: trainingQueue,
-      interval: parseInt(process.env.UPDATE_TONE_INTERVAL || '86400000'), // Default 24 hours
+      interval: parseInt(process.env.UPDATE_TONE_INTERVAL!),
       jobType: JobType.BUILD_TONE_PROFILE,
       jobData: async (userId: string, accountId: string) => ({
         userId,

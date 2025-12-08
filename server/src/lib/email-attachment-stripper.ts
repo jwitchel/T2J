@@ -49,12 +49,12 @@ export async function stripAttachments(fullMessage: string, parsed?: any): Promi
 
   if (parsed.headers && Array.isArray(parsed.headers)) {
     parsed.headers.forEach((header: any) => {
-      const key = header.key || '';
+      const key = header.key;
       const keyLower = key.toLowerCase();
 
       // Skip body-related headers - we'll add our own
       if (!skipHeaders.has(keyLower)) {
-        const value = header.value || '';
+        const value = header.value;
         messageParts.push(`${key}: ${value}`);
       }
     });

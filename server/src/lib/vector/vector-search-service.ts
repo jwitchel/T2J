@@ -397,15 +397,15 @@ export class VectorSearchService {
         id: String(candidate.id),
         vector: combinedVector,
         metadata: {
-          emailId: String(candidate.email_id || ''),
-          text: String(candidate.text || ''),
+          emailId: String(candidate.email_id),
+          text: String(candidate.text),
           userId: String(candidate.user_id),
-          emailAccountId: String(candidate.email_account_id || ''),
-          recipientEmail: String(candidate.recipient_email || ''),
-          relationship: String(candidate.relationship_type || ''),
-          subject: String(candidate.subject || ''),
-          sentDate: candidate.sent_date?.toISOString() || new Date().toISOString(),
-          wordCount: Number(candidate.word_count || 0)
+          emailAccountId: String(candidate.email_account_id),
+          recipientEmail: String(candidate.recipient_email),
+          relationship: String(candidate.relationship_type),
+          subject: String(candidate.subject),
+          sentDate: candidate.sent_date!.toISOString(),
+          wordCount: Number(candidate.word_count)
         }
       });
     }
@@ -531,16 +531,16 @@ export class VectorSearchService {
 
       matches.push({
         id: result.item.id,
-        emailId: String(result.item.metadata.emailId || ''),
-        text: String(result.item.metadata.text || ''),
+        emailId: String(result.item.metadata.emailId),
+        text: String(result.item.metadata.text),
         metadata: {
           userId: String(result.item.metadata.userId),
-          emailAccountId: String(result.item.metadata.emailAccountId || ''),
-          recipientEmail: String(result.item.metadata.recipientEmail || ''),
-          relationship: String(result.item.metadata.relationship || ''),
-          subject: String(result.item.metadata.subject || ''),
-          sentDate: new Date(String(result.item.metadata.sentDate || new Date().toISOString())),
-          wordCount: Number(result.item.metadata.wordCount || 0)
+          emailAccountId: String(result.item.metadata.emailAccountId),
+          recipientEmail: String(result.item.metadata.recipientEmail),
+          relationship: String(result.item.metadata.relationship),
+          subject: String(result.item.metadata.subject),
+          sentDate: new Date(String(result.item.metadata.sentDate)),
+          wordCount: Number(result.item.metadata.wordCount)
         },
         scores: {
           semantic: semanticScore,

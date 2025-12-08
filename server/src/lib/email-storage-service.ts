@@ -190,7 +190,7 @@ export class EmailStorageService {
         continue;
       }
 
-      const subject = parsedEmail.subject?.trim() || '';
+      const subject = parsedEmail.subject?.trim();
       const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
         userId: params.userId,
         emailAccountId: params.emailAccountId
@@ -205,14 +205,14 @@ export class EmailStorageService {
 
       const hasUserContent = hasActualUserContent(processedContent.userReply);
       const features = hasUserContent ? extractEmailFeatures(redactedUserReply, {
-        email: emailData.from || '',
+        email: emailData.from,
         name: ''
       }) : null;
 
       processedEmails.push({
         params,
         parsedEmail,
-        subject,
+        subject: subject!,
         redactedUserReply,
         features,
         hasUserContent
@@ -337,9 +337,9 @@ export class EmailStorageService {
         const getAddresses = (field: any) => {
           if (!field) return [];
           if (Array.isArray(field)) {
-            return field.flatMap(f => f.value || []);
+            return field.flatMap(f => f.value);
           }
-          return field.value || [];
+          return field.value;
         };
 
         const allRecipients = [
@@ -369,7 +369,7 @@ export class EmailStorageService {
             emailAccountId,
             emailData,
             parsedEmail,
-            subject,
+            subject: subject!,
             redactedUserReply,
             features,
             semanticVector,
@@ -445,7 +445,7 @@ export class EmailStorageService {
       const parsedEmail = emailData.parsed;
 
       // Subject is allowed to be empty - store as empty string
-      const subject = parsedEmail.subject?.trim() || '';
+      const subject = parsedEmail.subject?.trim();
 
       // Process email to extract user content (remove signatures, quotes)
       const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
@@ -473,7 +473,7 @@ export class EmailStorageService {
       if (hasUserContent) {
         // Extract features from redacted text
         features = extractEmailFeatures(redactedUserReply, {
-          email: emailData.from || '',
+          email: emailData.from,
           name: ''
         });
 
@@ -501,9 +501,9 @@ export class EmailStorageService {
         const getAddresses = (field: any) => {
           if (!field) return [];
           if (Array.isArray(field)) {
-            return field.flatMap(f => f.value || []);
+            return field.flatMap(f => f.value);
           }
-          return field.value || [];
+          return field.value;
         };
 
         const allRecipients = [
@@ -534,7 +534,7 @@ export class EmailStorageService {
             emailAccountId,
             emailData,
             parsedEmail,
-            subject,
+            subject: subject!,
             redactedUserReply,
             features,
             semanticVector,
@@ -566,7 +566,7 @@ export class EmailStorageService {
           emailAccountId,
           emailData,
           parsedEmail,
-          subject,
+          subject: subject!,
           redactedUserReply,
           features,
           semanticVector,
@@ -723,7 +723,7 @@ export class EmailStorageService {
           userReply: redactedUserReply,
           subject,  // Empty string if no subject
           recipientPersonEmailId: relationshipDetection.personEmailId,  // FK to person_emails
-          wordCount: features?.stats.wordCount || 0,
+          wordCount: features?.stats.wordCount!,
           sentDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
@@ -737,7 +737,7 @@ export class EmailStorageService {
           rawText: parsedEmail.text!,  // Validated above at line 127
           subject,  // Empty string if no subject
           senderPersonEmailId: relationshipDetection.personEmailId,  // FK to person_emails
-          wordCount: features?.stats.wordCount || 0,
+          wordCount: features?.stats.wordCount!,
           receivedDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,

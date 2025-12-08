@@ -324,8 +324,8 @@ router.get('/stats', requireAuth, async (_req, res): Promise<void> => {
     // Include both 'waiting' and 'prioritized' jobs in the queued count
     const stats = {
       active: emailCounts.active + toneCounts.active,
-      queued: (emailCounts.waiting || 0) + (toneCounts.waiting || 0) + 
-              (emailCounts.prioritized || 0) + (toneCounts.prioritized || 0),
+      queued: emailCounts.waiting + toneCounts.waiting +
+              emailCounts.prioritized + toneCounts.prioritized,
       completed: emailCounts.completed + toneCounts.completed,
       failed: emailCounts.failed + toneCounts.failed,
       delayed: emailCounts.delayed + toneCounts.delayed,

@@ -22,7 +22,7 @@ export class RegexSignatureDetector {
       return [];
     }
 
-    const patterns = result.rows[0].signature_patterns || [];
+    const patterns = result.rows[0].signature_patterns;
     this.userPatterns.set(userId, patterns);
     return patterns;
   }

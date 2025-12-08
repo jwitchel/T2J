@@ -275,19 +275,19 @@ export class RelationshipService {
     }
     
     // Specific greetings if consistent (optional field)
-    const topGreetings = aggregated.greetings?.filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD) || [];
-    if (topGreetings.length > 0) {
+    const topGreetings = aggregated.greetings?.filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD);
+    if (topGreetings && topGreetings.length > 0) {
       parts.push(`Preferred greetings: ${topGreetings.map(g => g.text).join(', ')}.`);
     }
 
     // Specific closings if consistent (optional field)
-    const topClosings = aggregated.closings?.filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD) || [];
-    if (topClosings.length > 0) {
+    const topClosings = aggregated.closings?.filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD);
+    if (topClosings && topClosings.length > 0) {
       parts.push(`Preferred closings: ${topClosings.map(c => c.text).join(', ')}.`);
     }
 
     // Common phrases if frequent (optional field - not yet implemented)
-    const commonPhrases: PhraseFrequency[] = aggregated.commonPhrases || [];
+    const commonPhrases: PhraseFrequency[] = aggregated.commonPhrases!;
     if (commonPhrases.length > 0) {
       const topPhrases = commonPhrases
         .slice(0, 5)
@@ -296,7 +296,7 @@ export class RelationshipService {
     }
 
     // Emoji usage (optional field)
-    const emojis: EmojiFrequency[] = aggregated.emojis || [];
+    const emojis: EmojiFrequency[] = aggregated.emojis!;
     if (emojis.length > 0) {
       const topEmojis = emojis.slice(0, 5).map(e => e.emoji);
       parts.push(`Feel free to use emojis like: ${topEmojis.join(' ')}.`);
@@ -317,24 +317,24 @@ export class RelationshipService {
     const defaults = DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
     
     // Extract top greetings and closings (optional fields)
-    const preferredGreetings = (aggregated.greetings || [])
+    const preferredGreetings = (aggregated.greetings!)
       .filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PREFERRED_THRESHOLD)
       .map(g => g.text)
       .slice(0, 5);
 
-    const preferredClosings = (aggregated.closings || [])
+    const preferredClosings = (aggregated.closings!)
       .filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PREFERRED_THRESHOLD)
       .map(c => c.text)
       .slice(0, 5);
 
     // Extract common phrases (used frequently) - optional field not yet implemented
-    const commonPhrases: string[] = (aggregated.commonPhrases || [])
+    const commonPhrases: string[] = (aggregated.commonPhrases!)
       .filter(p => p.frequency > RELATIONSHIP_THRESHOLDS.MIN_PHRASE_FREQUENCY)
       .map(p => p.phrase)
       .slice(0, 10);
 
     // Extract emojis if used frequently enough (optional field)
-    const commonEmojis: string[] = (aggregated.emojis || [])
+    const commonEmojis: string[] = (aggregated.emojis!)
       .filter(e => e.frequency > RELATIONSHIP_THRESHOLDS.MIN_PHRASE_FREQUENCY)
       .map(e => e.emoji)
       .slice(0, 10);

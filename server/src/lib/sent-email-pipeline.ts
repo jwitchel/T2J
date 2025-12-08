@@ -5,7 +5,7 @@ import { EmailProcessor, ProcessedEmail, ProcessingContext } from './email-proce
 import { pool } from './db';
 
 // Pipeline configuration from environment
-const PIPELINE_CONCURRENCY = parseInt(process.env.EMAIL_PIPELINE_CONCURRENCY || '1', 10);
+const PIPELINE_CONCURRENCY = parseInt(process.env.EMAIL_PIPELINE_CONCURRENCY!, 10);
 
 export interface PipelineOptions {
   userId: string;

@@ -135,8 +135,8 @@ export class PromptFormatterV2 {
 
     // Build minimal template data for action-analysis (no examples/patterns needed)
     const templateData = {
-      incomingEmail: params.incomingEmail || '',
-      recipientEmail: params.recipientEmail || '',
+      incomingEmail: params.incomingEmail!,
+      recipientEmail: params.recipientEmail!,
       relationship: 'unknown', // Not used in action-analysis
       userNames: params.userNames,
       incomingEmailMetadata: params.incomingEmailMetadata ? {

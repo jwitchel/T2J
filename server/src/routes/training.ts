@@ -136,7 +136,7 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
             console.log(`[Training] Email ${validMessages[i].messageId} skipped (duplicate or no content)`);
           } else {
             processed++;
-            saved += result.saved || 0;
+            saved += result.saved!;
           }
         } else {
           errors++;
@@ -359,7 +359,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
           [email.id]
         );
 
-        const text = emailResult.rows[0]?.user_reply || '';
+        const text = emailResult.rows[0]!.user_reply;
 
         return {
           userId,
@@ -474,10 +474,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
               date: new Date(email.metadata.sentDate || Date.now()),
               from: [{ address: userId, name: '' }],
               replyTo: [],
-              to: [{ address: email.metadata.recipientEmail || '', name: '' }],
+              to: [{ address: email.metadata.recipientEmail, name: '' }],
               cc: [],
               bcc: [],
-              subject: email.metadata.subject || '',
+              subject: email.metadata.subject,
               textContent: textForAnalysis,
               htmlContent: null,
               userReply: textForAnalysis,

@@ -22,7 +22,7 @@ if (!process.env.ENCRYPTION_KEY) {
 // SERVICE_TOKEN is loaded from .env for worker authentication
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT!;
 
 // Test database connection and initialize schedulers
 async function initializeDatabase() {

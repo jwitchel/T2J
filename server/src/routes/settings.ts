@@ -27,7 +27,7 @@ router.get('/profile', requireAuth, async (req, res) => {
     }
 
     const user = userResult.rows[0];
-    const preferences = user.preferences || {};
+    const preferences = user.preferences;
 
     // Get defaults from EmailActionRouter and merge with saved preferences
     const defaultFolders = EmailActionRouter.getDefaultFolders();
@@ -46,13 +46,13 @@ router.get('/profile', requireAuth, async (req, res) => {
 
     return res.json({
       preferences: {
-        name: preferences.name || user.name || '',
-        nicknames: preferences.nicknames || '',
-        signatureBlock: preferences.signatureBlock || '',
+        name: preferences.name || user.name,
+        nicknames: preferences.nicknames,
+        signatureBlock: preferences.signatureBlock,
         folderPreferences: completeFolderPreferences,
-        workDomainsCSV: preferences.workDomainsCSV || '',
-        familyEmailsCSV: preferences.familyEmailsCSV || '',
-        spouseEmailsCSV: preferences.spouseEmailsCSV || ''
+        workDomainsCSV: preferences.workDomainsCSV,
+        familyEmailsCSV: preferences.familyEmailsCSV,
+        spouseEmailsCSV: preferences.spouseEmailsCSV
       }
     });
   } catch (error) {
@@ -84,15 +84,15 @@ router.post('/profile', requireAuth, async (req, res) => {
     }
 
     // Merge current preferences with updates
-    const currentPrefs = currentResult.rows[0].preferences || {};
+    const currentPrefs = currentResult.rows[0].preferences;
     const updatedPrefs = {
       ...currentPrefs,
       ...(name !== undefined && { name }),
       ...(nicknames !== undefined && { nicknames }),
       ...(signatureBlock !== undefined && { signatureBlock }),
-      ...(workDomainsCSV !== undefined && { workDomainsCSV: workDomainsCSV || '' }),
-      ...(familyEmailsCSV !== undefined && { familyEmailsCSV: familyEmailsCSV || '' }),
-      ...(spouseEmailsCSV !== undefined && { spouseEmailsCSV: spouseEmailsCSV || '' })
+      ...(workDomainsCSV !== undefined && { workDomainsCSV }),
+      ...(familyEmailsCSV !== undefined && { familyEmailsCSV }),
+      ...(spouseEmailsCSV !== undefined && { spouseEmailsCSV })
     };
 
     // Update with merged preferences

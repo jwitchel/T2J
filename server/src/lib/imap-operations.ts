@@ -350,7 +350,7 @@ export class ImapOperations {
 
         if (lastUid === 0) {
           // First run - use 15-min lookback to avoid processing ancient emails
-          const lookbackMinutes = parseInt(process.env.NEXT_PUBLIC_LOOK_BACK_DEFAULT_MINUTES || '15', 10);
+          const lookbackMinutes = parseInt(process.env.NEXT_PUBLIC_LOOK_BACK_DEFAULT_MINUTES!, 10);
           const since = new Date(Date.now() - lookbackMinutes * 60 * 1000);
           uids = await conn.search([['SINCE', since]]);
 

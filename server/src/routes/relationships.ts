@@ -118,8 +118,8 @@ router.delete('/:type', async (req: Request, res: Response) => {
 router.get('/people', async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.id;
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseInt(req.query.limit as string);
+    const offset = parseInt(req.query.offset as string);
     
     const people = await personService.listPeopleForUser({
       userId,
@@ -262,7 +262,7 @@ router.post('/people/:id/relationships', async (req: Request, res: Response) => 
            user_set = true,
            confidence = $5,
            updated_at = NOW()`,
-      [userId, id, relationship.id, isPrimary || false, confidence || 0.5]
+      [userId, id, relationship.id, isPrimary, confidence]
     );
     
     // Return updated person
