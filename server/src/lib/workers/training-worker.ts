@@ -180,7 +180,10 @@ trainingWorker.on('failed', (job, err) => {
 // Handle lock renewal errors (OS sleep/wake scenario)
 trainingWorker.on('error', (err) => {
   if (err.message.includes('could not renew lock')) {
-    console.warn('[TrainingWorker] Lock renewal failed - job will be marked as stalled and handled by stalledInterval');
+    // Extract job ID from error message if available (format: "Could not renew lock for job <id>")
+    const jobIdMatch = err.message.match(/job\s+(\S+)/i);
+    const jobId = jobIdMatch ? jobIdMatch[1] : 'unknown';
+    console.warn(`[TrainingWorker] Lock renewal failed for job ${jobId} - will be marked as stalled`);
   } else {
     console.error('[TrainingWorker] Worker error:', err);
   }

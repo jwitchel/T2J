@@ -208,7 +208,10 @@ inboxWorker.on('failed', (job, err) => {
 // Handle lock renewal errors (OS sleep/wake scenario)
 inboxWorker.on('error', (err) => {
   if (err.message.includes('could not renew lock')) {
-    console.warn('[InboxWorker] Lock renewal failed - job will be marked as stalled and handled by stalledInterval');
+    // Extract job ID from error message if available (format: "Could not renew lock for job <id>")
+    const jobIdMatch = err.message.match(/job\s+(\S+)/i);
+    const jobId = jobIdMatch ? jobIdMatch[1] : 'unknown';
+    console.warn(`[InboxWorker] Lock renewal failed for job ${jobId} - will be marked as stalled`);
   } else {
     console.error('[InboxWorker] Worker error:', err);
   }
