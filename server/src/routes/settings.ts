@@ -102,13 +102,10 @@ router.get('/profile', requireAuth, async (req, res) => {
       ? { ...defaultFolders, ...preferences.folderPreferences }
       : defaultFolders;
 
-    // Get drafts folder path from user preferences, with fallback to default
-    const draftsFolderPath = preferences.folderPreferences?.draftsFolderPath || '[Gmail]/Drafts';
-
-    // Add draftsFolderPath to folderPreferences
+    // Add draftsFolderPath to folderPreferences (undefined if not configured)
     const completeFolderPreferences = {
       ...folderPreferences,
-      draftsFolderPath
+      draftsFolderPath: preferences.folderPreferences?.draftsFolderPath
     };
 
     return res.json({
