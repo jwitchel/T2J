@@ -204,23 +204,48 @@ export class WritingPatternAnalyzer {
     relationship: string,
     styleClusterName?: string
   ): Promise<SentencePatterns> {
+    const cached = await this._loadCachedStats(userId, relationship);
+    if (cached) return cached;
 
-    // Try to load from cache first (outside transaction)
+    return this._withAdvisoryLock(userId, relationship, async () => {
+      const emails = await this._fetchEmailsFromPostgres(userId, relationship, styleClusterName);
+      const { allSentences, wordCounts } = await this._extractSentences(emails);
+      const metrics = this._calculateMetrics(wordCounts);
+      const examples = this._selectExamples(allSentences, wordCounts);
+      const result = { ...metrics, examples, rawSentenceLengths: wordCounts };
+      await this._persistStats(userId, relationship, result, wordCounts.length);
+      return result;
+    });
+  }
+
+  /**
+   * Load cached sentence statistics from database
+   */
+  private async _loadCachedStats(userId: string, relationship: string): Promise<SentencePatterns | null> {
     const cacheStart = Date.now();
     const cached = await this._loadSentenceStats(userId, relationship);
     const cacheEnd = Date.now();
+
     if (cached) {
       console.log(`[TIMING] calculateSentenceStats cache HIT: ${cacheEnd - cacheStart}ms`);
       return cached;
     }
-    console.log(`[TIMING] Cache check: ${cacheEnd - cacheStart}ms (MISS)`);
 
-    // Use advisory lock to prevent duplicate calculations across processes
-    // Advisory locks are lightweight and don't require a row to exist
+    console.log(`[TIMING] Cache check: ${cacheEnd - cacheStart}ms (MISS)`);
+    return null;
+  }
+
+  /**
+   * Execute callback with advisory lock protection
+   */
+  private async _withAdvisoryLock<T>(
+    userId: string,
+    relationship: string,
+    callback: () => Promise<T>
+  ): Promise<T> {
     const lockKey = this._getAdvisoryLockKey(userId, relationship);
 
     try {
-      // Try to acquire advisory lock (non-blocking)
       const lockStart = Date.now();
       const lockResult = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
       const lockAcquired = lockResult.rows[0]?.pg_try_advisory_lock;
@@ -228,61 +253,53 @@ export class WritingPatternAnalyzer {
       console.log(`[TIMING] Lock acquisition: ${lockEnd - lockStart}ms (acquired: ${lockAcquired})`);
 
       if (!lockAcquired) {
-        // Someone else is calculating, wait and retry cache
         console.log(`[SentenceStats] Another process is calculating for ${relationship}, waiting...`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        await new Promise(resolve => setTimeout(resolve, 2000));
         const cachedAfterWait = await this._loadSentenceStats(userId, relationship);
         if (cachedAfterWait) {
           console.log(`[SentenceStats] Cache hit after wait for ${relationship}`);
-          return cachedAfterWait;
+          return cachedAfterWait as T;
         }
-        // If still no cache after wait, try to acquire lock ourselves
         const retryLock = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
         if (!retryLock.rows[0]?.pg_try_advisory_lock) {
           console.log(`[SentenceStats] Still locked, calculating anyway for ${relationship}`);
         }
       }
 
-      // Double-check cache after acquiring lock
       const cachedAfterLock = await this._loadSentenceStats(userId, relationship);
       if (cachedAfterLock) {
         console.log(`[SentenceStats] Cache hit after lock for ${relationship}`);
-        return cachedAfterLock;
+        return cachedAfterLock as T;
       }
 
-      // Fetch emails for this relationship from PostgreSQL
-      const fetchStart = Date.now();
-      const emails = await this._fetchEmailsFromPostgres(userId, relationship, styleClusterName);
-      const fetchEnd = Date.now();
-      console.log(`[TIMING] DB fetch: ${fetchEnd - fetchStart}ms, fetched ${emails.length} emails`);
+      return await callback();
+    } finally {
+      try {
+        await db.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+      } catch (error) {
+        console.error(`[SentenceStats] Failed to release lock for ${relationship}:`, error);
+      }
+    }
+  }
 
+  /**
+   * Extract sentences from emails using NLP
+   */
+  private async _extractSentences(
+    emails: Array<{ metadata: { userReply: string; sentDate: Date } }>
+  ): Promise<{ allSentences: string[]; wordCounts: number[] }> {
     if (emails.length === 0) {
-      return {
-        avgLength: 0,
-        medianLength: 0,
-        trimmedMean: 0,
-        minLength: 0,
-        maxLength: 0,
-        stdDeviation: 0,
-        percentile25: 0,
-        percentile75: 0,
-        distribution: { short: 0, medium: 0, long: 0 },
-        examples: [] // Required by interface
-      };
+      return { allSentences: [], wordCounts: [] };
     }
 
-    // Collect all sentences from userReply texts
     const allSentences: string[] = [];
-    // Array where each element is the word count of a sentence
-    // e.g., [5, 10, 7] means 3 sentences with 5, 10, and 7 words respectively
-    const wordCountsPerSentence: number[] = [];
+    const wordCounts: number[] = [];
 
     const nlpStart = Date.now();
     emails.forEach(email => {
       const userReply = email.metadata.userReply;
       if (!userReply || userReply === '[ForwardedWithoutComment]') return;
 
-      // Use compromise to split into sentences
       const doc = nlp(userReply);
       const sentences = doc.sentences();
 
@@ -290,16 +307,21 @@ export class WritingPatternAnalyzer {
         const text = sentence.text().trim();
         if (text.length > 0) {
           allSentences.push(text);
-          // Use compromise's wordCount method
-          const wordCount = sentence.wordCount();
-          wordCountsPerSentence.push(wordCount);
+          wordCounts.push(sentence.wordCount());
         }
       });
     });
     const nlpEnd = Date.now();
-    console.log(`[TIMING] NLP processing (${emails.length} emails): ${nlpEnd - nlpStart}ms, extracted ${wordCountsPerSentence.length} sentences`);
-    
-    if (wordCountsPerSentence.length === 0) {
+    console.log(`[TIMING] NLP processing (${emails.length} emails): ${nlpEnd - nlpStart}ms, extracted ${wordCounts.length} sentences`);
+
+    return { allSentences, wordCounts };
+  }
+
+  /**
+   * Calculate statistical metrics from word counts
+   */
+  private _calculateMetrics(wordCounts: number[]): Omit<SentencePatterns, 'examples' | 'rawSentenceLengths'> {
+    if (wordCounts.length === 0) {
       return {
         avgLength: 0,
         medianLength: 0,
@@ -309,55 +331,66 @@ export class WritingPatternAnalyzer {
         stdDeviation: 0,
         percentile25: 0,
         percentile75: 0,
-        distribution: { short: 0, medium: 0, long: 0 },
-        examples: [] // Required by interface
+        distribution: { short: 0, medium: 0, long: 0 }
       };
     }
-    
-    // Sort for median and percentile calculations
-    const sortedCounts = [...wordCountsPerSentence].sort((a, b) => a - b);
-    
-    // Calculate statistics using simple-statistics
-    const avgLength = ss.mean(wordCountsPerSentence);
+
+    const sortedCounts = [...wordCounts].sort((a, b) => a - b);
+    const avgLength = ss.mean(wordCounts);
     const medianLength = ss.median(sortedCounts);
-    const minLength = ss.min(wordCountsPerSentence);
-    const maxLength = ss.max(wordCountsPerSentence);
-    const stdDeviation = ss.standardDeviation(wordCountsPerSentence);
+    const minLength = ss.min(wordCounts);
+    const maxLength = ss.max(wordCounts);
+    const stdDeviation = ss.standardDeviation(wordCounts);
     const percentile25 = ss.quantile(sortedCounts, 0.25);
     const percentile75 = ss.quantile(sortedCounts, 0.75);
-    
-    // Calculate trimmed mean (remove top and bottom 5%)
+
     const trimAmount = Math.floor(sortedCounts.length * 0.05);
-    const trimmedData = trimAmount > 0 
+    const trimmedData = trimAmount > 0
       ? sortedCounts.slice(trimAmount, sortedCounts.length - trimAmount)
       : sortedCounts;
     const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
 
-    // Get sentence length breakpoints from env
     const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
     const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
 
-    // Calculate distribution
-    const shortCount = wordCountsPerSentence.filter(c => c < shortMax).length;
-    const mediumCount = wordCountsPerSentence.filter(c => c >= shortMax && c <= longMin).length;
-    const longCount = wordCountsPerSentence.filter(c => c > longMin).length;
-    const totalSentenceCount = wordCountsPerSentence.length;
+    const shortCount = wordCounts.filter(c => c < shortMax).length;
+    const mediumCount = wordCounts.filter(c => c >= shortMax && c <= longMin).length;
+    const longCount = wordCounts.filter(c => c > longMin).length;
 
     const distribution = {
-      short: shortCount / totalSentenceCount,
-      medium: mediumCount / totalSentenceCount,
-      long: longCount / totalSentenceCount
+      short: shortCount / wordCounts.length,
+      medium: mediumCount / wordCounts.length,
+      long: longCount / wordCounts.length
     };
 
-    // Select 3-5 example sentences showing variety in length
+    return {
+      avgLength: Math.round(avgLength * 100) / 100,
+      medianLength: Math.round(medianLength * 100) / 100,
+      trimmedMean: Math.round(trimmedMean * 100) / 100,
+      minLength,
+      maxLength,
+      stdDeviation: Math.round(stdDeviation * 100) / 100,
+      percentile25: Math.round(percentile25 * 100) / 100,
+      percentile75: Math.round(percentile75 * 100) / 100,
+      distribution
+    };
+  }
+
+  /**
+   * Select example sentences showing variety in length
+   */
+  private _selectExamples(allSentences: string[], wordCounts: number[]): string[] {
+    if (allSentences.length === 0) return [];
+
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
+
+    const shortSentences = allSentences.filter((_, i) => wordCounts[i] < shortMax);
+    const mediumSentences = allSentences.filter((_, i) => wordCounts[i] >= shortMax && wordCounts[i] <= longMin);
+    const longSentences = allSentences.filter((_, i) => wordCounts[i] > longMin);
+
     const examples: string[] = [];
 
-    // Find indices of sentences at different length percentiles
-    const shortSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] < shortMax);
-    const mediumSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] >= shortMax && wordCountsPerSentence[i] <= longMin);
-    const longSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] > longMin);
-
-    // Add one example from each category if available
     if (shortSentences.length > 0) {
       examples.push(shortSentences[Math.floor(Math.random() * shortSentences.length)]);
     }
@@ -368,7 +401,6 @@ export class WritingPatternAnalyzer {
       examples.push(longSentences[Math.floor(Math.random() * longSentences.length)]);
     }
 
-    // If we have fewer than 3 examples, add more from the most common category
     while (examples.length < 3 && allSentences.length > examples.length) {
       const remaining = allSentences.filter(s => !examples.includes(s));
       if (remaining.length > 0) {
@@ -378,23 +410,20 @@ export class WritingPatternAnalyzer {
       }
     }
 
-    const result: SentencePatterns = {
-      avgLength: Math.round(avgLength * 100) / 100,
-      medianLength: Math.round(medianLength * 100) / 100,
-      trimmedMean: Math.round(trimmedMean * 100) / 100,
-      minLength,
-      maxLength,
-      stdDeviation: Math.round(stdDeviation * 100) / 100,
-      percentile25: Math.round(percentile25 * 100) / 100,
-      percentile75: Math.round(percentile75 * 100) / 100,
-      distribution,
-      examples,
-      rawSentenceLengths: wordCountsPerSentence  // Include raw data for accumulation
-    };
-    
-    // Debug logging
+    return examples;
+  }
+
+  /**
+   * Persist calculated statistics to database
+   */
+  private async _persistStats(
+    userId: string,
+    relationship: string,
+    result: SentencePatterns,
+    totalSentences: number
+  ): Promise<void> {
     console.log(`[SentenceStats] Calculated for ${relationship}:`, {
-      totalSentences: wordCountsPerSentence.length,
+      totalSentences,
       avgLength: result.avgLength,
       medianLength: result.medianLength,
       trimmedMean: result.trimmedMean,
@@ -402,22 +431,11 @@ export class WritingPatternAnalyzer {
       range: `${result.minLength} - ${result.maxLength}`,
       stdDev: result.stdDeviation
     });
-    
-      // Store the stats in the database
-      await this._storeSentenceStats(userId, relationship, {
-        ...result,
-        totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
-      } as any);
 
-      return result;
-    } finally {
-      // Always release the advisory lock
-      try {
-        await db.query('SELECT pg_advisory_unlock($1)', [lockKey]);
-      } catch (error) {
-        console.error(`[SentenceStats] Failed to release lock for ${relationship}:`, error);
-      }
-    }
+    await this._storeSentenceStats(userId, relationship, {
+      ...result,
+      totalSentences
+    } as any);
   }
 
   /**

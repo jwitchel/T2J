@@ -201,52 +201,66 @@ function extractLinguisticMarkers(doc: any): {
   professionalPhrases: string[];
   informalLanguage: string[];
 } {
+  const endearments = _extractEndearments(doc);
+  const professionalPhrases = _extractProfessionalPhrases(doc);
+  const informalLanguage = _detectInformalLanguage(doc);
+
+  return {
+    endearments: [...new Set(endearments)],
+    professionalPhrases: [...new Set(professionalPhrases)],
+    informalLanguage: [...new Set(informalLanguage)]
+  };
+}
+
+function _extractEndearments(doc: any): string[] {
   const endearments: string[] = [];
-  const professionalPhrases: string[] = [];
-  const informalLanguage: string[] = [];
-  
-  // Use compromise's tagging and patterns for endearments
-  // Look for patterns that indicate intimate relationships
+
   const termsOfEndearment = doc.match('#Endearment');
   const loveExpressions = doc.match('love #Pronoun');
-  
-  // Collect endearments
+
   if (termsOfEndearment.found) {
     termsOfEndearment.forEach((m: any) => {
       const term = m.text().toLowerCase();
-      // Filter out formal uses like "Dear Sir"
       if (!m.has('dear #Honorific') && !m.has('dear sir')) {
         endearments.push(term);
       }
     });
   }
-  
+
   if (loveExpressions.found) {
     endearments.push('love');
   }
-  
-  // Professional language patterns - match longer phrases first
+
+  return endearments;
+}
+
+function _extractProfessionalPhrases(doc: any): string[] {
+  const professionalPhrases: string[] = [];
+
   const businessPhrases = doc.match('(per our discussion|as per our|pursuant to|with regard to|further to|per our)');
   const formalRequests = doc.match('(please find attached|for your review|kindly|at your earliest convenience|for your consideration|please find|for your)');
   const corporateLanguage = doc.match('(stakeholder|deliverable|action item|touch base|circle back|bandwidth)');
-  
+
   [businessPhrases, formalRequests, corporateLanguage].forEach(matches => {
     if (matches.found) {
       matches.forEach((m: any) => {
         const phrase = m.text().toLowerCase();
-        // Add full phrase if it's a compound phrase
         professionalPhrases.push(phrase);
       });
     }
   });
-  
-  // Use compromise's built-in tags for informal language detection
-  // First, enhance tagging for common informal expressions
+
+  return professionalPhrases;
+}
+
+function _detectInformalLanguage(doc: any): string[] {
+  const informalLanguage: string[] = [];
+
   const informalExpressions = ['lol', 'lmao', 'omg', 'btw', 'fyi', 'haha', 'hehe', 'dude', 'bro', 'gotta', 'gonna', 'wanna'];
   informalExpressions.forEach(expr => {
     doc.match(expr).tag('Informal');
   });
-  
+
   const informalIndicators = {
     informal: doc.match('#Informal'),
     slang: doc.match('#Slang'),
@@ -254,13 +268,11 @@ function extractLinguisticMarkers(doc: any): {
     interjections: doc.match('#Interjection'),
     emoticons: doc.match('#Emoticon'),
     expressions: doc.match('#Expression').filter((expr: any) => {
-      // Filter for informal expressions
       const text = expr.text().toLowerCase();
       return /^(lol|lmao|haha|hehe|omg|btw|fyi|rofl|smh|tbh|imo|imho)/.test(text);
     })
   };
-  
-  // Collect informal language markers
+
   if (informalIndicators.informal.found) {
     informalIndicators.informal.forEach((m: any) => {
       const text = m.text().toLowerCase();
@@ -269,7 +281,7 @@ function extractLinguisticMarkers(doc: any): {
       }
     });
   }
-  
+
   if (informalIndicators.slang.found) {
     informalIndicators.slang.forEach((m: any) => {
       const text = m.text().toLowerCase();
@@ -278,7 +290,7 @@ function extractLinguisticMarkers(doc: any): {
       }
     });
   }
-  
+
   if (informalIndicators.interjections.found) {
     informalIndicators.interjections.forEach((m: any) => {
       const text = m.text().toLowerCase();
@@ -287,59 +299,57 @@ function extractLinguisticMarkers(doc: any): {
       }
     });
   }
-  
+
   if (informalIndicators.emoticons.found) {
     informalIndicators.emoticons.forEach((m: any) => {
       informalLanguage.push(m.text());
     });
   }
-  
+
   if (informalIndicators.expressions.found) {
     informalIndicators.expressions.forEach((m: any) => {
-      const text = m.text().toLowerCase().replace(/[.,!?]$/, ''); // Remove trailing punctuation
+      const text = m.text().toLowerCase().replace(/[.,!?]$/, '');
       if (!informalLanguage.includes(text)) {
         informalLanguage.push(text);
       }
     });
   }
-  
-  // Add contraction density as an indicator
-  const contractionCount = informalIndicators.contractions.length;
-  const wordCount = doc.wordCount();
+
+  _analyzeContractionDensity(informalIndicators.contractions, doc.wordCount(), informalLanguage);
+  _detectStructuralInformality(doc, informalLanguage);
+
+  return informalLanguage;
+}
+
+function _analyzeContractionDensity(contractions: any, wordCount: number, informalLanguage: string[]): void {
+  const contractionCount = contractions.length;
   const contractionDensity = wordCount > 0 ? contractionCount / wordCount : 0;
-  
-  if (contractionDensity > 0.1) { // More than 10% contractions
+
+  if (contractionDensity > 0.1) {
     informalLanguage.push(`high_contraction_density`);
   } else if (contractionCount > 2) {
     informalLanguage.push(`${contractionCount}_contractions`);
   }
-  
-  // Detect sentence fragments (informal writing often has fragments)
-  const fragments = doc.sentences().filter((s: any) => 
+}
+
+function _detectStructuralInformality(doc: any, informalLanguage: string[]): void {
+  const fragments = doc.sentences().filter((s: any) =>
     s.wordCount() < 3 || !s.has('#Verb')
   );
   if (fragments.length > 0) {
     informalLanguage.push(`${fragments.length}_fragments`);
   }
-  
-  // Check for repeated punctuation (!!!, ???) - informal indicator
+
   if (/[!?]{2,}/.test(doc.text())) {
     informalLanguage.push('repeated_punctuation');
   }
-  
-  // Check for all caps words (excluding short acronyms)
-  const allCapsWords = doc.match('#Acronym').filter((m: any) => 
+
+  const allCapsWords = doc.match('#Acronym').filter((m: any) =>
     m.text().length > 3 && /^[A-Z]+$/.test(m.text())
   );
   if (allCapsWords.found) {
     informalLanguage.push('emphasis_caps');
   }
-  
-  return {
-    endearments: [...new Set(endearments)],
-    professionalPhrases: [...new Set(professionalPhrases)],
-    informalLanguage: [...new Set(informalLanguage)]
-  };
 }
 
 function analyzeGreetingStyle(doc: any): string {
