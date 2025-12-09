@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { auth } from '../lib/auth';
 import { personService } from '../lib/relationships/person-service';
 import { userRelationshipService } from '../lib/relationships/user-relationship-service';
+import { RelationshipType } from '../lib/relationships/types';
 
 const router = Router();
 
@@ -222,54 +223,27 @@ router.post('/people/:id/relationships', async (req: Request, res: Response) => 
     const userId = req.user.id;
     const { id } = req.params;
     const { relationshipType, isPrimary, confidence } = req.body;
-    
+
     if (!relationshipType) {
       return res.status(400).json({ error: 'Relationship type is required' });
     }
-    
-    // First verify the person exists
-    const person = await personService.getPersonById(id, userId);
-    if (!person) {
-      return res.status(404).json({ error: 'Person not found' });
-    }
-    
-    // Verify the relationship type exists
-    const relationship = await userRelationshipService.getRelationshipByType(userId, relationshipType);
-    if (!relationship) {
-      return res.status(400).json({ error: 'Invalid relationship type' });
-    }
-    
-    // Manually update the person_relationships table
-    const pool = personService.getPool();
-    
-    // First, unset any existing primary relationship if this is to be primary
-    if (isPrimary) {
-      await pool.query(
-        `UPDATE person_relationships 
-         SET is_primary = false 
-         WHERE user_id = $1 AND person_id = $2`,
-        [userId, id]
-      );
-    }
-    
-    // Insert or update the relationship
-    await pool.query(
-      `INSERT INTO person_relationships 
-       (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
-       ON CONFLICT (user_id, person_id, user_relationship_id) DO UPDATE 
-       SET is_primary = $4,
-           user_set = true,
-           confidence = $5,
-           updated_at = NOW()`,
-      [userId, id, relationship.id, isPrimary, confidence]
+
+    const person = await personService.assignRelationshipToPerson(
+      id,
+      userId,
+      relationshipType as RelationshipType,
+      isPrimary ?? false,
+      confidence ?? 1.0
     );
-    
-    // Return updated person
-    const updatedPerson = await personService.getPersonById(id, userId);
-    return res.json({ person: updatedPerson });
+
+    return res.json({ person });
   } catch (error: any) {
     console.error('Error assigning relationship:', error);
+    if (error.code === 'PERSON_NOT_FOUND') {
+      return res.status(404).json({ error: error.message });
+    } else if (error.code === 'INVALID_RELATIONSHIP') {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: 'Failed to assign relationship' });
   }
 });

@@ -910,6 +910,49 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
     client.release();
   }
 
+  /**
+   * Assign a relationship type to a person
+   */
+  async assignRelationshipToPerson(
+    personId: string,
+    userId: string,
+    relationshipType: RelationshipType,
+    isPrimary: boolean,
+    confidence: number = 1.0
+  ): Promise<PersonWithDetails> {
+    const relationshipResult = await this.pool.query(
+      `SELECT id FROM user_relationships
+       WHERE user_id = $1 AND relationship_type = $2 AND is_active = true`,
+      [userId, relationshipType]
+    );
+    const userRelationshipId = relationshipResult.rows[0]!.id;
+
+    return await withTransaction(this.pool, async (client) => {
+      if (isPrimary) {
+        await client.query(
+          `UPDATE person_relationships
+           SET is_primary = false
+           WHERE user_id = $1 AND person_id = $2`,
+          [userId, personId]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO person_relationships
+         (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
+         ON CONFLICT (user_id, person_id, user_relationship_id) DO UPDATE
+         SET is_primary = $4,
+             user_set = true,
+             confidence = $5,
+             updated_at = NOW()`,
+        [userId, personId, userRelationshipId, isPrimary, confidence]
+      );
+
+      return (await this.getPersonById(personId, userId, client))!;
+    });
+  }
+
   // Public method to get pool for direct queries
   getPool(): Pool {
     return this.pool;
