@@ -183,12 +183,6 @@ export namespace EmailActionType {
 }
 
 /**
- * Type alias for RecommendedAction (backwards compatibility)
- * This is what the LLM returns as its recommendation
- */
-export type RecommendedAction = EmailActionType;
-
-/**
  * Extended email message with action tracking
  */
 export interface EmailMessageWithAction {
