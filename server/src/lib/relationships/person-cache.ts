@@ -77,6 +77,9 @@ export class PersonCache {
           p.id,
           p.user_id,
           p.name,
+          p.relationship_type,
+          p.relationship_user_set,
+          p.relationship_confidence,
           p.created_at,
           p.updated_at,
           json_agg(
@@ -86,28 +89,12 @@ export class PersonCache {
               'is_primary', pe.is_primary,
               'created_at', pe.created_at
             ) ORDER BY pe.is_primary DESC, pe.created_at ASC
-          ) as emails,
-          COALESCE(
-            json_agg(
-              DISTINCT jsonb_build_object(
-                'id', pr.id,
-                'user_relationship_id', pr.user_relationship_id,
-                'relationship_type', ur.relationship_type,
-                'confidence', pr.confidence,
-                'is_primary', pr.is_primary,
-                'user_set', pr.user_set,
-                'created_at', pr.created_at
-              )
-            ) FILTER (WHERE pr.id IS NOT NULL),
-            '[]'::json
-          ) as relationships
+          ) as emails
         FROM people p
         INNER JOIN person_emails pe ON pe.person_id = p.id
-        LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = p.user_id
-        LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
         WHERE p.user_id = $1
           AND pe.email_address = ANY($2)
-        GROUP BY p.id, p.user_id, p.name, p.created_at, p.updated_at
+        GROUP BY p.id, p.user_id, p.name, p.relationship_type, p.relationship_user_set, p.relationship_confidence, p.created_at, p.updated_at
       `, [userId, uncachedEmails]);
 
       // Build map of email -> person
@@ -117,8 +104,10 @@ export class PersonCache {
           id: row.id,
           user_id: row.user_id,
           name: row.name,
+          relationship_type: row.relationship_type,
+          relationship_user_set: row.relationship_user_set,
+          relationship_confidence: row.relationship_confidence,
           emails: row.emails,
-          relationships: row.relationships,
           created_at: row.created_at,
           updated_at: row.updated_at
         };

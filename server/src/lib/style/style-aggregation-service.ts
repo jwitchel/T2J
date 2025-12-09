@@ -94,15 +94,13 @@ export class StyleAggregationService {
     relationshipType: string
   ): Promise<AggregatedStyle> {
     // Query email_sent from PostgreSQL for this user and relationship
-    // JOIN through person_emails and person_relationships to filter by relationship type
+    // Relationship type is now directly on the people table
     const emailsResult = await this.customPool.query(`
       SELECT es.user_reply, es.word_count, es.sent_date
       FROM email_sent es
       INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
       INNER JOIN people p ON pe.person_id = p.id
-      INNER JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
-      INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
-      WHERE es.user_id = $1 AND ur.relationship_type = $2
+      WHERE es.user_id = $1 AND p.relationship_type = $2
       ORDER BY es.sent_date DESC
       LIMIT $3
     `, [userId, relationshipType, MAX_EMAILS_TO_ANALYZE]);
@@ -272,23 +270,23 @@ export class StyleAggregationService {
     emailCount?: number;
     lastUpdated?: string;
   }>> {
-    // Get all relationship types from user_relationships
+    // Get distinct relationship types from people table
     const relationshipsResult = await this.customPool.query(
-      `SELECT DISTINCT relationship_type, display_name 
-       FROM user_relationships 
-       WHERE user_id = $1 AND is_active = true
+      `SELECT DISTINCT relationship_type
+       FROM people
+       WHERE user_id = $1 AND relationship_type IS NOT NULL
        ORDER BY relationship_type`,
       [userId]
     );
-    
+
     // Get aggregated styles
     const stylesResult = await this.customPool.query(
-      `SELECT target_identifier, profile_data 
-       FROM tone_preferences 
+      `SELECT target_identifier, profile_data
+       FROM tone_preferences
        WHERE user_id = $1 AND preference_type = 'category'`,
       [userId]
     );
-    
+
     const styleMap = new Map<string, AggregatedStyle>();
     for (const row of stylesResult.rows) {
       const data = row.profile_data;
@@ -297,10 +295,13 @@ export class StyleAggregationService {
         styleMap.set(row.target_identifier, style as AggregatedStyle);
       }
     }
-    
+
+    // Use RelationshipType.LABELS for display names
+    const { RelationshipType } = require('../relationships/types');
+
     return relationshipsResult.rows.map(row => ({
       relationshipType: row.relationship_type,
-      displayName: row.display_name,
+      displayName: RelationshipType.LABELS[row.relationship_type] || row.relationship_type,
       hasAggregatedStyle: styleMap.has(row.relationship_type),
       emailCount: styleMap.get(row.relationship_type)?.emailCount,
       lastUpdated: styleMap.get(row.relationship_type)?.lastUpdated

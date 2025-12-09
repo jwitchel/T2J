@@ -184,13 +184,9 @@ export class RelationshipDetector {
       person = found.get(recipientEmail.toLowerCase().trim()) || null;
     }
 
-    if (person && person.relationships.length > 0) {
-      // Find the primary relationship or the one with highest confidence
-      const primaryRel = person.relationships.find(r => r.is_primary)
-        || person.relationships.sort((a, b) => b.confidence - a.confidence)[0];
-
-      // Return early - will extract primaryEmail at end
-      return this._buildResult(person, primaryRel.relationship_type as RelationshipType, primaryRel.confidence);
+    if (person && person.relationship_type) {
+      // Relationship is now directly on the person
+      return this._buildResult(person, person.relationship_type, person.relationship_confidence);
     }
 
     // Step 2: Check configured relationships for BOTH addresses

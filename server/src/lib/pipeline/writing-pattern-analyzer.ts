@@ -479,17 +479,15 @@ export class WritingPatternAnalyzer {
 
       // Filter by relationship if not aggregate
       if (relationship && relationship !== 'aggregate') {
-        // Join to relationship tables to filter by relationship type
+        // Join to people table to filter by relationship type (now directly on people)
         query += `
         INNER JOIN person_emails pe ON se.recipient_person_email_id = pe.id
-        INNER JOIN person_relationships pr ON pr.person_id = pe.person_id AND pr.user_id = se.user_id
-        INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
+        INNER JOIN people p ON pe.person_id = p.id
         WHERE se.user_id = $1
           AND se.semantic_vector IS NOT NULL
-          AND pr.is_primary = true
         `;
         paramCount++;
-        query += ` AND ur.relationship_type = $${paramCount}`;
+        query += ` AND p.relationship_type = $${paramCount}`;
         params.push(relationship);
       } else {
         // For aggregate, no joins needed
@@ -1021,18 +1019,18 @@ export class WritingPatternAnalyzer {
    */
   async loadPatterns(
     userId: string,
-    relationship?: string
+    relationship: string | undefined
   ): Promise<WritingPatterns | null> {
     const query = `
-      SELECT profile_data 
-      FROM tone_preferences 
-      WHERE user_id = $1 
-        AND preference_type = $2 
+      SELECT profile_data
+      FROM tone_preferences
+      WHERE user_id = $1
+        AND preference_type = $2
         AND target_identifier = $3
     `;
-    
+
     const preferenceType = relationship ? 'category' : 'aggregate';
-    const targetIdentifier = relationship || 'aggregate';
+    const targetIdentifier = relationship ?? 'aggregate';
     
     const result = await db.query(query, [userId, preferenceType, targetIdentifier]);
     if (result.rows.length === 0) {
@@ -1054,13 +1052,12 @@ export class WritingPatternAnalyzer {
   async savePatterns(
     userId: string,
     patterns: WritingPatterns,
-    relationship?: string,
+    relationship: string | undefined,
     emailsAnalyzed: number = 1000
   ): Promise<void> {
     const preferenceType = relationship ? 'category' : 'aggregate';
-    let targetIdentifier = relationship || 'aggregate';
-    let userRelationshipId: string | null = null;
-    
+    const targetIdentifier = relationship ?? 'aggregate';
+
     // Create profile data with consistent structure
     const profileData = {
       meta: {
@@ -1072,21 +1069,6 @@ export class WritingPatternAnalyzer {
       writingPatterns: patterns
     };
 
-    if (relationship) {
-      // Ensure the relationship exists in user_relationships
-      const displayName = relationship.charAt(0).toUpperCase() + relationship.slice(1);
-      
-      const relationshipResult = await db.query(`
-        INSERT INTO user_relationships (user_id, relationship_type, display_name)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (user_id, relationship_type) 
-        DO UPDATE SET display_name = $3
-        RETURNING id
-      `, [userId, relationship, displayName]);
-      
-      userRelationshipId = relationshipResult.rows[0].id;
-    }
-    
     // Save to unified tone_preferences table
     // Note: updated_at is auto-updated by database trigger
     const query = `
@@ -1094,23 +1076,20 @@ export class WritingPatternAnalyzer {
         user_id,
         preference_type,
         target_identifier,
-        user_relationship_id,
         profile_data,
         emails_analyzed
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (user_id, preference_type, target_identifier)
       DO UPDATE SET
-        user_relationship_id = $4,
-        profile_data = $5,
-        emails_analyzed = $6
+        profile_data = $4,
+        emails_analyzed = $5
     `;
-    
+
     await db.query(query, [
       userId,
       preferenceType,
       targetIdentifier,
-      userRelationshipId,
       JSON.stringify(profileData),
       emailsAnalyzed
     ]);

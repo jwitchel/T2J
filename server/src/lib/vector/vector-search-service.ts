@@ -352,12 +352,10 @@ export class VectorSearchService {
       SELECT
         es.id, es.email_id, es.user_reply as text, es.semantic_vector, es.style_vector,
         es.user_id, es.email_account_id, pe.email_address as recipient_email,
-        ur.relationship_type, es.subject, es.sent_date, es.word_count
+        p.relationship_type, es.subject, es.sent_date, es.word_count
       FROM email_sent es
       INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
       INNER JOIN people p ON pe.person_id = p.id
-      LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
-      LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
       ${whereClause}
       ORDER BY es.sent_date DESC
       LIMIT $${paramCount + 1}

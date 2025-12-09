@@ -122,10 +122,8 @@ export class SpamDetector {
 
     // Step 3: Check existing relationship - skip LLM if already classified
     const person = await personService.findPersonByEmail(senderEmail, userId);
-    if (person) {
-      const relationshipType = person.relationships.find(r => r.is_primary)!.relationship_type;
-
-      if (relationshipType === RelationshipType.SPAM) {
+    if (person && person.relationship_type) {
+      if (person.relationship_type === RelationshipType.SPAM) {
         return {
           isSpam: true,
           indicators: ['Sender previously classified as spam'],
@@ -134,7 +132,7 @@ export class SpamDetector {
       }
       return {
         isSpam: false,
-        indicators: [`Sender has existing ${relationshipType} relationship`],
+        indicators: [`Sender has existing ${person.relationship_type} relationship`],
         senderResponseCount: responseCount
       };
     }

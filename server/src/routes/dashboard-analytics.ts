@@ -98,14 +98,12 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
         er.updated_at,
         er.email_account_id,
         ea.email_address,
-        ur.relationship_type,
+        p.relationship_type,
         p.name as person_name
        FROM email_received er
        JOIN email_accounts ea ON er.email_account_id = ea.id
        LEFT JOIN person_emails pe ON er.sender_person_email_id = pe.id
        LEFT JOIN people p ON pe.person_id = p.id
-       LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = er.user_id AND pr.is_primary = true
-       LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
        WHERE er.user_id = $1
        ORDER BY er.updated_at DESC
        LIMIT $2 OFFSET $3`,

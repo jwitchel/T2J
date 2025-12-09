@@ -88,13 +88,11 @@ router.get('/email/:accountId/:messageId', requireAuth, async (req, res): Promis
       dt.context_data as "contextData",
       dt.created_at as "draftCreatedAt",
       dt.generated_content as "draftBody",
-      ur.relationship_type as "relationshipType",
-      pr.confidence as "relationshipConfidence"
+      p.relationship_type as "relationshipType",
+      p.relationship_confidence as "relationshipConfidence"
     FROM email_received er
     INNER JOIN person_emails pe ON er.sender_person_email_id = pe.id
     INNER JOIN people p ON pe.person_id = p.id
-    LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = er.user_id AND pr.is_primary = true
-    LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
     LEFT JOIN draft_tracking dt
       ON dt.original_message_id = er.email_id
       AND dt.user_id = er.user_id

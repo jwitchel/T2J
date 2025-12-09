@@ -246,7 +246,7 @@ router.post('/wipe', requireAuth, async (req, res): Promise<void> => {
       DELETE FROM draft_tracking WHERE user_id = $1
     `, [userId]);
 
-    // Delete all people (CASCADE will automatically delete person_emails and person_relationships)
+    // Delete all people (CASCADE will automatically delete person_emails)
     await pool.query(`
       DELETE FROM people WHERE user_id = $1
     `, [userId]);
@@ -286,7 +286,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
 
     // Get ALL sent emails for the user across ALL accounts and relationships from PostgreSQL
     // (Pattern analysis uses sent emails to learn the user's writing style)
-    // JOIN through person_emails and person_relationships to get recipient and relationship info
+    // JOIN through person_emails to get recipient and relationship info (relationship is now on people table)
     const emailsResult = await pool.query(`
       SELECT
         es.id,
@@ -294,18 +294,17 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         es.email_account_id as "emailAccountId",
         es.user_reply as "userReply",
         es.sent_date as "sentDate",
-        ur.relationship_type as relationship,
+        p.relationship_type as relationship,
         pe.email_address as "recipientEmail",
         es.subject,
         es.email_id as "emailId"
       FROM email_sent es
       INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
       INNER JOIN people p ON pe.person_id = p.id
-      INNER JOIN person_relationships pr ON pr.person_id = p.id AND pr.user_id = es.user_id AND pr.is_primary = true
-      INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
       WHERE es.user_id = $1
         AND es.semantic_vector IS NOT NULL
         AND es.user_reply != ''
+        AND p.relationship_type IS NOT NULL
       ORDER BY es.sent_date DESC
       LIMIT 10000
     `, [userId]);

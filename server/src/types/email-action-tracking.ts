@@ -88,7 +88,7 @@ export namespace EmailActionType {
     [EmailActionType.SILENT_LARGE_LIST]: 'Large distribution list - silent',
     [EmailActionType.SILENT_UNSUBSCRIBE]: 'Unsubscribe candidate',
     [EmailActionType.SILENT_TODO]: 'Requires action - moved to todo folder',
-    [EmailActionType.KEEP_IN_INBOX]: 'Unclear intent - stays in inbox for manual review',
+    [EmailActionType.KEEP_IN_INBOX]: 'Stays in inbox for manual review',
     [EmailActionType.TRAINING]: 'Imported for training purposes',
     [EmailActionType.MANUALLY_HANDLED]: 'User handled manually'
   };

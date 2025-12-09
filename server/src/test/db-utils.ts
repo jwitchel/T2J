@@ -50,10 +50,8 @@ export async function setupTestDb() {
 export async function cleanupTestDb() {
   // Drop relationship tables first (due to foreign keys)
   await testPool.query('DROP TABLE IF EXISTS tone_preferences CASCADE');
-  await testPool.query('DROP TABLE IF EXISTS person_relationships CASCADE');
   await testPool.query('DROP TABLE IF EXISTS person_emails CASCADE');
   await testPool.query('DROP TABLE IF EXISTS people CASCADE');
-  await testPool.query('DROP TABLE IF EXISTS user_relationships CASCADE');
 
   // Drop main application tables
   await testPool.query('DROP TABLE IF EXISTS draft_tracking CASCADE');

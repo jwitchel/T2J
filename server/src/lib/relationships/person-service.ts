@@ -52,6 +52,9 @@ export interface Person {
   id: string;
   user_id: string;
   name: string;
+  relationship_type: RelationshipType | null;
+  relationship_user_set: boolean;
+  relationship_confidence: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -64,22 +67,8 @@ export interface PersonEmail {
   created_at: Date;
 }
 
-export interface PersonRelationship {
-  id: string;
-  user_id: string;
-  person_id: string;
-  relationship_type: string;
-  user_relationship_id: string;
-  is_primary: boolean;
-  user_set: boolean;
-  confidence: number;
-  created_at: Date;
-  updated_at: Date;
-}
-
 export interface PersonWithDetails extends Person {
   emails: PersonEmail[];
-  relationships: PersonRelationship[];
 }
 
 export interface CreatePersonParams {
@@ -214,47 +203,22 @@ export class PersonService {
         throw new DuplicateEmailError(normalizedEmail);
       }
       
-      // Create the person
+      // Create the person with relationship directly on the row
       const personResult = await client.query(
-        `INSERT INTO people (user_id, name, created_at, updated_at)
-         VALUES ($1, $2, NOW(), NOW())
-         RETURNING id, user_id, name, created_at, updated_at`,
-        [params.userId, params.name.trim()]
+        `INSERT INTO people (user_id, name, relationship_type, relationship_user_set, relationship_confidence, created_at, updated_at)
+         VALUES ($1, $2, $3, false, $4, NOW(), NOW())
+         RETURNING *`,
+        [params.userId, params.name.trim(), params.relationshipType || null, params.confidence || 1.0]
       );
-      
+
       const person = personResult.rows[0];
-      
+
       // Add the primary email
       await client.query(
         `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
-         VALUES ($1, $2, true, NOW())
-         RETURNING id, person_id, email_address, is_primary, created_at`,
+         VALUES ($1, $2, true, NOW())`,
         [person.id, normalizedEmail]
       );
-      
-      // Add relationship if provided
-      if (params.relationshipType) {
-        // Verify the relationship type exists for this user and get its ID
-        const relationshipCheck = await client.query(
-          `SELECT id, relationship_type FROM user_relationships 
-           WHERE user_id = $1 AND relationship_type = $2 AND is_active = true`,
-          [params.userId, params.relationshipType]
-        );
-        
-        if (relationshipCheck.rows.length === 0) {
-          throw new InvalidRelationshipError(params.relationshipType);
-        }
-        
-        const userRelationshipId = relationshipCheck.rows[0].id;
-        
-        await client.query(
-          `INSERT INTO person_relationships 
-           (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-           VALUES ($1, $2, $3, true, false, $4, NOW(), NOW())
-           RETURNING id, user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at`,
-          [params.userId, person.id, userRelationshipId, params.confidence || 0.5]
-        );
-      }
       
       await this._commitTransaction(client);
       
@@ -390,11 +354,11 @@ export class PersonService {
       } else {
         // Person doesn't exist with this email, create or find by name
         const personResult = await db.query(
-          `INSERT INTO people (user_id, name, created_at, updated_at)
-           VALUES ($1, $2, NOW(), NOW())
+          `INSERT INTO people (user_id, name, relationship_type, relationship_user_set, relationship_confidence, created_at, updated_at)
+           VALUES ($1, $2, $3, false, $4, NOW(), NOW())
            ON CONFLICT (user_id, name) DO NOTHING
            RETURNING id`,
-          [params.userId, params.name.trim()]
+          [params.userId, params.name.trim(), params.relationshipType || null, params.confidence || 1.0]
         );
 
         if (personResult.rows.length > 0) {
@@ -425,60 +389,16 @@ export class PersonService {
         );
       }
 
-      // Add or update relationship if provided
+      // Update relationship if provided (only if not user_set)
       if (params.relationshipType) {
-        // Check if the relationship type exists for this user and get its ID
-        const relCheck = await db.query(
-          `SELECT id FROM user_relationships
-           WHERE user_id = $1 AND relationship_type = $2 AND is_active = true`,
-          [params.userId, params.relationshipType]
+        await db.query(
+          `UPDATE people
+           SET relationship_type = $1,
+               relationship_confidence = GREATEST(relationship_confidence, $2),
+               updated_at = NOW()
+           WHERE id = $3 AND relationship_user_set = false`,
+          [params.relationshipType, params.confidence || 1.0, personId]
         );
-
-        if (relCheck.rows.length > 0) {
-          const userRelationshipId = relCheck.rows[0].id;
-
-          // Check existing primary relationship to respect priority
-          const existingPrimaryCheck = await db.query(
-            `SELECT pr.id, ur.relationship_type, pr.confidence
-             FROM person_relationships pr
-             INNER JOIN user_relationships ur ON pr.user_relationship_id = ur.id
-             WHERE pr.user_id = $1 AND pr.person_id = $2 AND pr.is_primary = true`,
-            [params.userId, personId]
-          );
-
-          const shouldBecomesPrimary = this._shouldReplacePrimaryRelationship(
-            existingPrimaryCheck.rows[0]?.relationship_type,
-            params.relationshipType,
-            existingPrimaryCheck.rows[0]?.confidence,
-            params.confidence || 0.5
-          );
-
-          // Only unset existing primary if new relationship should take priority
-          if (shouldBecomesPrimary && existingPrimaryCheck.rows.length > 0) {
-            await db.query(
-              `UPDATE person_relationships
-               SET is_primary = false
-               WHERE user_id = $1 AND person_id = $2 AND is_primary = true`,
-              [params.userId, personId]
-            );
-          }
-
-          // Insert/update the relationship
-          await db.query(
-            `INSERT INTO person_relationships
-             (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, false, $5, NOW(), NOW())
-             ON CONFLICT (user_id, person_id, user_relationship_id) DO UPDATE
-             SET confidence = GREATEST(person_relationships.confidence, $5),
-                 is_primary = CASE
-                   WHEN $4 = true THEN true
-                   ELSE person_relationships.is_primary
-                 END,
-                 updated_at = NOW()
-             WHERE person_relationships.confidence < EXCLUDED.confidence`,
-            [params.userId, personId, userRelationshipId, shouldBecomesPrimary, params.confidence || 0.5]
-          );
-        }
       }
 
       // Query person details WITHIN the transaction before committing
@@ -495,90 +415,42 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
     this._validateEmail(emailAddress);
 
     try {
-      // this._logOperation('findPersonByEmail', userId, { email: emailAddress });
-      
       const normalizedEmail = this._normalizeEmail(emailAddress);
-      
-      // Single query to get person with all details
-      const result = await this.pool.query(
-        `WITH person_data AS (
-          SELECT DISTINCT p.id, p.user_id, p.name, p.created_at, p.updated_at
-          FROM people p
-          INNER JOIN person_emails pe ON pe.person_id = p.id
-          WHERE pe.email_address = $1 AND p.user_id = $2
-          LIMIT 1
-        )
-        SELECT 
-          pd.id, pd.user_id, pd.name, pd.created_at, pd.updated_at,
-          pe.id as email_id, pe.email_address, pe.is_primary as email_is_primary, pe.created_at as email_created_at,
-          pr.id as rel_id, pr.user_relationship_id, pr.is_primary as rel_is_primary, 
-          pr.user_set, pr.confidence, pr.created_at as rel_created_at, pr.updated_at as rel_updated_at,
-          ur.relationship_type
-        FROM person_data pd
-        LEFT JOIN person_emails pe ON pe.person_id = pd.id
-        LEFT JOIN person_relationships pr ON pr.person_id = pd.id AND pr.user_id = pd.user_id
-        LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
-        ORDER BY pe.is_primary DESC, pe.created_at ASC, pr.is_primary DESC, pr.confidence DESC`,
+
+      // Get person with relationship directly from people table
+      const personResult = await this.pool.query(
+        `SELECT p.*
+         FROM people p
+         INNER JOIN person_emails pe ON pe.person_id = p.id
+         WHERE pe.email_address = $1 AND p.user_id = $2
+         LIMIT 1`,
         [normalizedEmail, userId]
       );
-      
-      if (result.rows.length === 0) {
+
+      if (personResult.rows.length === 0) {
         return null;
       }
-      
-      // Process results into the expected structure
-      const firstRow = result.rows[0];
-      const person = {
-        id: firstRow.id,
-        user_id: firstRow.user_id,
-        name: firstRow.name,
-        created_at: firstRow.created_at,
-        updated_at: firstRow.updated_at
-      };
-      
-      // Collect emails and relationships
-      const emailsMap = new Map<string, PersonEmail>();
-      const relationshipsMap = new Map<string, PersonRelationship>();
-      
-      for (const row of result.rows) {
-        // Add email if not already added
-        if (row.email_id && !emailsMap.has(row.email_id)) {
-          emailsMap.set(row.email_id, {
-            id: row.email_id,
-            person_id: person.id,
-            email_address: row.email_address,
-            is_primary: row.email_is_primary,
-            created_at: row.email_created_at
-          });
-        }
-        
-        // Add relationship if not already added
-        if (row.rel_id && !relationshipsMap.has(row.rel_id)) {
-          relationshipsMap.set(row.rel_id, {
-            id: row.rel_id,
-            user_id: person.user_id,
-            person_id: person.id,
-            relationship_type: row.relationship_type,
-            user_relationship_id: row.user_relationship_id,
-            is_primary: row.rel_is_primary,
-            user_set: row.user_set,
-            confidence: row.confidence,
-            created_at: row.rel_created_at,
-            updated_at: row.rel_updated_at
-          });
-        }
-      }
-      
+
+      const person = personResult.rows[0];
+
+      // Get all emails for this person
+      const emailsResult = await this.pool.query(
+        `SELECT id, person_id, email_address, is_primary, created_at
+         FROM person_emails
+         WHERE person_id = $1
+         ORDER BY is_primary DESC, created_at ASC`,
+        [person.id]
+      );
+
       return {
         ...person,
-        emails: Array.from(emailsMap.values()),
-        relationships: Array.from(relationshipsMap.values())
+        emails: emailsResult.rows
       };
     } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
         throw error;
       }
-      
+
       throw new PersonServiceError(`Failed to find person by email: ${error instanceof Error ? error.message : 'Unknown error'}`, 'FIND_FAILED');
     }
   }
@@ -590,9 +462,9 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
     const db = client || this.pool;
 
     try {
-      // Get person details
+      // Get person details (relationship is now directly on the person)
       const personResult = await db.query(
-        `SELECT id, user_id, name, created_at, updated_at
+        `SELECT *
          FROM people
          WHERE id = $1 AND user_id = $2`,
         [personId, userId]
@@ -613,22 +485,9 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
         [personId]
       );
 
-      // Get all relationships for this person
-      const relationshipsResult = await db.query(
-        `SELECT pr.id, pr.user_id, pr.person_id, pr.user_relationship_id,
-                pr.is_primary, pr.user_set, pr.confidence, pr.created_at, pr.updated_at,
-                ur.relationship_type
-         FROM person_relationships pr
-         JOIN user_relationships ur ON pr.user_relationship_id = ur.id
-         WHERE pr.person_id = $1 AND pr.user_id = $2
-         ORDER BY pr.is_primary DESC, pr.confidence DESC`,
-        [personId, userId]
-      );
-
       return {
         ...person,
-        emails: emailsResult.rows,
-        relationships: relationshipsResult.rows
+        emails: emailsResult.rows
       };
     } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
@@ -643,34 +502,26 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
     // Trust caller - params.userId is typed as string
     const limit = Math.min(Math.max(params.limit || 50, 1), 100); // Between 1 and 100
     const offset = Math.max(params.offset || 0, 0); // Non-negative
-    
+
     try {
       this._logOperation('listPeopleForUser', params.userId, { limit, offset });
-      
-      // Get people with their primary email and relationship
+
+      // Get people with their primary email (relationship is now on people table)
       const result = await this.pool.query(
-        `SELECT 
-          p.id, p.user_id, p.name, p.created_at, p.updated_at,
+        `SELECT
+          p.*,
           pe.email_address as primary_email,
-          ur.relationship_type as primary_relationship,
-          pr.confidence as relationship_confidence,
-          pr.user_set as relationship_user_set,
-          COUNT(DISTINCT pe_all.id) as email_count,
-          COUNT(DISTINCT pr_all.id) as relationship_count
+          COUNT(DISTINCT pe_all.id) as email_count
          FROM people p
          LEFT JOIN person_emails pe ON pe.person_id = p.id AND pe.is_primary = true
-         LEFT JOIN person_relationships pr ON pr.person_id = p.id AND pr.is_primary = true AND pr.user_id = p.user_id
-         LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
          LEFT JOIN person_emails pe_all ON pe_all.person_id = p.id
-         LEFT JOIN person_relationships pr_all ON pr_all.person_id = p.id AND pr_all.user_id = p.user_id
          WHERE p.user_id = $1
-         GROUP BY p.id, p.user_id, p.name, p.created_at, p.updated_at, 
-                  pe.email_address, ur.relationship_type, pr.confidence, pr.user_set
+         GROUP BY p.id, pe.email_address
          ORDER BY p.name ASC
          LIMIT $2 OFFSET $3`,
         [params.userId, limit, offset]
       );
-      
+
       // For each person, get their full details
       const people: PersonWithDetails[] = [];
       for (const row of result.rows) {
@@ -679,13 +530,13 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
           people.push(person);
         }
       }
-      
+
       return people;
     } catch (error: unknown) {
       if (error instanceof PersonServiceError) {
         throw error;
       }
-      
+
       throw new PersonServiceError(`Failed to list people: ${error instanceof Error ? error.message : 'Unknown error'}`, 'LIST_FAILED');
     }
   }
@@ -694,30 +545,34 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
     // Trust caller - params.userId is typed as string
     this._validateUUID(params.sourcePersonId, 'source person ID');
     this._validateUUID(params.targetPersonId, 'target person ID');
-    
+
     if (params.sourcePersonId === params.targetPersonId) {
       throw new ValidationError('Cannot merge a person with themselves');
     }
-    
+
     const client = await this._beginTransaction();
-    
+
     try {
       this._logOperation('mergePeople', params.userId, {
         sourcePersonId: params.sourcePersonId,
         targetPersonId: params.targetPersonId
       });
-      
-      // Verify both people belong to the user
+
+      // Verify both people belong to the user and get their relationship info
       const peopleCheck = await client.query(
-        `SELECT id, name FROM people 
+        `SELECT id, name, relationship_type, relationship_user_set, relationship_confidence
+         FROM people
          WHERE user_id = $1 AND id IN ($2, $3)`,
         [params.userId, params.sourcePersonId, params.targetPersonId]
       );
-      
+
       if (peopleCheck.rows.length !== 2) {
         throw new PersonNotFoundError('One or both people not found or unauthorized');
       }
-      
+
+      const source = peopleCheck.rows.find(r => r.id === params.sourcePersonId)!;
+      const target = peopleCheck.rows.find(r => r.id === params.targetPersonId)!;
+
       // Move all emails from source to target (skip duplicates)
       await client.query(
         `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
@@ -729,102 +584,52 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
          )`,
         [params.targetPersonId, params.sourcePersonId]
       );
-      
-      // Merge relationships - for each relationship type, keep the one with highest confidence or user_set
-      const relationshipsResult = await client.query(
-        `SELECT DISTINCT user_relationship_id
-         FROM person_relationships
-         WHERE person_id IN ($1, $2) AND user_id = $3`,
-        [params.sourcePersonId, params.targetPersonId, params.userId]
-      );
-      
-      // First, remove primary flags from target person's relationships to avoid constraint violation
-      await client.query(
-        `UPDATE person_relationships
-         SET is_primary = false
-         WHERE person_id = $1 AND user_id = $2`,
-        [params.targetPersonId, params.userId]
-      );
-      
-      for (const row of relationshipsResult.rows) {
-        const userRelationshipId = row.user_relationship_id;
-        
-        // Get the best relationship for this type (prefer user_set, then highest confidence)
-        const bestRelationship = await client.query(
-          `SELECT person_id, is_primary, user_set, confidence
-           FROM person_relationships
-           WHERE person_id IN ($1, $2) AND user_id = $3 AND user_relationship_id = $4
-           ORDER BY user_set DESC, confidence DESC
-           LIMIT 1`,
-          [params.sourcePersonId, params.targetPersonId, params.userId, userRelationshipId]
+
+      // Merge relationship: prefer user_set, then highest confidence
+      const sourceIsBetter = (source.relationship_user_set && !target.relationship_user_set) ||
+        (source.relationship_user_set === target.relationship_user_set &&
+         source.relationship_confidence > target.relationship_confidence);
+
+      if (sourceIsBetter && source.relationship_type) {
+        await client.query(
+          `UPDATE people
+           SET relationship_type = $1,
+               relationship_user_set = $2,
+               relationship_confidence = $3,
+               updated_at = NOW()
+           WHERE id = $4`,
+          [source.relationship_type, source.relationship_user_set, source.relationship_confidence, params.targetPersonId]
         );
-        
-        if (bestRelationship.rows.length > 0) {
-          const best = bestRelationship.rows[0];
-          
-          // Delete any existing relationship of this type for the target
-          await client.query(
-            `DELETE FROM person_relationships
-             WHERE person_id = $1 AND user_id = $2 AND user_relationship_id = $3`,
-            [params.targetPersonId, params.userId, userRelationshipId]
-          );
-          
-          // Insert the best relationship for the target (without is_primary flag initially)
-          await client.query(
-            `INSERT INTO person_relationships 
-             (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-             VALUES ($1, $2, $3, false, $4, $5, NOW(), NOW())`,
-            [params.userId, params.targetPersonId, userRelationshipId, best.user_set, best.confidence]
-          );
-        }
+      } else {
+        // Just update timestamp
+        await client.query(
+          `UPDATE people SET updated_at = NOW() WHERE id = $1`,
+          [params.targetPersonId]
+        );
       }
-      
-      // Ensure at least one relationship is marked as primary
-      await client.query(
-        `UPDATE person_relationships
-         SET is_primary = true
-         WHERE person_id = $1 AND user_id = $2
-         AND NOT EXISTS (
-           SELECT 1 FROM person_relationships 
-           WHERE person_id = $1 AND user_id = $2 AND is_primary = true
-         )
-         AND id = (
-           SELECT id FROM person_relationships
-           WHERE person_id = $1 AND user_id = $2
-           ORDER BY user_set DESC, confidence DESC
-           LIMIT 1
-         )`,
-        [params.targetPersonId, params.userId]
-      );
-      
-      // Delete the source person (cascades to emails and relationships)
+
+      // Delete the source person (cascades to emails)
       await client.query(
         `DELETE FROM people WHERE id = $1 AND user_id = $2`,
         [params.sourcePersonId, params.userId]
       );
-      
-      // Update the target person's updated_at timestamp
-      await client.query(
-        `UPDATE people SET updated_at = NOW() WHERE id = $1`,
-        [params.targetPersonId]
-      );
-      
+
       await this._commitTransaction(client);
-      
+
       // Return the merged person
       const mergedPerson = await this.getPersonById(params.targetPersonId, params.userId);
       if (!mergedPerson) {
         throw new PersonNotFoundError('Failed to retrieve merged person');
       }
-      
+
       return mergedPerson;
     } catch (error: unknown) {
       await this._rollbackTransaction(client);
-      
+
       if (error instanceof PersonServiceError) {
         throw error;
       }
-      
+
       // Handle specific database errors
       if (error instanceof Error && 'code' in error) {
         const pgError = error as any;
@@ -832,7 +637,7 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
           throw new PersonServiceError('Merge conflict: duplicate data detected', 'MERGE_CONFLICT');
         }
       }
-      
+
       throw new PersonServiceError(`Failed to merge people: ${error instanceof Error ? error.message : 'Unknown error'}`, 'MERGE_FAILED');
     }
   }
@@ -842,47 +647,6 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
    */
   private _normalizeEmail(email: string): string {
     return email.toLowerCase().trim();
-  }
-
-  /**
-   * Determine if a new relationship should replace the existing primary relationship
-   * Based on relationship type priority and confidence
-   *
-   * Priority order: spouse > family > colleague > friends > external > spam
-   *
-   * @param existingType - Current primary relationship type (undefined if no primary exists)
-   * @param newType - New relationship type being added
-   * @param existingConfidence - Confidence of existing primary relationship
-   * @param newConfidence - Confidence of new relationship
-   * @returns true if new relationship should become primary
-   */
-  private _shouldReplacePrimaryRelationship(
-    existingType: RelationshipType | undefined,
-    newType: RelationshipType,
-    existingConfidence: number = 0,
-    newConfidence: number = 0
-  ): boolean {
-    // If no existing primary, new relationship becomes primary
-    if (!existingType) {
-      return true;
-    }
-
-    const existingPriority = RelationshipType.PRIORITY[existingType];
-    const newPriority = RelationshipType.PRIORITY[newType];
-
-    // Higher priority relationship (lower number) always wins
-    if (newPriority < existingPriority) {
-      return true;
-    }
-
-    // Lower priority relationship (higher number) never wins
-    if (newPriority > existingPriority) {
-      return false;
-    }
-
-    // Same priority - use confidence as tiebreaker
-    // Only replace if new confidence is significantly higher (>= 0.1 difference)
-    return newConfidence >= existingConfidence + 0.1;
   }
 
   /**
@@ -911,45 +675,70 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
   }
 
   /**
-   * Assign a relationship type to a person
+   * Assign a relationship type to a person (user-set)
    */
   async assignRelationshipToPerson(
     personId: string,
     userId: string,
     relationshipType: RelationshipType,
-    isPrimary: boolean,
+    _isPrimary: boolean, // Ignored - only one relationship per person now
     confidence: number = 1.0
   ): Promise<PersonWithDetails> {
-    const relationshipResult = await this.pool.query(
-      `SELECT id FROM user_relationships
-       WHERE user_id = $1 AND relationship_type = $2 AND is_active = true`,
-      [userId, relationshipType]
-    );
-    const userRelationshipId = relationshipResult.rows[0]!.id;
+    this._validateUUID(personId, 'person ID');
 
     return await withTransaction(this.pool, async (client) => {
-      if (isPrimary) {
-        await client.query(
-          `UPDATE person_relationships
-           SET is_primary = false
-           WHERE user_id = $1 AND person_id = $2`,
-          [userId, personId]
-        );
-      }
-
-      await client.query(
-        `INSERT INTO person_relationships
-         (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
-         ON CONFLICT (user_id, person_id, user_relationship_id) DO UPDATE
-         SET is_primary = $4,
-             user_set = true,
-             confidence = $5,
-             updated_at = NOW()`,
-        [userId, personId, userRelationshipId, isPrimary, confidence]
+      // Verify person belongs to user and update relationship
+      const result = await client.query(
+        `UPDATE people
+         SET relationship_type = $1,
+             relationship_user_set = true,
+             relationship_confidence = $2,
+             updated_at = NOW()
+         WHERE id = $3 AND user_id = $4
+         RETURNING id`,
+        [relationshipType, confidence, personId, userId]
       );
 
+      if (result.rows.length === 0) {
+        throw new PersonNotFoundError(`Person ${personId} not found or unauthorized`);
+      }
+
       return (await this.getPersonById(personId, userId, client))!;
+    });
+  }
+
+  /**
+   * Set relationship by email address (used by UI dropdown)
+   */
+  async setRelationshipByEmail(
+    emailAddress: string,
+    relationshipType: RelationshipType,
+    userId: string
+  ): Promise<Person> {
+    this._validateEmail(emailAddress);
+    const normalizedEmail = this._normalizeEmail(emailAddress);
+
+    return await withTransaction(this.pool, async (client) => {
+      // Find person by email and update relationship in single query
+      const result = await client.query(
+        `UPDATE people p
+         SET relationship_type = $3,
+             relationship_user_set = true,
+             relationship_confidence = 1.0,
+             updated_at = NOW()
+         FROM person_emails pe
+         WHERE pe.person_id = p.id
+           AND pe.email_address = $1
+           AND p.user_id = $2
+         RETURNING p.*`,
+        [normalizedEmail, userId, relationshipType]
+      );
+
+      if (result.rows.length === 0) {
+        throw new PersonNotFoundError(`No person found with email ${emailAddress}`);
+      }
+
+      return result.rows[0];
     });
   }
 
