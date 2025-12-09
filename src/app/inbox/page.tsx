@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useSearchParams } from 'next/navigation';
 import { EmailActionType } from '../../../server/src/types/email-action-tracking';
 import type { SpamCheckResult } from '../../../server/src/lib/pipeline/types';
+import { RelationshipSelector } from '@/components/relationship-selector';
 
 interface ParsedEmail {
   headers: Array<{ key: string; value: string }>;
@@ -376,7 +377,14 @@ function InboxContent() {
                   <div>To: {emailData.to.join(', ')}</div>
                   {emailData.cc && emailData.cc.length > 0 && <div>CC: {emailData.cc.join(', ')}</div>}
                   <div>Subject: {emailData.subject}</div>
-                  <div>Relationship: {llmResponse.relationship.type} ({Math.round(llmResponse.relationship.confidence * 100)}% confidence)</div>
+                  <div className="flex items-center gap-2">
+                    <span>Relationship:</span>
+                    <RelationshipSelector
+                      emailAddress={emailData.from}
+                      currentRelationship={llmResponse.relationship.type}
+                    />
+                    <span className="text-xs">({Math.round(llmResponse.relationship.confidence * 100)}% confidence)</span>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

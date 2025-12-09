@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { EmailActionType } from '../../../server/src/types/email-action-tracking';
 import { RelationshipType } from '../../../server/src/lib/relationships/types';
+import { RelationshipSelector } from '@/components/relationship-selector';
 
 interface RecentAction {
   id: string;
@@ -38,55 +39,28 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-// Action categories for display
-type ActionCategory = 'Drafted' | 'Spam' | 'Moved' | 'No Action';
-
-// Map actions to categories and labels
-function getActionInfo(actionTaken: string): {
-  category: ActionCategory;
-  label: string;
-  color: string;
-} {
+// Map actions to display info (label and color)
+function getActionInfo(actionTaken: string): { label: string; color: string } {
   const label = EmailActionType.LABELS[actionTaken] || actionTaken;
 
   if (EmailActionType.isDraftAction(actionTaken)) {
-    return {
-      category: 'Drafted',
-      label,
-      color: 'bg-blue-500 hover:bg-blue-600'
-    };
+    return { label, color: 'bg-blue-500 hover:bg-blue-600' };
   }
 
   if (EmailActionType.isSpamAction(actionTaken)) {
-    return {
-      category: 'Spam',
-      label,
-      color: 'bg-red-500 hover:bg-red-600'
-    };
+    return { label, color: 'bg-red-500 hover:bg-red-600' };
   }
 
   if (EmailActionType.isMovedAction(actionTaken)) {
-    return {
-      category: 'Moved',
-      label,
-      color: 'bg-green-500 hover:bg-green-600'
-    };
+    return { label, color: 'bg-green-500 hover:bg-green-600' };
   }
 
   if (EmailActionType.isKeepInInbox(actionTaken)) {
-    return {
-      category: 'No Action',
-      label,
-      color: 'bg-yellow-500 hover:bg-yellow-600'
-    };
+    return { label, color: 'bg-yellow-500 hover:bg-yellow-600' };
   }
 
-  // Unknown/No Action (includes MANUALLY_HANDLED, PENDING, TRAINING, etc.)
-  return {
-    category: 'No Action',
-    label,
-    color: 'bg-gray-500 hover:bg-gray-600'
-  };
+  // System actions (MANUALLY_HANDLED, PENDING, TRAINING, etc.)
+  return { label, color: 'bg-gray-500 hover:bg-gray-600' };
 }
 
 // Generate consistent color for email address
@@ -218,8 +192,6 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
               {data.actions.map((action) => {
                 const actionInfo = getActionInfo(action.actionTaken);
                 const emailColor = getEmailColor(action.emailAccount);
-                const relationshipColor = RelationshipType.COLORS[action.relationship] || RelationshipType.COLORS.unknown;
-                const relationshipLabel = RelationshipType.LABELS[action.relationship] || RelationshipType.LABELS.unknown;
 
                 return (
                   <tr key={action.id} className="border-b last:border-0 hover:bg-muted/50">
@@ -230,9 +202,16 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
                       {action.senderName || action.senderEmail || '(Unknown)'}
                     </td>
                     <td className="py-1.5 px-2">
-                      <Badge className={`${relationshipColor} text-white text-xs px-1.5 py-0`}>
-                        {relationshipLabel}
-                      </Badge>
+                      {action.senderEmail ? (
+                        <RelationshipSelector
+                          emailAddress={action.senderEmail}
+                          currentRelationship={action.relationship}
+                        />
+                      ) : (
+                        <Badge className={`${RelationshipType.COLORS.unknown} text-white text-xs px-1.5 py-0`}>
+                          {RelationshipType.LABELS.unknown}
+                        </Badge>
+                      )}
                     </td>
                     <td className="py-1.5 px-2 max-w-xs truncate" title={action.subject}>
                       {action.subject}
