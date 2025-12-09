@@ -253,7 +253,6 @@ export class DraftGenerator {
       let responseMessage = '';
 
       if (needsResponse) {
-        console.log(`[DraftGenerator] Generating response: action=${combinedMeta.recommendedAction}, examples=${exampleSelection.examples?.length || 0}, relationship=${exampleSelection.relationship}, patterns=${!!writingPatterns}`);
 
         const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
           incomingEmail: processedEmail.userReply,
@@ -279,7 +278,7 @@ export class DraftGenerator {
         ? { type: RelationshipType.SPAM, confidence: 0.9 }
         : { type: detectedRelationship.relationship, confidence: detectedRelationship.confidence };
 
-      console.log(`[DraftGenerator] 🎯 Final relationship determination: action=${combinedMeta.recommendedAction}, isSpamAction=${EmailActionType.isSpamAction(combinedMeta.recommendedAction)}, detectedRelationship=${detectedRelationship.relationship}, finalRelationship=${finalRelationship.type}`);
+      console.log(`[DraftGenerator] action=${combinedMeta.recommendedAction}, relationship=${finalRelationship.type}, examples=${exampleSelection.examples?.length || 0}, patterns=${!!writingPatterns}, needsResponse=${needsResponse}`);
 
       return {
         body: responseMessage,
