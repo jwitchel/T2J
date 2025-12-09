@@ -216,28 +216,34 @@ Check if email requires ONLY external action with explicitly NO email response n
 
 **If matches → return `responseAction: "silent-todo"`**
 
-### STEP 8 - GENUINELY AMBIGUOUS (RARE - USE SPARINGLY)
-**IMPORTANT**: This step should only match in rare, truly unclear cases. Default to reply-all when uncertain.
+### STEP 8 - REQUIRES MANUAL REVIEW (keep-in-inbox)
+**IMPORTANT**: This step identifies emails that require human judgment beyond what an AI can provide.
 
-Check ONLY if email meets ALL of these criteria:
-8.1. **Completely unclear intent AND no clear ask**:
-   8.1.1. Forwarded email with NO explanation of why you're included AND no clear question
-   8.1.2. Email body is just "Thoughts?" or "FYI?" with no context AND unclear if response expected
-   8.1.3. Email thread missing so much context you cannot determine what's being discussed
-   8.1.4. Subject line completely contradicts body making it impossible to understand intent
+Check if email meets ANY of these criteria:
+8.1. **Requires attachment review**:
+   8.1.1. Email references attachments that must be reviewed to understand context or respond appropriately
+   8.1.2. "Please review the attached document and..." where the attachment content determines the response
+   8.1.3. Spreadsheets, contracts, or documents requiring detailed analysis
+8.2. **Requires external information not available to you**:
+   8.2.1. References calendar availability you cannot check ("Are you free Tuesday?")
+   8.2.2. Requires CRM, project management, or other system lookup
+   8.2.3. Needs information from previous conversations not in the thread
+   8.2.4. References documents, files, or resources you don't have access to
+8.3. **High-stakes decisions**:
+   8.3.1. Financial approvals, budget decisions, or expense authorizations
+   8.3.2. Legal commitments, contracts, or binding agreements
+   8.3.3. Hiring decisions, terminations, or HR-sensitive matters
+   8.3.4. Strategic decisions with significant business impact
+8.4. **Technical complexity beyond simple response**:
+   8.4.1. Requires domain expertise to evaluate options or recommendations
+   8.4.2. Technical architecture decisions or code review requests
+   8.4.3. Complex debugging or troubleshooting requiring investigation
+8.5. **Genuinely ambiguous**:
+   8.5.1. Forwarded email with NO explanation and no clear question
+   8.5.2. Email body too vague to determine intent ("Thoughts?" with no context)
+   8.5.3. Contradictory information making it impossible to understand intent
 
-**CRITICAL EXCLUSIONS** (these need responses, do NOT classify as ambiguous):
-- "Complex questions requiring thought" → needs reply with thoughtful answer (use default reply-all)
-- "Email from important sender but unclear what they need" → MUST reply to important people (use default reply-all)
-- "Could be informational OR could require response" → default to reply (use default reply-all)
-- "Let me know what you think" → clear ask for opinion (use default reply-all)
-- "We should discuss this" → needs response to schedule discussion (use default reply-all)
-- "Multiple requests" → prioritize and address all (use default reply-all)
-- Group emails where your role is unclear → safer to reply (use default reply-all)
-
-**Decision rule**: If you have ANY doubt whether this is ambiguous, choose reply-all instead. Only use keep-in-inbox for emails so unclear that keeping in inbox for manual review is the safest option.
-
-**If matches ALL criteria above → return `responseAction: "keep-in-inbox"`**
+**If ANY of 8.1-8.5 match → return `responseAction: "keep-in-inbox"`**
 
 ### STEP 9 - RESPONSE TYPE DETERMINATION
 If no response type is specified, the default response type is "reply-all".
