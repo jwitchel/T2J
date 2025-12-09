@@ -39,6 +39,7 @@ import {
   IndexError
   // EmailMetadata // Unused
 } from './types';
+import { RelationshipType } from '../relationships/types';
 
 interface CachedIndex {
   index: LocalIndex;
@@ -318,7 +319,7 @@ export class VectorSearchService {
     if (params.filters?.relationship) {
       paramCount++;
       // Handle NULL relationships (persons with no relationship set default to 'external')
-      whereClause += ` AND COALESCE(ur.relationship_type, 'external') = $${paramCount}`;
+      whereClause += ` AND COALESCE(ur.relationship_type, '${RelationshipType.EXTERNAL}') = $${paramCount}`;
       queryParams.push(params.filters.relationship);
     }
 

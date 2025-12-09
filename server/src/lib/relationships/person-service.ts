@@ -86,7 +86,7 @@ export interface CreatePersonParams {
   userId: string;
   name: string;
   emailAddress: string;
-  relationshipType?: string;
+  relationshipType?: RelationshipType;
   confidence?: number;
 }
 
@@ -857,8 +857,8 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
    * @returns true if new relationship should become primary
    */
   private _shouldReplacePrimaryRelationship(
-    existingType: string | undefined,
-    newType: string,
+    existingType: RelationshipType | undefined,
+    newType: RelationshipType,
     existingConfidence: number = 0,
     newConfidence: number = 0
   ): boolean {
@@ -867,8 +867,8 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
       return true;
     }
 
-    const existingPriority = RelationshipType.PRIORITY[existingType] || 999;
-    const newPriority = RelationshipType.PRIORITY[newType] || 999;
+    const existingPriority = RelationshipType.PRIORITY[existingType];
+    const newPriority = RelationshipType.PRIORITY[newType];
 
     // Higher priority relationship (lower number) always wins
     if (newPriority < existingPriority) {

@@ -1,4 +1,4 @@
-import { extractEmailFeatures, ProcessedEmail } from './types';
+import { extractEmailFeatures, ProcessedEmail, RelationshipDetectorResult } from './types';
 import { EmbeddingService } from '../vector/embedding-service';
 import { StyleEmbeddingService } from '../vector/style-embedding-service';
 import { RelationshipDetector } from '../relationships/relationship-detector';
@@ -212,7 +212,7 @@ export class EmailIngestPipeline {
     return await withTransaction(pool, async (client) => {
       // Detect relationship (creates/finds person and returns personEmailId)
       // Use existing relationship if provided (e.g., from test data) for performance
-      let relationship: { relationship: string; confidence: number; personEmailId: string };
+      let relationship: RelationshipDetectorResult;
 
       if (email.relationship?.type) {
         // Relationship already provided - find/create person with this relationship

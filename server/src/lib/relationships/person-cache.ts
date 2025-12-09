@@ -6,6 +6,7 @@
 
 import { Pool, PoolClient } from 'pg';
 import { PersonService, PersonWithDetails, CreatePersonParams } from './person-service';
+import { RelationshipType } from './types';
 
 /**
  * Result from bulk person lookup
@@ -193,7 +194,7 @@ export class PersonCache {
   async getOrCreateBatch(
     emails: Array<{ email: string; name?: string }>,
     userId: string,
-    defaultRelationship: string = 'external',
+    defaultRelationship: RelationshipType = RelationshipType.EXTERNAL,
     client?: PoolClient
   ): Promise<Map<string, PersonWithDetails>> {
     const emailAddresses = emails.map(e => e.email);

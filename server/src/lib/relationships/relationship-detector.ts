@@ -142,7 +142,7 @@ export class RelationshipDetector {
   private _checkConfiguredRelationship(
     email: string,
     config: RelationshipConfig
-  ): { relationship: string; confidence: number } | null {
+  ): { relationship: RelationshipType; confidence: number } | null {
     const relationship = RelationshipDetector.determineConfiguredRelationship(email, config);
     if (relationship) {
       return { relationship, confidence: 1.0 };
@@ -190,7 +190,7 @@ export class RelationshipDetector {
         || person.relationships.sort((a, b) => b.confidence - a.confidence)[0];
 
       // Return early - will extract primaryEmail at end
-      return this._buildResult(person, primaryRel.relationship_type, primaryRel.confidence);
+      return this._buildResult(person, primaryRel.relationship_type as RelationshipType, primaryRel.confidence);
     }
 
     // Step 2: Check configured relationships for BOTH addresses
@@ -293,7 +293,7 @@ export class RelationshipDetector {
    * Helper to build RelationshipDetectorResult from person and relationship data
    * Centralizes primaryEmail extraction logic
    */
-  private _buildResult(person: any, relationship: string, confidence: number): RelationshipDetectorResult {
+  private _buildResult(person: any, relationship: RelationshipType, confidence: number): RelationshipDetectorResult {
     if (!person || !person.emails || person.emails.length === 0) {
       throw new Error(`Failed to create or retrieve person record. Cannot proceed without person_email_id`);
     }

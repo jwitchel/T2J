@@ -1,6 +1,7 @@
 // Type definitions for the tone learning pipeline
 
 import { LLMMetadata } from '../llm-client';
+import { RelationshipType } from '../relationships/types';
 
 /**
  * Simplified email metadata for LLM prompts
@@ -62,7 +63,7 @@ export interface ProcessedEmail {
   userReply: string;        // Just what the user wrote (no signature, no quotes)
   respondedTo: string;      // The quoted content the user was responding to
   relationship?: {
-    type: string;
+    type: RelationshipType;
     confidence: number;
   };
   fullMessage: string;       // Raw RFC 5322 message format (complete email with headers)
@@ -188,7 +189,7 @@ export interface EmailFeatures {
  * - personEmailId: FK to person_emails table for email storage
  */
 export interface RelationshipDetectorResult {
-  relationship: string;
+  relationship: RelationshipType;
   confidence: number;
   personEmailId: string;  // FK to person_emails(id)
 }
