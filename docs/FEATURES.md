@@ -192,7 +192,7 @@ See server/migrations/*.sql for complete database schema and table definitions.
 
 ## Environment Variables
 
-See .env.example for full list. Key variables:
+See .env.defaults for full list. Key variables:
 
 ---
 

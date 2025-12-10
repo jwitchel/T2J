@@ -84,7 +84,7 @@ npm run dev:all
 - PRs: clear description, link issues, list affected areas, include setup/repro steps and screenshots when UI changes; ensure `npm run lint` and relevant tests pass
 
 ## Security & Configuration Tips
-- Env files: `.env` (backend) and `.env.local` (frontend); use `.env.example` as reference; never commit secrets
+- Env files: `.env` (backend secrets) and `.env.local` (frontend); `.env.defaults` has operational config; never commit secrets
 - Local ports: web 3001, API 3002, Postgres 5434, Redis 6380
 - Resets: `npm run docker:reset` to wipe services and reseed for a clean slate
 
@@ -98,7 +98,7 @@ npm run dev:all
 - Node/NPM: `npm install|i`, `npm run *` (incl. `lint`, `build`, `test`, `server:build`, `validate-extraction`, demo/test scripts), `npx jest`, `npx tsx`, `npx ts-node`, `npx next build`.
 - System/FS: `ls`, `cp`, `mv`, `rm`, `mkdir`, `chmod`, `touch`, `echo`, `grep`, `find`, `awk`, `tree`, `pkill`, `true`, `source`.
 - Networking: `curl`; Web fetch allowed for `github.com`, `www.npmjs.com`, and `www.better-auth.com`; `WebSearch` allowed.
-- Database: `psql` commands permitted against local Postgres on `5434` (default DB creds in README/.env.example). Example: `PGPASSWORD=… psql -U aiemailuser -h localhost -p 5434 -d aiemaildb -f db/migrations/011_create_oauth_sessions.sql`.
+- Database: `psql` commands permitted against local Postgres on `5434` (default DB creds in README). Example: `PGPASSWORD=… psql -U aiemailuser -h localhost -p 5434 -d aiemaildb -f db/migrations/011_create_oauth_sessions.sql`.
 - Examples: environment overrides for quick runs are allowed, e.g.
   ````
   EXAMPLE_COUNT=5 PIPELINE_BATCH_SIZE=10 npx tsx -e "/* inline script */"

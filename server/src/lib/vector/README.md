@@ -47,7 +47,7 @@ See `style-clustering-service.ts` for K-means clustering implementation.
 
 ## Configuration
 
-See `.env.example` for all vector-related environment variables.
+See `.env.defaults` for all vector-related environment variables.
 
 ## Usage Examples
 

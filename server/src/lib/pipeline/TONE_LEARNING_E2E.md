@@ -40,4 +40,4 @@ DIRECT_EMAIL_MAX_PERCENTAGE=0.6    # Max portion from direct correspondence
 VECTOR_SCORE_THRESHOLD=0.5         # Minimum similarity threshold
 ```
 
-See `.env.example` for complete configuration.
+See `.env.defaults` for complete configuration.

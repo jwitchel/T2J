@@ -197,7 +197,7 @@ The project uses environment variables for configuration. Key settings include:
 - **PIPELINE_BATCH_SIZE**: Batch size for email processing (default: 100)
 - **VECTOR_SEARCH_LIMIT**: Maximum results from vector search (default: 50)
 
-See `.env.example` for the complete list with descriptions.
+See `.env.defaults` for operational config defaults (committed to git).
 
 ### Tone Learning Strategy
 

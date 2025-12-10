@@ -8,8 +8,10 @@ import { auth } from './lib/auth';
 import { createServer } from 'http';
 import { createUnifiedWebSocketServer } from './websocket/unified-websocket';
 
-// Load environment variables from root .env file
+// Load environment variables: .env first (local overrides), then .env.defaults (committed defaults)
+// dotenv won't override already-set variables, so .env takes precedence
 dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env.defaults') });
 
 // Validate required environment variables
 if (!process.env.ENCRYPTION_KEY) {
