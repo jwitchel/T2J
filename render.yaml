@@ -4,7 +4,7 @@ services:
     name: t2j-frontend
     runtime: node
     rootDir: ./
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
@@ -22,7 +22,7 @@ services:
     name: t2j-api
     runtime: node
     rootDir: ./
-    buildCommand: npm ci && npm run server:build
+    buildCommand: npm ci --include=dev && npm run server:build
     startCommand: node server/dist/server.js
     preDeployCommand: node db/migrate.js
     envVars:
@@ -54,7 +54,7 @@ services:
     name: t2j-workers
     runtime: node
     rootDir: ./
-    buildCommand: npm ci && npm run server:build
+    buildCommand: npm ci --include=dev && npm run server:build
     startCommand: node server/dist/scripts/start-workers.js
     envVars:
       - key: NODE_ENV
