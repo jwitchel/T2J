@@ -1,17 +1,13 @@
+// Load environment variables FIRST, before any other imports
+import './env';
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
 import { toNodeHandler } from 'better-auth/node';
 import { pool } from './lib/db';
 import { auth } from './lib/auth';
 import { createServer } from 'http';
 import { createUnifiedWebSocketServer } from './websocket/unified-websocket';
-
-// Load environment variables: .env first (local overrides), then .env.defaults (committed defaults)
-// dotenv won't override already-set variables, so .env takes precedence
-dotenv.config({ path: path.join(__dirname, '../../.env') });
-dotenv.config({ path: path.join(__dirname, '../../.env.defaults') });
 
 // Validate required environment variables
 if (!process.env.ENCRYPTION_KEY) {

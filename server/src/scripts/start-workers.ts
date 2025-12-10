@@ -5,12 +5,8 @@
  * This script starts the background workers that process jobs
  */
 
-// Load environment variables: .env first (local overrides), then .env.defaults (committed defaults)
-// dotenv won't override already-set variables, so .env takes precedence
-import dotenv from 'dotenv';
-import path from 'path';
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
-dotenv.config({ path: path.join(__dirname, '../../../.env.defaults') });
+// Load environment variables FIRST, before any other imports
+import '../env';
 
 // Set environment to skip server start
 process.env.SKIP_SERVER_START = 'true';

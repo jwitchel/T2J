@@ -46,6 +46,8 @@ services:
           name: t2j-frontend
           type: web
           property: hostport
+      - key: TRUSTED_ORIGINS
+        sync: false  # Set to frontend URL in dashboard
     healthCheckPath: /health
     autoDeploy: true
 
