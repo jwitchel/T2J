@@ -35,10 +35,10 @@ FOREIGN KEY (user_relationship_id)
 REFERENCES user_relationships(id) ON DELETE CASCADE;
 
 -- Step 4: Create indexes for performance
-CREATE INDEX idx_person_relationships_user_relationship 
+CREATE INDEX IF NOT EXISTS idx_person_relationships_user_relationship 
 ON person_relationships(user_relationship_id);
 
-CREATE INDEX idx_tone_preferences_user_relationship 
+CREATE INDEX IF NOT EXISTS idx_tone_preferences_user_relationship 
 ON tone_preferences(user_relationship_id);
 
 -- Step 5: Make user_relationship_id NOT NULL for person_relationships

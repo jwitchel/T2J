@@ -4,7 +4,7 @@
 -- Drop existing table if present (consolidating previous migrations)
 DROP TABLE IF EXISTS sender_response_stats;
 
-CREATE TABLE sender_response_stats (
+CREATE TABLE IF NOT EXISTS sender_response_stats (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
   email_account_id UUID NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
@@ -17,7 +17,7 @@ CREATE TABLE sender_response_stats (
 );
 
 -- Index for fast lookups during spam detection
-CREATE INDEX idx_sender_stats_lookup
+CREATE INDEX IF NOT EXISTS idx_sender_stats_lookup
 ON sender_response_stats(user_id, email_account_id, sender_email);
 
 -- Comments for documentation

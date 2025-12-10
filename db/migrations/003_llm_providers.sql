@@ -4,7 +4,7 @@
 -- Drop table if it exists (for development)
 DROP TABLE IF EXISTS llm_providers CASCADE;
 
-CREATE TABLE llm_providers (
+CREATE TABLE IF NOT EXISTS llm_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     provider_name VARCHAR(255) NOT NULL,
@@ -19,8 +19,8 @@ CREATE TABLE llm_providers (
 );
 
 -- Create index for faster lookups
-CREATE INDEX idx_llm_providers_user_id ON llm_providers(user_id);
-CREATE INDEX idx_llm_providers_active ON llm_providers(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_llm_providers_user_id ON llm_providers(user_id);
+CREATE INDEX IF NOT EXISTS idx_llm_providers_active ON llm_providers(user_id, is_active) WHERE is_active = true;
 
 -- Create unique partial index to ensure only one default provider per user
 CREATE UNIQUE INDEX idx_unique_default_provider ON llm_providers(user_id) WHERE is_default = true;

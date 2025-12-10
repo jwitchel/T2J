@@ -1,5 +1,5 @@
 -- Better-auth required tables
-CREATE TABLE "user" (
+CREATE TABLE IF NOT EXISTS "user" (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     "emailVerified" BOOLEAN NOT NULL DEFAULT false,
@@ -9,7 +9,7 @@ CREATE TABLE "user" (
     "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE "session" (
+CREATE TABLE IF NOT EXISTS "session" (
     id TEXT PRIMARY KEY,
     "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     "expiresAt" TIMESTAMP NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE "session" (
     "userAgent" TEXT
 );
 
-CREATE TABLE "account" (
+CREATE TABLE IF NOT EXISTS "account" (
     id TEXT PRIMARY KEY,
     "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     "accountId" TEXT NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE "account" (
     "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE "verification" (
+CREATE TABLE IF NOT EXISTS "verification" (
     id TEXT PRIMARY KEY,
     identifier TEXT NOT NULL,
     value TEXT NOT NULL,

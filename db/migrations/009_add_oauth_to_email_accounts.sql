@@ -7,7 +7,7 @@ ADD COLUMN oauth_token_expires_at TIMESTAMP,
 ADD COLUMN oauth_user_id VARCHAR(255);
 
 -- Add index for OAuth provider lookup
-CREATE INDEX idx_email_accounts_oauth_provider ON email_accounts(oauth_provider, oauth_user_id);
+CREATE INDEX IF NOT EXISTS idx_email_accounts_oauth_provider ON email_accounts(oauth_provider, oauth_user_id);
 
 -- Update comments
 COMMENT ON COLUMN email_accounts.oauth_provider IS 'OAuth provider (google, microsoft, etc)';

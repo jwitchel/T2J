@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS tone_profiles CASCADE;
 DROP TABLE IF EXISTS relationship_tone_preferences CASCADE;
 
 -- Create unified tone preferences table
-CREATE TABLE tone_preferences (
+CREATE TABLE IF NOT EXISTS tone_preferences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
   preference_type VARCHAR(20) NOT NULL CHECK (preference_type IN ('aggregate', 'category', 'individual')),
@@ -21,8 +21,8 @@ CREATE TABLE tone_preferences (
 );
 
 -- Create indexes for performance
-CREATE INDEX idx_tone_preferences_user ON tone_preferences(user_id);
-CREATE INDEX idx_tone_preferences_lookup ON tone_preferences(user_id, preference_type, target_identifier);
+CREATE INDEX IF NOT EXISTS idx_tone_preferences_user ON tone_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_tone_preferences_lookup ON tone_preferences(user_id, preference_type, target_identifier);
 
 -- Add updated_at trigger
 DROP TRIGGER IF EXISTS update_tone_preferences_updated_at ON tone_preferences;
