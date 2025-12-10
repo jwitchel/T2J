@@ -216,6 +216,8 @@ export class InboxProcessor {
   ): Promise<ImapOperationResult> {
     const recommendedAction = draft.meta.recommendedAction;
 
+    // Silent actions (including KEEP_IN_INBOX): Move email to appropriate folder (no draft)
+    // KEEP_IN_INBOX routes to INBOX via EmailActionRouter, so it's effectively a no-op move
     if (EmailActionType.isSilentAction(recommendedAction)) {
       const result = await emailMover.moveEmail({
         emailAccountId: context.accountId,
@@ -235,30 +237,31 @@ export class InboxProcessor {
         destination: result.folder || DEFAULT_DESTINATION,
         actionDescription: result.message || `Moved to ${result.folder}`
       };
-    } else {
-      const result = await emailMover.uploadDraft({
-        emailAccountId: context.accountId,
-        userId: context.userId,
-        to: draft.to,
-        cc: draft.cc,
-        subject: draft.subject,
-        body: draft.body,
-        bodyHtml: draft.bodyHtml,
-        inReplyTo: draft.inReplyTo,
-        references: draft.references,
-        recommendedAction
-      });
-
-      if (!result.success) {
-        throw new Error(`Failed to upload draft: ${result.error || 'Unknown error'}`);
-      }
-
-      return {
-        moved: true,
-        destination: result.folder || DEFAULT_DESTINATION,
-        actionDescription: result.message || 'Draft created'
-      };
     }
+
+    // Draft actions: Upload draft to drafts folder
+    const result = await emailMover.uploadDraft({
+      emailAccountId: context.accountId,
+      userId: context.userId,
+      to: draft.to,
+      cc: draft.cc,
+      subject: draft.subject,
+      body: draft.body,
+      bodyHtml: draft.bodyHtml,
+      inReplyTo: draft.inReplyTo,
+      references: draft.references,
+      recommendedAction
+    });
+
+    if (!result.success) {
+      throw new Error(`Failed to upload draft: ${result.error || 'Unknown error'}`);
+    }
+
+    return {
+      moved: true,
+      destination: result.folder || DEFAULT_DESTINATION,
+      actionDescription: result.message || 'Draft created'
+    };
   }
 
   /**

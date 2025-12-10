@@ -214,10 +214,15 @@ export class EmailMover {
       const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);
       const routeResult = actionRouter.getActionRoute(recommendedAction as any);
 
-      await withImapContext(emailAccountId, userId, async () => {
-        const imapOps = await ImapOperations.fromAccountId(emailAccountId, userId);
-        await imapOps.moveMessage(sourceFolder, routeResult.folder, messageUid, routeResult.flags, true);
-      });
+      // Skip IMAP operation if source === destination (e.g., KEEP_IN_INBOX)
+      const skipMove = sourceFolder === routeResult.folder;
+
+      if (!skipMove) {
+        await withImapContext(emailAccountId, userId, async () => {
+          const imapOps = await ImapOperations.fromAccountId(emailAccountId, userId);
+          await imapOps.moveMessage(sourceFolder, routeResult.folder, messageUid, routeResult.flags, true);
+        });
+      }
 
       // Update the action in email_received with the action the user chose
       const emailRepository = new EmailRepository(pool);
@@ -230,10 +235,10 @@ export class EmailMover {
 
       return {
         success: true,
-        message: `Email moved to ${routeResult.displayName}`,
+        message: skipMove ? `Kept in ${routeResult.displayName}` : `Email moved to ${routeResult.displayName}`,
         folder: routeResult.folder,
         action: recommendedAction,
-        removedFromInbox: !!(messageUid && sourceFolder)
+        removedFromInbox: !skipMove && !!(messageUid && sourceFolder)
       };
 
     } catch (error: unknown) {

@@ -104,7 +104,8 @@ export namespace EmailActionType {
   ] as const;
 
   /**
-   * Actions that are silent (no draft generation, moved to folder)
+   * Actions that are silent (no draft generation)
+   * These either move to a folder or stay in inbox
    */
   export const SILENT_ACTIONS: readonly EmailActionType[] = [
     EmailActionType.SILENT_FYI_ONLY,
@@ -112,6 +113,7 @@ export namespace EmailActionType {
     EmailActionType.SILENT_LARGE_LIST,
     EmailActionType.SILENT_UNSUBSCRIBE,
     EmailActionType.SILENT_TODO,
+    EmailActionType.KEEP_IN_INBOX,
   ] as const;
 
   /**
