@@ -59,12 +59,12 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
   }
 
   // Regular single-account inbox processing
-  // Get email account info for logging
+  // Get email account info for logging (account exists - job created with valid accountId)
   const accountResult = await pool.query(
     'SELECT email_address FROM email_accounts WHERE id = $1',
     [accountId]
   );
-  const emailAddress = accountResult.rows[0]?.email_address || 'unknown';
+  const emailAddress = accountResult.rows[0].email_address;
 
   // Log start
   realTimeLogger.log(userId, {
@@ -89,7 +89,7 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
   }
 
   const providerId = providerResult.rows[0].id;
-  const batchSize = parseInt(process.env.NEXT_PUBLIC_INBOX_BATCH_SIZE || '10', 10);
+  const batchSize = parseInt(process.env.NEXT_PUBLIC_INBOX_BATCH_SIZE!, 10);
 
   // Process batch
   const result = await inboxProcessor.processBatch({
@@ -208,7 +208,10 @@ inboxWorker.on('failed', (job, err) => {
 // Handle lock renewal errors (OS sleep/wake scenario)
 inboxWorker.on('error', (err) => {
   if (err.message.includes('could not renew lock')) {
-    console.warn('[InboxWorker] Lock renewal failed - job will be marked as stalled and handled by stalledInterval');
+    // Extract job ID from error message if available (format: "Could not renew lock for job <id>")
+    const jobIdMatch = err.message.match(/job\s+(\S+)/i);
+    const jobId = jobIdMatch ? jobIdMatch[1] : 'unknown';
+    console.warn(`[InboxWorker] Lock renewal failed for job ${jobId} - will be marked as stalled`);
   } else {
     console.error('[InboxWorker] Worker error:', err);
   }

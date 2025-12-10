@@ -6,7 +6,7 @@ import { PromptFormatterV2 } from './prompt-formatter-v2';
 import { EmailIngestPipeline } from './email-ingest-pipeline';
 import { ProcessedEmail } from './types';
 // import { RelationshipService } from '../relationships/relationship-service'; // No longer needed
-import { RelationshipDetector } from '../relationships/relationship-detector';
+import { RelationshipDetector, RelationshipType } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import { WritingPatternAnalyzer } from './writing-pattern-analyzer';
 import chalk from 'chalk';
@@ -131,7 +131,10 @@ Email Details:
    */
   async aggregateStyles(userId: string): Promise<void> {
     // Get all relationship types that have emails
-    const relationshipTypes = ['friend', 'colleague', 'acquaintance', 'client', 'customer', 'vendor'];
+    // Filter to only enum values (not namespace properties like PRIORITY, COLORS, etc.)
+    const relationshipTypes = Object.values(RelationshipType).filter(
+      (v): v is RelationshipType => typeof v === 'string'
+    );
     
     for (const relationshipType of relationshipTypes) {
       try {
@@ -195,7 +198,8 @@ Email Details:
       'SELECT COUNT(*) as count FROM email_sent WHERE user_id = $1',
       [userId]
     );
-    const totalEmails = parseInt(totalResult.rows[0]?.count || '0');
+    // COUNT(*) always returns exactly one row
+    const totalEmails = parseInt(totalResult.rows[0].count);
 
     // Get relationship breakdown
     const relationshipsResult = await pool.query(

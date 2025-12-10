@@ -2,6 +2,12 @@ import { Router, Request, Response } from 'express';
 import { auth } from '../lib/auth';
 import { personService } from '../lib/relationships/person-service';
 import { userRelationshipService } from '../lib/relationships/user-relationship-service';
+import { RelationshipType } from '../lib/relationships/types';
+
+// Helper to validate relationship type
+function isValidRelationshipType(type: string): type is RelationshipType {
+  return Object.values(RelationshipType).includes(type as RelationshipType);
+}
 
 const router = Router();
 
@@ -15,19 +21,19 @@ router.use(async (req: Request, res: Response, next) => {
     }
     
     // Attach user to request
-    (req as any).user = session.user;
+    req.user = session.user;
     return next();
   } catch (error) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 });
 
-// Get all user relationships
+// Get all user relationships (returns enum-based relationship types)
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const relationships = await userRelationshipService.getAllRelationships(userId);
-    
+
     return res.json({ relationships });
   } catch (error) {
     console.error('Error fetching relationships:', error);
@@ -35,91 +41,12 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Create a new relationship type
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user.id;
-    const { relationshipType, displayName } = req.body;
-    
-    if (!relationshipType || !displayName) {
-      return res.status(400).json({ error: 'Relationship type and display name are required' });
-    }
-    
-    const relationship = await userRelationshipService.createRelationship(userId, relationshipType, displayName);
-    
-    return res.status(201).json({ relationship });
-  } catch (error: any) {
-    console.error('Error creating relationship:', error);
-    if (error.code === 'DUPLICATE_RELATIONSHIP') {
-      return res.status(409).json({ error: error.message });
-    } else {
-      return res.status(500).json({ error: 'Failed to create relationship' });
-    }
-  }
-});
-
-// Update a relationship type
-router.put('/:type', async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user.id;
-    const { type } = req.params;
-    const { displayName, isActive } = req.body;
-    
-    // First find the relationship by type
-    const existingRel = await userRelationshipService.getRelationshipByType(userId, type);
-    if (!existingRel) {
-      throw { code: 'NOT_FOUND', message: 'Relationship not found' };
-    }
-    
-    const relationship = await userRelationshipService.updateRelationship(existingRel.id, {
-      display_name: displayName,
-      is_active: isActive
-    });
-    
-    return res.json({ relationship });
-  } catch (error: any) {
-    console.error('Error updating relationship:', error);
-    if (error.code === 'NOT_FOUND') {
-      return res.status(404).json({ error: error.message });
-    } else {
-      return res.status(500).json({ error: 'Failed to update relationship' });
-    }
-  }
-});
-
-// Delete a relationship type
-router.delete('/:type', async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user.id;
-    const { type } = req.params;
-    
-    // First find the relationship by type
-    const existingRel = await userRelationshipService.getRelationshipByType(userId, type);
-    if (!existingRel) {
-      throw { code: 'NOT_FOUND', message: 'Relationship not found' };
-    }
-    
-    await userRelationshipService.deleteRelationship(existingRel.id);
-    
-    return res.status(204).send();
-  } catch (error: any) {
-    console.error('Error deleting relationship:', error);
-    if (error.code === 'NOT_FOUND') {
-      return res.status(404).json({ error: error.message });
-    } else if (error.code === 'FORBIDDEN') {
-      return res.status(403).json({ error: error.message });
-    } else {
-      return res.status(500).json({ error: 'Failed to delete relationship' });
-    }
-  }
-});
-
 // Get all people
 router.get('/people', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
-    const limit = parseInt(req.query.limit as string) || 50;
-    const offset = parseInt(req.query.offset as string) || 0;
+    const userId = req.user.id;
+    const limit = parseInt(req.query.limit as string);
+    const offset = parseInt(req.query.offset as string);
     
     const people = await personService.listPeopleForUser({
       userId,
@@ -137,7 +64,7 @@ router.get('/people', async (req: Request, res: Response) => {
 // Get a specific person
 router.get('/people/:id', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     
     const person = await personService.getPersonById(id, userId);
@@ -160,7 +87,7 @@ router.get('/people/:id', async (req: Request, res: Response) => {
 // Create a new person
 router.post('/people', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { name, emailAddress, relationshipType, confidence } = req.body;
     
     if (!name || !emailAddress) {
@@ -191,7 +118,7 @@ router.post('/people', async (req: Request, res: Response) => {
 // Add email to person
 router.post('/people/:id/emails', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     const { emailAddress } = req.body;
     
@@ -216,68 +143,81 @@ router.post('/people/:id/emails', async (req: Request, res: Response) => {
   }
 });
 
-// Assign relationship to person
+// Assign relationship to person by person ID
 router.post('/people/:id/relationships', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     const { relationshipType, isPrimary, confidence } = req.body;
-    
+
     if (!relationshipType) {
       return res.status(400).json({ error: 'Relationship type is required' });
     }
-    
-    // First verify the person exists
-    const person = await personService.getPersonById(id, userId);
-    if (!person) {
-      return res.status(404).json({ error: 'Person not found' });
+
+    if (!isValidRelationshipType(relationshipType)) {
+      return res.status(400).json({ error: `Invalid relationship type: ${relationshipType}` });
     }
-    
-    // Verify the relationship type exists
-    const relationship = await userRelationshipService.getRelationshipByType(userId, relationshipType);
-    if (!relationship) {
-      return res.status(400).json({ error: 'Invalid relationship type' });
-    }
-    
-    // Manually update the person_relationships table
-    const pool = personService.getPool();
-    
-    // First, unset any existing primary relationship if this is to be primary
-    if (isPrimary) {
-      await pool.query(
-        `UPDATE person_relationships 
-         SET is_primary = false 
-         WHERE user_id = $1 AND person_id = $2`,
-        [userId, id]
-      );
-    }
-    
-    // Insert or update the relationship
-    await pool.query(
-      `INSERT INTO person_relationships 
-       (user_id, person_id, user_relationship_id, is_primary, user_set, confidence, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
-       ON CONFLICT (user_id, person_id, user_relationship_id) DO UPDATE 
-       SET is_primary = $4,
-           user_set = true,
-           confidence = $5,
-           updated_at = NOW()`,
-      [userId, id, relationship.id, isPrimary || false, confidence || 0.5]
+
+    const person = await personService.assignRelationshipToPerson(
+      id,
+      userId,
+      relationshipType,
+      isPrimary ?? false,
+      confidence ?? 1.0
     );
-    
-    // Return updated person
-    const updatedPerson = await personService.getPersonById(id, userId);
-    return res.json({ person: updatedPerson });
+
+    return res.json({ person });
   } catch (error: any) {
     console.error('Error assigning relationship:', error);
+    if (error.code === 'PERSON_NOT_FOUND') {
+      return res.status(404).json({ error: error.message });
+    } else if (error.code === 'INVALID_RELATIONSHIP') {
+      return res.status(400).json({ error: error.message });
+    }
     return res.status(500).json({ error: 'Failed to assign relationship' });
+  }
+});
+
+// Set relationship by email address (used by UI dropdown)
+router.post('/by-email', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const { emailAddress, relationshipType } = req.body;
+
+    if (!emailAddress) {
+      return res.status(400).json({ error: 'Email address is required' });
+    }
+
+    if (!relationshipType) {
+      return res.status(400).json({ error: 'Relationship type is required' });
+    }
+
+    if (!isValidRelationshipType(relationshipType)) {
+      return res.status(400).json({ error: `Invalid relationship type: ${relationshipType}` });
+    }
+
+    const person = await personService.setRelationshipByEmail(
+      emailAddress,
+      relationshipType,
+      userId
+    );
+
+    return res.json({ success: true, person });
+  } catch (error: any) {
+    console.error('Error setting relationship by email:', error);
+    if (error.code === 'PERSON_NOT_FOUND') {
+      return res.status(404).json({ error: error.message });
+    } else if (error.code === 'VALIDATION_ERROR') {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(500).json({ error: 'Failed to set relationship' });
   }
 });
 
 // Merge two people
 router.post('/people/merge', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { sourcePersonId, targetPersonId } = req.body;
     
     if (!sourcePersonId || !targetPersonId) {

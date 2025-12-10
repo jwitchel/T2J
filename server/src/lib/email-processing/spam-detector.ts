@@ -7,6 +7,8 @@ import { PromptFormatterV2 } from '../pipeline/prompt-formatter-v2';
 import { LLMClient } from '../llm-client';
 import { pool } from '../db';
 import { SpamCheckResult } from '../pipeline/types';
+import { RelationshipType } from '../relationships/types';
+import { personService } from '../relationships/person-service';
 
 export interface SpamCheckParams {
   senderEmail: string;
@@ -67,18 +69,21 @@ export class SpamDetector {
 
   /**
    * Get response count for sender across ALL user's email accounts
+   * Uses JOIN through person_emails to find responses to this sender
    * @private
    */
-  private async getResponseCount(userId: string, senderEmail: string): Promise<number> {
+  private async _getResponseCount(userId: string, senderEmail: string): Promise<number> {
     const result = await pool.query(
       `SELECT COUNT(*)::int as total
-       FROM email_sent
-       WHERE user_id = $1 AND recipient_email = $2`,
+       FROM email_sent es
+       INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
+       WHERE es.user_id = $1 AND pe.email_address = $2`,
       [userId, senderEmail.toLowerCase()]
     );
 
-    return result.rows[0]?.total || 0;
+    return result.rows[0]?.total;
   }
+
 
   /**
    * Check if an email is spam or unsolicited commercial content
@@ -96,10 +101,10 @@ export class SpamDetector {
     // Use the maximum count (if user replied to either address, it's not spam)
     // For Google Docs: From=noreply@google.com (0 replies), Reply-To=workmate@foo.com (5 replies)
     // We want to use the 5 replies from the actual person
-    let responseCount = await this.getResponseCount(userId, senderEmail);
+    let responseCount = await this._getResponseCount(userId, senderEmail);
 
     if (replyTo && replyTo !== senderEmail) {
-      const replyToResponseCount = await this.getResponseCount(userId, replyTo);
+      const replyToResponseCount = await this._getResponseCount(userId, replyTo);
       responseCount = Math.max(responseCount, replyToResponseCount);
     }
 
@@ -115,13 +120,30 @@ export class SpamDetector {
       return result;
     }
 
-    // Step 3: Prepare response history context for LLM
+    // Step 3: Check existing relationship - skip LLM if already classified
+    const person = await personService.findPersonByEmail(senderEmail, userId);
+    if (person && person.relationship_type) {
+      if (person.relationship_type === RelationshipType.SPAM) {
+        return {
+          isSpam: true,
+          indicators: ['Sender previously classified as spam'],
+          senderResponseCount: responseCount
+        };
+      }
+      return {
+        isSpam: false,
+        indicators: [`Sender has existing ${person.relationship_type} relationship`],
+        senderResponseCount: responseCount
+      };
+    }
+
+    // Step 4: Prepare response history context for LLM
     const responseHistory = {
       responseCount,
       hasRespondedBefore: responseCount > 0
     };
 
-    // Step 4: Format prompt for spam check with response history
+    // Step 5: Format prompt for spam check with response history
     // Note: Truncation happens in LLMClient right before sending to LLM
     const spamCheckPrompt = await this.promptFormatter.formatSpamCheck({
       rawEmail: fullMessage,
@@ -129,11 +151,11 @@ export class SpamDetector {
       responseHistory
     });
 
-    // Step 5: Perform spam check (with retry logic)
+    // Step 6: Perform spam check (with retry logic)
     const spamCheckResult = await this.llmClient.generateSpamCheck(spamCheckPrompt);
 
     const isSpam = spamCheckResult.meta.isSpam;
-    const indicators = spamCheckResult.meta.spamIndicators || [];
+    const indicators = spamCheckResult.meta.spamIndicators;
 
     const result: SpamCheckResult = {
       isSpam,

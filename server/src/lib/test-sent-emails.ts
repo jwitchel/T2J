@@ -31,51 +31,51 @@ export class TestEmailGenerator {
     const emails: TestEmail[] = [];
     
     // Simple responses
-    emails.push(...this.generateSimpleResponses());
+    emails.push(...this._generateSimpleResponses());
     
     // Multi-paragraph emails
-    emails.push(...this.generateMultiParagraphEmails());
+    emails.push(...this._generateMultiParagraphEmails());
     
     // Various reply depths
-    emails.push(...this.generateReplyDepthVariations());
+    emails.push(...this._generateReplyDepthVariations());
     
     // Different quote formats
-    emails.push(...this.generateQuoteFormatVariations());
+    emails.push(...this._generateQuoteFormatVariations());
     
     // Forwarded emails
-    emails.push(...this.generateForwardedEmails());
+    emails.push(...this._generateForwardedEmails());
     
     // Signatures
-    emails.push(...this.generateSignatureVariations());
+    emails.push(...this._generateSignatureVariations());
     
     // Auto-replies
-    emails.push(...this.generateAutoReplies());
+    emails.push(...this._generateAutoReplies());
     
     // Meeting/Calendar responses
-    emails.push(...this.generateMeetingResponses());
+    emails.push(...this._generateMeetingResponses());
     
     // Emoji-rich emails
-    emails.push(...this.generateEmojiEmails());
+    emails.push(...this._generateEmojiEmails());
     
     // Rich HTML emails
-    emails.push(...this.generateRichHtmlEmails());
+    emails.push(...this._generateRichHtmlEmails());
     
     // Different languages
-    emails.push(...this.generateMultilingualEmails());
+    emails.push(...this._generateMultilingualEmails());
     
     // Mobile signatures
-    emails.push(...this.generateMobileEmails());
+    emails.push(...this._generateMobileEmails());
     
     // Edge cases
-    emails.push(...this.generateEdgeCases());
+    emails.push(...this._generateEdgeCases());
     
     // Corporate emails
-    emails.push(...this.generateCorporateEmails());
+    emails.push(...this._generateCorporateEmails());
     
     return emails;
   }
 
-  private generateSimpleResponses(): TestEmail[] {
+  private _generateSimpleResponses(): TestEmail[] {
     return [
       {
         id: 'simple-1',
@@ -120,7 +120,7 @@ export class TestEmailGenerator {
     ];
   }
 
-  private generateMultiParagraphEmails(): TestEmail[] {
+  private _generateMultiParagraphEmails(): TestEmail[] {
     return [
       {
         id: 'multi-1',
@@ -157,7 +157,7 @@ Let me know if you'd like to discuss these points further.`,
     ];
   }
 
-  private generateReplyDepthVariations(): TestEmail[] {
+  private _generateReplyDepthVariations(): TestEmail[] {
     return [
       {
         id: 'depth-1',
@@ -209,7 +209,7 @@ Let me know if you'd like to discuss these points further.`,
     ];
   }
 
-  private generateQuoteFormatVariations(): TestEmail[] {
+  private _generateQuoteFormatVariations(): TestEmail[] {
     return [
       {
         id: 'quote-gmail',
@@ -284,7 +284,7 @@ On Fri, Jan 12, 2024 at 4:00 PM Team Lead <lead@company.com> wrote:
     ];
   }
 
-  private generateForwardedEmails(): TestEmail[] {
+  private _generateForwardedEmails(): TestEmail[] {
     return [
       {
         id: 'fwd-1',
@@ -327,7 +327,7 @@ Here are the notes from today's meeting...`,
     ];
   }
 
-  private generateSignatureVariations(): TestEmail[] {
+  private _generateSignatureVariations(): TestEmail[] {
     return [
       {
         id: 'sig-1',
@@ -392,7 +392,7 @@ This email is confidential and may be legally privileged.`,
     ];
   }
 
-  private generateAutoReplies(): TestEmail[] {
+  private _generateAutoReplies(): TestEmail[] {
     return [
       {
         id: 'auto-1',
@@ -429,7 +429,7 @@ John Smith`,
     ];
   }
 
-  private generateMeetingResponses(): TestEmail[] {
+  private _generateMeetingResponses(): TestEmail[] {
     return [
       {
         id: 'meeting-1',
@@ -462,7 +462,7 @@ Looking forward to discussing the new features.`,
     ];
   }
 
-  private generateEmojiEmails(): TestEmail[] {
+  private _generateEmojiEmails(): TestEmail[] {
     return [
       {
         id: 'emoji-1',
@@ -523,7 +523,7 @@ Looking forward to getting started!`,
     ];
   }
 
-  private generateRichHtmlEmails(): TestEmail[] {
+  private _generateRichHtmlEmails(): TestEmail[] {
     return [
       {
         id: 'html-1',
@@ -596,7 +596,7 @@ See you at the board meeting.`,
     ];
   }
 
-  private generateMultilingualEmails(): TestEmail[] {
+  private _generateMultilingualEmails(): TestEmail[] {
     return [
       {
         id: 'lang-1',
@@ -663,7 +663,7 @@ BTW, I'll present in English, but feel free to ask questions in español or 日�
     ];
   }
 
-  private generateMobileEmails(): TestEmail[] {
+  private _generateMobileEmails(): TestEmail[] {
     return [
       {
         id: 'mobile-1',
@@ -706,7 +706,7 @@ Please excuse any typos`,
     ];
   }
 
-  private generateEdgeCases(): TestEmail[] {
+  private _generateEdgeCases(): TestEmail[] {
     return [
       {
         id: 'edge-1',
@@ -787,7 +787,7 @@ Should be >= instead of >`,
     ];
   }
 
-  private generateCorporateEmails(): TestEmail[] {
+  private _generateCorporateEmails(): TestEmail[] {
     return [
       {
         id: 'corp-1',

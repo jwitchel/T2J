@@ -19,16 +19,16 @@ export class BPETokenizer {
   private readonly UNK_TOKEN = '<unk>';
 
   constructor(vocabPath: string, mergesPath: string) {
-    this.loadVocab(vocabPath);
-    this.loadMerges(mergesPath);
+    this._loadVocab(vocabPath);
+    this._loadMerges(mergesPath);
   }
 
-  private loadVocab(vocabPath: string): void {
+  private _loadVocab(vocabPath: string): void {
     const vocabData = JSON.parse(fs.readFileSync(vocabPath, 'utf-8'));
     this.vocab = new Map(Object.entries(vocabData));
   }
 
-  private loadMerges(mergesPath: string): void {
+  private _loadMerges(mergesPath: string): void {
     const mergesText = fs.readFileSync(mergesPath, 'utf-8');
     const lines = mergesText.split('\n');
 
@@ -44,7 +44,7 @@ export class BPETokenizer {
   /**
    * Get all bigram pairs in a word
    */
-  private getPairs(word: string[]): Set<string> {
+  private _getPairs(word: string[]): Set<string> {
     const pairs = new Set<string>();
     for (let i = 0; i < word.length - 1; i++) {
       pairs.add(word[i] + ' ' + word[i + 1]);
@@ -55,14 +55,14 @@ export class BPETokenizer {
   /**
    * Apply BPE merges to a word
    */
-  private bpe(token: string): string[] {
+  private _bpe(token: string): string[] {
     // Check cache
     if (this.cache.has(token)) {
       return this.cache.get(token)!;
     }
 
     let word = token.split('');
-    let pairs = this.getPairs(word);
+    let pairs = this._getPairs(word);
 
     if (pairs.size === 0) {
       return [token];
@@ -114,7 +114,7 @@ export class BPETokenizer {
       if (word.length === 1) {
         break;
       }
-      pairs = this.getPairs(word);
+      pairs = this._getPairs(word);
     }
 
     // Cache result
@@ -140,7 +140,7 @@ export class BPETokenizer {
       const word = prefix + words[i];
 
       // Apply BPE
-      const bpeTokens = this.bpe(word);
+      const bpeTokens = this._bpe(word);
 
       // Convert to IDs
       for (const token of bpeTokens) {

@@ -9,7 +9,7 @@ const regexSignatureDetector = new RegexSignatureDetector(pool);
 // Get user's signature patterns
 router.get('/', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const patterns = await regexSignatureDetector.loadUserPatterns(userId);
     
     res.json({
@@ -27,7 +27,7 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
 // Update user's signature patterns
 router.put('/', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { patterns } = req.body;
     
     if (!Array.isArray(patterns)) {
@@ -77,7 +77,7 @@ router.put('/', requireAuth, async (req, res): Promise<void> => {
 // Test signature patterns against sample text
 router.post('/test', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { text, patterns } = req.body;
     
     if (!text) {

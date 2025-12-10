@@ -55,8 +55,8 @@ describe('Authentication Middleware', () => {
       await requireAuth(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
-      expect((mockReq as any).user).toEqual({ id: 'test-user-123' });
-      expect((mockReq as any).isServiceToken).toBe(true);
+      expect((mockReq as Request).user).toEqual({ id: 'test-user-123' });
+      expect((mockReq as Request).isServiceToken).toBe(true);
       expect(mockRes.status).not.toHaveBeenCalled();
     });
 

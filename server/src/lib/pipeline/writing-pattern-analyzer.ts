@@ -31,6 +31,7 @@ export interface SentencePatterns {
     long: number;     // >25 words
   };
   examples: string[];
+  rawSentenceLengths?: number[];  // Optional: raw data for accumulation
 }
 
 export interface ParagraphPattern {
@@ -100,8 +101,9 @@ export class WritingPatternAnalyzer {
 
   /**
    * Load sentence statistics from the database if available
+   * @private
    */
-  public async loadSentenceStats(
+  private async _loadSentenceStats(
     userId: string,
     relationship: string
   ): Promise<SentencePatterns | null> {
@@ -144,8 +146,9 @@ export class WritingPatternAnalyzer {
 
   /**
    * Store sentence statistics in the database
+   * @private
    */
-  async storeSentenceStats(
+  private async _storeSentenceStats(
     userId: string,
     relationship: string,
     stats: SentencePatterns & { totalSentences?: number }
@@ -201,25 +204,48 @@ export class WritingPatternAnalyzer {
     relationship: string,
     styleClusterName?: string
   ): Promise<SentencePatterns> {
-    const totalStart = Date.now();
-    console.log(`[TIMING] calculateSentenceStats START for ${relationship}`);
+    const cached = await this._loadCachedStats(userId, relationship);
+    if (cached) return cached;
 
-    // Try to load from cache first (outside transaction)
+    return this._withAdvisoryLock(userId, relationship, async () => {
+      const emails = await this._fetchEmailsFromPostgres(userId, relationship, styleClusterName);
+      const { allSentences, wordCounts } = await this._extractSentences(emails);
+      const metrics = this._calculateMetrics(wordCounts);
+      const examples = this._selectExamples(allSentences, wordCounts);
+      const result = { ...metrics, examples, rawSentenceLengths: wordCounts };
+      await this._persistStats(userId, relationship, result, wordCounts.length);
+      return result;
+    });
+  }
+
+  /**
+   * Load cached sentence statistics from database
+   */
+  private async _loadCachedStats(userId: string, relationship: string): Promise<SentencePatterns | null> {
     const cacheStart = Date.now();
-    const cached = await this.loadSentenceStats(userId, relationship);
+    const cached = await this._loadSentenceStats(userId, relationship);
     const cacheEnd = Date.now();
+
     if (cached) {
       console.log(`[TIMING] calculateSentenceStats cache HIT: ${cacheEnd - cacheStart}ms`);
       return cached;
     }
-    console.log(`[TIMING] Cache check: ${cacheEnd - cacheStart}ms (MISS)`);
 
-    // Use advisory lock to prevent duplicate calculations across processes
-    // Advisory locks are lightweight and don't require a row to exist
-    const lockKey = this.getAdvisoryLockKey(userId, relationship);
+    console.log(`[TIMING] Cache check: ${cacheEnd - cacheStart}ms (MISS)`);
+    return null;
+  }
+
+  /**
+   * Execute callback with advisory lock protection
+   */
+  private async _withAdvisoryLock<T>(
+    userId: string,
+    relationship: string,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    const lockKey = this._getAdvisoryLockKey(userId, relationship);
 
     try {
-      // Try to acquire advisory lock (non-blocking)
       const lockStart = Date.now();
       const lockResult = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
       const lockAcquired = lockResult.rows[0]?.pg_try_advisory_lock;
@@ -227,61 +253,53 @@ export class WritingPatternAnalyzer {
       console.log(`[TIMING] Lock acquisition: ${lockEnd - lockStart}ms (acquired: ${lockAcquired})`);
 
       if (!lockAcquired) {
-        // Someone else is calculating, wait and retry cache
         console.log(`[SentenceStats] Another process is calculating for ${relationship}, waiting...`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-        const cachedAfterWait = await this.loadSentenceStats(userId, relationship);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const cachedAfterWait = await this._loadSentenceStats(userId, relationship);
         if (cachedAfterWait) {
           console.log(`[SentenceStats] Cache hit after wait for ${relationship}`);
-          return cachedAfterWait;
+          return cachedAfterWait as T;
         }
-        // If still no cache after wait, try to acquire lock ourselves
         const retryLock = await db.query('SELECT pg_try_advisory_lock($1)', [lockKey]);
         if (!retryLock.rows[0]?.pg_try_advisory_lock) {
           console.log(`[SentenceStats] Still locked, calculating anyway for ${relationship}`);
         }
       }
 
-      // Double-check cache after acquiring lock
-      const cachedAfterLock = await this.loadSentenceStats(userId, relationship);
+      const cachedAfterLock = await this._loadSentenceStats(userId, relationship);
       if (cachedAfterLock) {
         console.log(`[SentenceStats] Cache hit after lock for ${relationship}`);
-        return cachedAfterLock;
+        return cachedAfterLock as T;
       }
 
-      // Fetch emails for this relationship from PostgreSQL
-      const fetchStart = Date.now();
-      const emails = await this._fetchEmailsFromPostgres(userId, relationship, styleClusterName);
-      const fetchEnd = Date.now();
-      console.log(`[TIMING] DB fetch: ${fetchEnd - fetchStart}ms, fetched ${emails.length} emails`);
+      return await callback();
+    } finally {
+      try {
+        await db.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+      } catch (error) {
+        console.error(`[SentenceStats] Failed to release lock for ${relationship}:`, error);
+      }
+    }
+  }
 
+  /**
+   * Extract sentences from emails using NLP
+   */
+  private async _extractSentences(
+    emails: Array<{ metadata: { userReply: string; sentDate: Date } }>
+  ): Promise<{ allSentences: string[]; wordCounts: number[] }> {
     if (emails.length === 0) {
-      return {
-        avgLength: 0,
-        medianLength: 0,
-        trimmedMean: 0,
-        minLength: 0,
-        maxLength: 0,
-        stdDeviation: 0,
-        percentile25: 0,
-        percentile75: 0,
-        distribution: { short: 0, medium: 0, long: 0 },
-        examples: [] // Required by interface
-      };
+      return { allSentences: [], wordCounts: [] };
     }
 
-    // Collect all sentences from userReply texts
     const allSentences: string[] = [];
-    // Array where each element is the word count of a sentence
-    // e.g., [5, 10, 7] means 3 sentences with 5, 10, and 7 words respectively
-    const wordCountsPerSentence: number[] = [];
+    const wordCounts: number[] = [];
 
     const nlpStart = Date.now();
     emails.forEach(email => {
-      const userReply = email.metadata.userReply || '';
+      const userReply = email.metadata.userReply;
       if (!userReply || userReply === '[ForwardedWithoutComment]') return;
 
-      // Use compromise to split into sentences
       const doc = nlp(userReply);
       const sentences = doc.sentences();
 
@@ -289,16 +307,21 @@ export class WritingPatternAnalyzer {
         const text = sentence.text().trim();
         if (text.length > 0) {
           allSentences.push(text);
-          // Use compromise's wordCount method
-          const wordCount = sentence.wordCount();
-          wordCountsPerSentence.push(wordCount);
+          wordCounts.push(sentence.wordCount());
         }
       });
     });
     const nlpEnd = Date.now();
-    console.log(`[TIMING] NLP processing (${emails.length} emails): ${nlpEnd - nlpStart}ms, extracted ${wordCountsPerSentence.length} sentences`);
-    
-    if (wordCountsPerSentence.length === 0) {
+    console.log(`[TIMING] NLP processing (${emails.length} emails): ${nlpEnd - nlpStart}ms, extracted ${wordCounts.length} sentences`);
+
+    return { allSentences, wordCounts };
+  }
+
+  /**
+   * Calculate statistical metrics from word counts
+   */
+  private _calculateMetrics(wordCounts: number[]): Omit<SentencePatterns, 'examples' | 'rawSentenceLengths'> {
+    if (wordCounts.length === 0) {
       return {
         avgLength: 0,
         medianLength: 0,
@@ -308,55 +331,66 @@ export class WritingPatternAnalyzer {
         stdDeviation: 0,
         percentile25: 0,
         percentile75: 0,
-        distribution: { short: 0, medium: 0, long: 0 },
-        examples: [] // Required by interface
+        distribution: { short: 0, medium: 0, long: 0 }
       };
     }
-    
-    // Sort for median and percentile calculations
-    const sortedCounts = [...wordCountsPerSentence].sort((a, b) => a - b);
-    
-    // Calculate statistics using simple-statistics
-    const avgLength = ss.mean(wordCountsPerSentence);
+
+    const sortedCounts = [...wordCounts].sort((a, b) => a - b);
+    const avgLength = ss.mean(wordCounts);
     const medianLength = ss.median(sortedCounts);
-    const minLength = ss.min(wordCountsPerSentence);
-    const maxLength = ss.max(wordCountsPerSentence);
-    const stdDeviation = ss.standardDeviation(wordCountsPerSentence);
+    const minLength = ss.min(wordCounts);
+    const maxLength = ss.max(wordCounts);
+    const stdDeviation = ss.standardDeviation(wordCounts);
     const percentile25 = ss.quantile(sortedCounts, 0.25);
     const percentile75 = ss.quantile(sortedCounts, 0.75);
-    
-    // Calculate trimmed mean (remove top and bottom 5%)
+
     const trimAmount = Math.floor(sortedCounts.length * 0.05);
-    const trimmedData = trimAmount > 0 
+    const trimmedData = trimAmount > 0
       ? sortedCounts.slice(trimAmount, sortedCounts.length - trimAmount)
       : sortedCounts;
     const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
 
-    // Get sentence length breakpoints from env
-    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX || '10');
-    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN || '25');
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
 
-    // Calculate distribution
-    const shortCount = wordCountsPerSentence.filter(c => c < shortMax).length;
-    const mediumCount = wordCountsPerSentence.filter(c => c >= shortMax && c <= longMin).length;
-    const longCount = wordCountsPerSentence.filter(c => c > longMin).length;
-    const totalSentenceCount = wordCountsPerSentence.length;
+    const shortCount = wordCounts.filter(c => c < shortMax).length;
+    const mediumCount = wordCounts.filter(c => c >= shortMax && c <= longMin).length;
+    const longCount = wordCounts.filter(c => c > longMin).length;
 
     const distribution = {
-      short: shortCount / totalSentenceCount,
-      medium: mediumCount / totalSentenceCount,
-      long: longCount / totalSentenceCount
+      short: shortCount / wordCounts.length,
+      medium: mediumCount / wordCounts.length,
+      long: longCount / wordCounts.length
     };
 
-    // Select 3-5 example sentences showing variety in length
+    return {
+      avgLength: Math.round(avgLength * 100) / 100,
+      medianLength: Math.round(medianLength * 100) / 100,
+      trimmedMean: Math.round(trimmedMean * 100) / 100,
+      minLength,
+      maxLength,
+      stdDeviation: Math.round(stdDeviation * 100) / 100,
+      percentile25: Math.round(percentile25 * 100) / 100,
+      percentile75: Math.round(percentile75 * 100) / 100,
+      distribution
+    };
+  }
+
+  /**
+   * Select example sentences showing variety in length
+   */
+  private _selectExamples(allSentences: string[], wordCounts: number[]): string[] {
+    if (allSentences.length === 0) return [];
+
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
+
+    const shortSentences = allSentences.filter((_, i) => wordCounts[i] < shortMax);
+    const mediumSentences = allSentences.filter((_, i) => wordCounts[i] >= shortMax && wordCounts[i] <= longMin);
+    const longSentences = allSentences.filter((_, i) => wordCounts[i] > longMin);
+
     const examples: string[] = [];
 
-    // Find indices of sentences at different length percentiles
-    const shortSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] < shortMax);
-    const mediumSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] >= shortMax && wordCountsPerSentence[i] <= longMin);
-    const longSentences = allSentences.filter((_, i) => wordCountsPerSentence[i] > longMin);
-
-    // Add one example from each category if available
     if (shortSentences.length > 0) {
       examples.push(shortSentences[Math.floor(Math.random() * shortSentences.length)]);
     }
@@ -367,7 +401,6 @@ export class WritingPatternAnalyzer {
       examples.push(longSentences[Math.floor(Math.random() * longSentences.length)]);
     }
 
-    // If we have fewer than 3 examples, add more from the most common category
     while (examples.length < 3 && allSentences.length > examples.length) {
       const remaining = allSentences.filter(s => !examples.includes(s));
       if (remaining.length > 0) {
@@ -377,22 +410,20 @@ export class WritingPatternAnalyzer {
       }
     }
 
-    const result: SentencePatterns = {
-      avgLength: Math.round(avgLength * 100) / 100,
-      medianLength: Math.round(medianLength * 100) / 100,
-      trimmedMean: Math.round(trimmedMean * 100) / 100,
-      minLength,
-      maxLength,
-      stdDeviation: Math.round(stdDeviation * 100) / 100,
-      percentile25: Math.round(percentile25 * 100) / 100,
-      percentile75: Math.round(percentile75 * 100) / 100,
-      distribution,
-      examples
-    };
-    
-    // Debug logging
+    return examples;
+  }
+
+  /**
+   * Persist calculated statistics to database
+   */
+  private async _persistStats(
+    userId: string,
+    relationship: string,
+    result: SentencePatterns,
+    totalSentences: number
+  ): Promise<void> {
     console.log(`[SentenceStats] Calculated for ${relationship}:`, {
-      totalSentences: wordCountsPerSentence.length,
+      totalSentences,
       avgLength: result.avgLength,
       medianLength: result.medianLength,
       trimmedMean: result.trimmedMean,
@@ -400,25 +431,11 @@ export class WritingPatternAnalyzer {
       range: `${result.minLength} - ${result.maxLength}`,
       stdDev: result.stdDeviation
     });
-    
-      // Store the stats in the database
-      await this.storeSentenceStats(userId, relationship, {
-        ...result,
-        totalSentences: totalSentenceCount  // Now it's clear this is the count of sentences
-      } as any);
 
-      const totalEnd = Date.now();
-      console.log(`[TIMING] calculateSentenceStats TOTAL: ${totalEnd - totalStart}ms for ${relationship}`);
-
-      return result;
-    } finally {
-      // Always release the advisory lock
-      try {
-        await db.query('SELECT pg_advisory_unlock($1)', [lockKey]);
-      } catch (error) {
-        console.error(`[SentenceStats] Failed to release lock for ${relationship}:`, error);
-      }
-    }
+    await this._storeSentenceStats(userId, relationship, {
+      ...result,
+      totalSentences
+    } as any);
   }
 
   /**
@@ -426,7 +443,7 @@ export class WritingPatternAnalyzer {
    * PostgreSQL advisory locks use bigint, so we hash the strings to a 64-bit integer
    * @private
    */
-  private getAdvisoryLockKey(userId: string, relationship: string): number {
+  private _getAdvisoryLockKey(userId: string, relationship: string): number {
     // Simple hash function to convert string to integer
     // We use a combination of userId and relationship to ensure uniqueness
     const str = `${userId}:${relationship}`;
@@ -455,8 +472,6 @@ export class WritingPatternAnalyzer {
       let query = `
         SELECT se.user_reply, se.sent_date
         FROM email_sent se
-        WHERE se.user_id = $1
-          AND se.semantic_vector IS NOT NULL
       `;
 
       const params: any[] = [userId];
@@ -464,9 +479,22 @@ export class WritingPatternAnalyzer {
 
       // Filter by relationship if not aggregate
       if (relationship && relationship !== 'aggregate') {
+        // Join to people table to filter by relationship type (now directly on people)
+        query += `
+        INNER JOIN person_emails pe ON se.recipient_person_email_id = pe.id
+        INNER JOIN people p ON pe.person_id = p.id
+        WHERE se.user_id = $1
+          AND se.semantic_vector IS NOT NULL
+        `;
         paramCount++;
-        query += ` AND se.relationship_type = $${paramCount}`;
+        query += ` AND p.relationship_type = $${paramCount}`;
         params.push(relationship);
+      } else {
+        // For aggregate, no joins needed
+        query += `
+        WHERE se.user_id = $1
+          AND se.semantic_vector IS NOT NULL
+        `;
       }
 
       // Filter by style cluster if specified
@@ -535,23 +563,14 @@ export class WritingPatternAnalyzer {
     
     const result = await db.query(query, params);
     const provider = result.rows[0];
-
-    if (!provider) {
-      throw new Error('No active LLM provider found');
-    }
-
-    if (!provider.api_key) {
-      throw new Error(`LLM provider "${provider.provider_name}" has no API key configured`);
-    }
-
     const decryptedApiKey = decryptPassword(provider.api_key);
 
-    this.modelName = provider.model_name || '';
+    this.modelName = provider.model_name;
     this.llmClient = new LLMClient({
       id: provider.id,
       type: provider.provider_type as any,
       apiKey: decryptedApiKey,
-      apiEndpoint: provider.api_endpoint || undefined,
+      apiEndpoint: provider.api_endpoint,
       modelName: provider.model_name
     });
   }
@@ -571,20 +590,9 @@ export class WritingPatternAnalyzer {
     const startTime = Date.now();
     console.log(`[TIMING] analyzeWritingPatterns START for ${relationship || 'aggregate'}: ${emails.length} emails`);
 
-    // Log the analysis start
-    realTimeLogger.log(userId, {
-      userId,
-      emailAccountId: 'pattern-analysis',
-      level: 'info',
-      command: 'pattern.analysis.start',
-      data: {
-        raw: `Analyzing ${emails.length} emails for ${relationship || 'all relationships'}`
-      }
-    });
-
     // Process in batches of 50 emails
     const batchSize = 50;
-    const batches = this.chunkEmails(emails, batchSize);
+    const batches = this._chunkEmails(emails, batchSize);
 
     console.log(`[TIMING] Created ${batches.length} batches of ${batchSize} emails each`);
 
@@ -598,7 +606,7 @@ export class WritingPatternAnalyzer {
       console.log(`[TIMING] Batch ${i + 1}/${batches.length} START`);
 
       try {
-        const analysis = await this.analyzeBatch(batches[i], relationship);
+        const analysis = await this._analyzeBatch(batches[i], relationship);
         batchAnalyses.push(analysis);
         successfulBatches++;
         const batchEnd = Date.now();
@@ -618,34 +626,23 @@ export class WritingPatternAnalyzer {
 
     // Aggregate patterns across all batches
     const aggStart = Date.now();
-    const aggregated = this.aggregatePatterns(batchAnalyses);
+    const aggregated = this._aggregatePatterns(batchAnalyses);
     const aggEnd = Date.now();
     console.log(`[TIMING] aggregatePatterns COMPLETE: ${aggEnd - aggStart}ms`);
 
     // Calculate sentence statistics directly from emails for accuracy
     // Always calculate, even for aggregate (when relationship is undefined)
     const relationshipLabel = relationship || 'aggregate';
-    const statsStart = Date.now();
-    console.log(`[TIMING] calculateSentenceStats START for ${relationshipLabel}`);
     const directSentenceStats = await this.calculateSentenceStats(userId, relationship || 'aggregate');
-    const statsEnd = Date.now();
-    console.log(`[TIMING] calculateSentenceStats COMPLETE: ${statsEnd - statsStart}ms`);
 
     // Calculate structural patterns using NLP
-    const structureStart = Date.now();
-    console.log(`[TIMING] NLP structural analysis START for ${relationshipLabel}`);
 
-    const paragraphPatterns = await this.calculateParagraphPatterns(userId, emails);
-    console.log(`[TIMING] Paragraph patterns: ${paragraphPatterns.length} types found`);
+    const paragraphPatterns = await this._calculateParagraphPatterns(userId, emails);
 
-    const openingPatterns = await this.calculateOpeningPatterns(userId, emails);
-    console.log(`[TIMING] Opening patterns: ${openingPatterns.length} variations found`);
+    const openingPatterns = await this._calculateOpeningPatterns(userId, emails);
 
-    const valedictionPatterns = await this.calculateValedictionPatterns(userId, emails);
-    console.log(`[TIMING] Valediction patterns: ${valedictionPatterns.length} types found`);
+    const valedictionPatterns = await this._calculateValedictionPatterns(userId, emails);
 
-    const structureEnd = Date.now();
-    console.log(`[TIMING] NLP structural analysis COMPLETE: ${structureEnd - structureStart}ms`);
 
     // Replace LLM-calculated patterns with NLP calculations
     aggregated.sentencePatterns = directSentenceStats;
@@ -665,7 +662,7 @@ export class WritingPatternAnalyzer {
       level: 'info',
       command: 'pattern.analysis.complete',
       data: {
-        raw: `Found ${aggregated.openingPatterns.length} opening patterns, ${aggregated.valediction.length} valedictions, ${aggregated.negativePatterns.length} negative patterns, ${aggregated.uniqueExpressions.length} unique expressions`,
+        raw: `For relationship ${relationship || 'aggregate'}, found ${aggregated.openingPatterns.length} opening patterns, ${aggregated.valediction.length} valedictions, ${aggregated.negativePatterns.length} negative patterns, ${aggregated.uniqueExpressions.length} unique expressions`,
         parsed: {
           totalEmails: emails.length,
           batchSize,
@@ -690,7 +687,7 @@ export class WritingPatternAnalyzer {
   /**
    * Analyze a single batch of emails
    */
-  private async analyzeBatch(
+  private async _analyzeBatch(
     emails: ProcessedEmail[],
     relationship?: string
   ): Promise<BatchAnalysisResult> {
@@ -754,41 +751,35 @@ export class WritingPatternAnalyzer {
     writeFileSync(responseFile, response, 'utf8');
     console.log(`[LLM] Response written to: ${responseFile}`);
 
-    // Parse the response
-    try {
-      // Extract JSON from response, handling various formats
-      let cleanResponse = response.trim();
-      
-      // Try to find JSON content within the response
-      // First, check if entire response is wrapped in markdown
-      const markdownJsonMatch = cleanResponse.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (markdownJsonMatch) {
-        cleanResponse = markdownJsonMatch[1].trim();
-      }
-      
-      // If still not valid JSON, try to extract JSON object
-      if (!cleanResponse.startsWith('{')) {
-        const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          cleanResponse = jsonMatch[0];
-        }
-      }
-      
-      const parsed = JSON.parse(cleanResponse);
+    // Parse the response - extract JSON from response, handling various formats
+    let cleanResponse = response.trim();
 
-      // Add metadata
-      return {
-        ...parsed,
-        emailCount: emails.length,
-        dateRange: {
-          start: emails[0].date,
-          end: emails[emails.length - 1].date
-        }
-      };
-    } catch (error) {
-      console.error('Failed to parse LLM response:', response);
-      throw error;
+    // Try to find JSON content within the response
+    // First, check if entire response is wrapped in markdown
+    const markdownJsonMatch = cleanResponse.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (markdownJsonMatch) {
+      cleanResponse = markdownJsonMatch[1].trim();
     }
+
+    // If still not valid JSON, try to extract JSON object
+    if (!cleanResponse.startsWith('{')) {
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanResponse = jsonMatch[0];
+      }
+    }
+
+    const parsed = JSON.parse(cleanResponse);
+
+    // Add metadata
+    return {
+      ...parsed,
+      emailCount: emails.length,
+      dateRange: {
+        start: emails[0].date,
+        end: emails[emails.length - 1].date
+      }
+    };
   }
 
   // Remove buildAnalysisPrompt method - no longer needed since we use templates
@@ -796,7 +787,7 @@ export class WritingPatternAnalyzer {
   /**
    * Chunk emails into batches
    */
-  private chunkEmails(emails: ProcessedEmail[], batchSize: number): ProcessedEmail[][] {
+  private _chunkEmails(emails: ProcessedEmail[], batchSize: number): ProcessedEmail[][] {
     const chunks: ProcessedEmail[][] = [];
     for (let i = 0; i < emails.length; i += batchSize) {
       chunks.push(emails.slice(i, i + batchSize));
@@ -810,7 +801,7 @@ export class WritingPatternAnalyzer {
    * - Handles relationship-specific variations
    * - Identifies context-dependent patterns
    */
-  private aggregatePatterns(batchResults: BatchAnalysisResult[]): WritingPatterns {
+  private _aggregatePatterns(batchResults: BatchAnalysisResult[]): WritingPatterns {
     if (batchResults.length === 1) {
       // If only one batch, return it directly
       const { emailCount, dateRange, ...patterns } = batchResults[0];
@@ -850,25 +841,25 @@ export class WritingPatternAnalyzer {
     const valediction: ValedictionPattern[] = [];
 
     // Aggregate negative patterns (union of all, keep highest confidence)
-    const negativePatterns = this.mergeNegativePatterns(
+    const negativePatterns = this._mergeNegativePatterns(
       batchResults.map(b => b.negativePatterns)
     );
 
     // Aggregate response patterns with email count weighting
     const responsePatterns: ResponsePatterns = {
-      immediate: this.weightedAverage(
+      immediate: this._weightedAverage(
         batchWeights.map(({ batch, weight }) => ({ 
           value: batch.responsePatterns.immediate, 
           weight 
         }))
       ),
-      contemplative: this.weightedAverage(
+      contemplative: this._weightedAverage(
         batchWeights.map(({ batch, weight }) => ({ 
           value: batch.responsePatterns.contemplative, 
           weight 
         }))
       ),
-      questionHandling: this.mostCommonStringWeighted(
+      questionHandling: this._mostCommonStringWeighted(
         batchWeights.map(({ batch, weight }) => ({ 
           value: batch.responsePatterns.questionHandling, 
           weight 
@@ -877,7 +868,7 @@ export class WritingPatternAnalyzer {
     };
 
     // Aggregate unique expressions with context awareness
-    const uniqueExpressions = this.mergeUniqueExpressions(
+    const uniqueExpressions = this._mergeUniqueExpressions(
       batchWeights.map(({ batch, weight }) => ({
         expressions: batch.uniqueExpressions,
         weight
@@ -896,14 +887,14 @@ export class WritingPatternAnalyzer {
   }
 
   // Helper methods for aggregation
-  private weightedAverage(items: { value: number; weight: number }[]): number {
+  private _weightedAverage(items: { value: number; weight: number }[]): number {
     const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
     const weightedSum = items.reduce((sum, item) => sum + item.value * item.weight, 0);
     return weightedSum / totalWeight;
   }
 
 
-  private mergeNegativePatterns(patternArrays: NegativePattern[][]): NegativePattern[] {
+  private _mergeNegativePatterns(patternArrays: NegativePattern[][]): NegativePattern[] {
     const merged = new Map<string, NegativePattern>();
 
     patternArrays.forEach(patterns => {
@@ -923,7 +914,7 @@ export class WritingPatternAnalyzer {
       .slice(0, 10);
   }
 
-  private mergeUniqueExpressions(
+  private _mergeUniqueExpressions(
     batchData: { expressions: UniqueExpression[]; weight: number }[]
   ): UniqueExpression[] {
     const merged = new Map<string, { 
@@ -984,11 +975,11 @@ export class WritingPatternAnalyzer {
         };
       })
       .sort((a, b) => b.occurrenceRate - a.occurrenceRate)
-      .slice(0, parseInt(process.env.PATTERN_UNIQUE_EXPRESSIONS_COUNT || '15'));
+      .slice(0, parseInt(process.env.PATTERN_UNIQUE_EXPRESSIONS_COUNT!));
   }
 
 
-  private mostCommonStringWeighted(
+  private _mostCommonStringWeighted(
     items: { value: string; weight: number }[]
   ): string {
     const weightedCounts = new Map<string, number>();
@@ -998,7 +989,7 @@ export class WritingPatternAnalyzer {
     });
     
     let maxWeight = 0;
-    let mostCommon = items[0]?.value || '';
+    let mostCommon = items[0]?.value;
     weightedCounts.forEach((weight, value) => {
       if (weight > maxWeight) {
         maxWeight = weight;
@@ -1028,18 +1019,18 @@ export class WritingPatternAnalyzer {
    */
   async loadPatterns(
     userId: string,
-    relationship?: string
+    relationship: string | undefined
   ): Promise<WritingPatterns | null> {
     const query = `
-      SELECT profile_data 
-      FROM tone_preferences 
-      WHERE user_id = $1 
-        AND preference_type = $2 
+      SELECT profile_data
+      FROM tone_preferences
+      WHERE user_id = $1
+        AND preference_type = $2
         AND target_identifier = $3
     `;
-    
+
     const preferenceType = relationship ? 'category' : 'aggregate';
-    const targetIdentifier = relationship || 'aggregate';
+    const targetIdentifier = relationship ?? 'aggregate';
     
     const result = await db.query(query, [userId, preferenceType, targetIdentifier]);
     if (result.rows.length === 0) {
@@ -1061,13 +1052,12 @@ export class WritingPatternAnalyzer {
   async savePatterns(
     userId: string,
     patterns: WritingPatterns,
-    relationship?: string,
+    relationship: string | undefined,
     emailsAnalyzed: number = 1000
   ): Promise<void> {
     const preferenceType = relationship ? 'category' : 'aggregate';
-    let targetIdentifier = relationship || 'aggregate';
-    let userRelationshipId: string | null = null;
-    
+    const targetIdentifier = relationship ?? 'aggregate';
+
     // Create profile data with consistent structure
     const profileData = {
       meta: {
@@ -1079,46 +1069,27 @@ export class WritingPatternAnalyzer {
       writingPatterns: patterns
     };
 
-    if (relationship) {
-      // Ensure the relationship exists in user_relationships
-      const displayName = relationship.charAt(0).toUpperCase() + relationship.slice(1);
-      
-      const relationshipResult = await db.query(`
-        INSERT INTO user_relationships (user_id, relationship_type, display_name)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (user_id, relationship_type) 
-        DO UPDATE SET display_name = $3
-        RETURNING id
-      `, [userId, relationship, displayName]);
-      
-      userRelationshipId = relationshipResult.rows[0].id;
-    }
-    
     // Save to unified tone_preferences table
+    // Note: updated_at is auto-updated by database trigger
     const query = `
       INSERT INTO tone_preferences (
-        user_id, 
-        preference_type, 
+        user_id,
+        preference_type,
         target_identifier,
-        user_relationship_id,
-        profile_data, 
-        emails_analyzed, 
-        last_updated
+        profile_data,
+        emails_analyzed
       )
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (user_id, preference_type, target_identifier)
-      DO UPDATE SET 
-        user_relationship_id = $4,
-        profile_data = $5,
-        emails_analyzed = $6,
-        last_updated = NOW()
+      DO UPDATE SET
+        profile_data = $4,
+        emails_analyzed = $5
     `;
-    
+
     await db.query(query, [
       userId,
       preferenceType,
       targetIdentifier,
-      userRelationshipId,
       JSON.stringify(profileData),
       emailsAnalyzed
     ]);
@@ -1128,7 +1099,7 @@ export class WritingPatternAnalyzer {
    * Calculate paragraph structure patterns using NLP
    * Categorizes emails into: single-line, brief-multi-line, multi-paragraph, mixed
    */
-  private async calculateParagraphPatterns(
+  private async _calculateParagraphPatterns(
     _userId: string,
     emails: ProcessedEmail[]
   ): Promise<ParagraphPattern[]> {
@@ -1137,7 +1108,7 @@ export class WritingPatternAnalyzer {
     }
 
     // Classify each email's structure
-    const classifications = emails.map(email => this.classifyEmailStructure(email));
+    const classifications = emails.map(email => this._classifyEmailStructure(email));
 
     // Count occurrences of each type
     const counts = new Map<string, number>();
@@ -1150,7 +1121,7 @@ export class WritingPatternAnalyzer {
     const patterns: ParagraphPattern[] = Array.from(counts.entries()).map(([type, count]) => ({
       type,
       percentage: (count / total) * 100,
-      description: this.getParagraphTypeDescription(type)
+      description: this._getParagraphTypeDescription(type)
     }));
 
     // Sort by percentage (most common first)
@@ -1162,7 +1133,7 @@ export class WritingPatternAnalyzer {
   /**
    * Classify a single email's paragraph structure
    */
-  private classifyEmailStructure(email: ProcessedEmail): string {
+  private _classifyEmailStructure(email: ProcessedEmail): string {
     const text = email.userReply;
     if (!text || text.trim() === '') {
       return "single-line response";
@@ -1170,9 +1141,9 @@ export class WritingPatternAnalyzer {
 
     const doc = nlp(text);
     const sentences = doc.sentences().length;
-    const lineBreaks = this.countLineBreaks(text);
-    const hasGreeting = this.hasGreeting(text);
-    const hasClosing = this.hasClosing(text);
+    const lineBreaks = this._countLineBreaks(text);
+    const hasGreeting = this._hasGreeting(text);
+    const hasClosing = this._hasClosing(text);
 
     // Single-line: Very brief, 1-2 sentences, minimal line breaks
     if (sentences <= 2 && lineBreaks <= 1) {
@@ -1196,15 +1167,15 @@ export class WritingPatternAnalyzer {
   /**
    * Count meaningful line breaks in text
    */
-  private countLineBreaks(text: string): number {
+  private _countLineBreaks(text: string): number {
     return text.split('\n').filter(line => line.trim().length > 0).length - 1;
   }
 
   /**
    * Detect if text has a greeting
    */
-  private hasGreeting(text: string): boolean {
-    const firstLine = text.split('\n')[0]?.toLowerCase() || '';
+  private _hasGreeting(text: string): boolean {
+    const firstLine = text.split('\n')[0]?.toLowerCase();
     const doc = nlp(firstLine);
 
     // Check for common greeting patterns
@@ -1214,7 +1185,7 @@ export class WritingPatternAnalyzer {
   /**
    * Detect if text has a closing/valediction
    */
-  private hasClosing(text: string): boolean {
+  private _hasClosing(text: string): boolean {
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length === 0) return false;
 
@@ -1228,7 +1199,7 @@ export class WritingPatternAnalyzer {
   /**
    * Get description for paragraph type
    */
-  private getParagraphTypeDescription(type: string): string {
+  private _getParagraphTypeDescription(type: string): string {
     const descriptions: Record<string, string> = {
       "single-line response": "Very brief emails, 1-2 sentences total, no line breaks",
       "brief-multi-line": "Short emails with 2-4 lines, each line is a distinct point",
@@ -1242,7 +1213,7 @@ export class WritingPatternAnalyzer {
    * Calculate opening patterns using NLP
    * Extracts exact opening text with frequencies
    */
-  private async calculateOpeningPatterns(
+  private async _calculateOpeningPatterns(
     _userId: string,
     emails: ProcessedEmail[]
   ): Promise<OpeningPattern[]> {
@@ -1251,7 +1222,7 @@ export class WritingPatternAnalyzer {
     }
 
     // Extract opening from each email
-    const openings = emails.map(email => this.extractOpening(email));
+    const openings = emails.map(email => this._extractOpening(email));
 
     // Count occurrences
     const counts = new Map<string, number>();
@@ -1276,7 +1247,7 @@ export class WritingPatternAnalyzer {
   /**
    * Extract opening text from email
    */
-  private extractOpening(email: ProcessedEmail): string {
+  private _extractOpening(email: ProcessedEmail): string {
     const lines = email.userReply.split('\n').filter(l => l.trim());
     if (lines.length === 0) {
       return "[right to the point]";
@@ -1301,7 +1272,7 @@ export class WritingPatternAnalyzer {
    * Calculate valediction patterns using NLP
    * Analyzes closing phrases before name
    */
-  private async calculateValedictionPatterns(
+  private async _calculateValedictionPatterns(
     _userId: string,
     emails: ProcessedEmail[]
   ): Promise<ValedictionPattern[]> {
@@ -1310,7 +1281,7 @@ export class WritingPatternAnalyzer {
     }
 
     // Extract valediction from each email
-    const valedictions = emails.map(email => this.extractValediction(email));
+    const valedictions = emails.map(email => this._extractValediction(email));
 
     // Count occurrences
     const counts = new Map<string, number>();
@@ -1341,7 +1312,7 @@ export class WritingPatternAnalyzer {
   /**
    * Extract valediction from email
    */
-  private extractValediction(email: ProcessedEmail): string {
+  private _extractValediction(email: ProcessedEmail): string {
     const lines = email.userReply.split('\n').filter(l => l.trim());
     if (lines.length === 0) {
       return "[None]";
@@ -1350,14 +1321,14 @@ export class WritingPatternAnalyzer {
     // Check last 3 lines for valedictions
     const lastLines = lines.slice(-3).join('\n').toLowerCase();
 
-    const detected = this.detectCommonValedictions(lastLines);
+    const detected = this._detectCommonValedictions(lastLines);
     return detected || "[None]";
   }
 
   /**
    * Detect common valediction phrases using NLP
    */
-  private detectCommonValedictions(text: string): string | null {
+  private _detectCommonValedictions(text: string): string | null {
     const doc = nlp(text);
 
     // Use NLP to find common valediction patterns
@@ -1379,5 +1350,140 @@ export class WritingPatternAnalyzer {
     }
 
     return null;
+  }
+
+  /**
+   * Calculate aggregate patterns from accumulated data across all relationships
+   * This avoids duplicate NLP processing and LLM calls for aggregate stats
+   *
+   * @param accumulatedData - Data collected from all relationship analyses
+   * @returns WritingPatterns for aggregate (without LLM-generated patterns)
+   */
+  public calculateAggregateFromAccumulated(accumulatedData: {
+    sentenceLengths: number[];
+    paragraphCounts: Map<string, number>;
+    openingCounts: Map<string, number>;
+    valedictionCounts: Map<string, number>;
+    totalEmails: number;
+  }): WritingPatterns {
+    // Calculate sentence patterns from accumulated lengths
+    const sentencePatterns = this._calculateSentenceStatsFromRaw(accumulatedData.sentenceLengths);
+
+    // Calculate paragraph patterns from accumulated counts
+    const paragraphPatterns: ParagraphPattern[] = Array.from(accumulatedData.paragraphCounts.entries())
+      .map(([type, count]) => ({
+        type,
+        percentage: (count / accumulatedData.totalEmails) * 100,
+        description: this._getParagraphTypeDescription(type)
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Calculate opening patterns from accumulated counts
+    const openingPatterns: OpeningPattern[] = Array.from(accumulatedData.openingCounts.entries())
+      .map(([pattern, count]) => ({
+        pattern,
+        percentage: count / accumulatedData.totalEmails,
+        notes: pattern === "[right to the point]" ? "No greeting, starts directly with content" : undefined
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Calculate valediction patterns from accumulated counts
+    const totalValedictions = Array.from(accumulatedData.valedictionCounts.values()).reduce((sum, c) => sum + c, 0);
+    const valediction: ValedictionPattern[] = Array.from(accumulatedData.valedictionCounts.entries())
+      .map(([phrase, count]) => ({
+        phrase,
+        percentage: (count / totalValedictions) * 100
+      }))
+      .sort((a, b) => b.percentage - a.percentage);
+
+    // Ensure percentages sum to exactly 100%
+    const sum = valediction.reduce((acc, p) => acc + p.percentage, 0);
+    if (sum !== 100 && valediction.length > 0) {
+      valediction[0].percentage += (100 - sum);
+    }
+
+    // Return aggregate patterns without LLM-generated data (Option B)
+    return {
+      sentencePatterns,
+      paragraphPatterns,
+      openingPatterns,
+      valediction,
+      negativePatterns: [],  // Skip LLM for aggregate
+      responsePatterns: {    // Default values
+        immediate: 0,
+        contemplative: 0,
+        questionHandling: 'varies'
+      },
+      uniqueExpressions: []  // Skip LLM for aggregate
+    };
+  }
+
+  /**
+   * Helper method to calculate sentence statistics from raw sentence lengths
+   * Used by calculateAggregateFromAccumulated
+   */
+  private _calculateSentenceStatsFromRaw(wordCounts: number[]): SentencePatterns {
+    if (wordCounts.length === 0) {
+      return {
+        avgLength: 0,
+        medianLength: 0,
+        trimmedMean: 0,
+        minLength: 0,
+        maxLength: 0,
+        stdDeviation: 0,
+        percentile25: 0,
+        percentile75: 0,
+        distribution: { short: 0, medium: 0, long: 0 },
+        examples: []
+      };
+    }
+
+    // Sort for median and percentile calculations
+    const sortedCounts = [...wordCounts].sort((a, b) => a - b);
+
+    // Calculate statistics using simple-statistics
+    const avgLength = ss.mean(wordCounts);
+    const medianLength = ss.median(sortedCounts);
+    const minLength = ss.min(wordCounts);
+    const maxLength = ss.max(wordCounts);
+    const stdDeviation = ss.standardDeviation(wordCounts);
+    const percentile25 = ss.quantile(sortedCounts, 0.25);
+    const percentile75 = ss.quantile(sortedCounts, 0.75);
+
+    // Calculate trimmed mean (remove top and bottom 5%)
+    const trimAmount = Math.floor(sortedCounts.length * 0.05);
+    const trimmedData = trimAmount > 0
+      ? sortedCounts.slice(trimAmount, sortedCounts.length - trimAmount)
+      : sortedCounts;
+    const trimmedMean = trimmedData.length > 0 ? ss.mean(trimmedData) : avgLength;
+
+    // Get sentence length breakpoints from env
+    const shortMax = parseInt(process.env.PATTERN_SENTENCE_SHORT_MAX!);
+    const longMin = parseInt(process.env.PATTERN_SENTENCE_LONG_MIN!);
+
+    // Calculate distribution
+    const shortCount = wordCounts.filter(c => c < shortMax).length;
+    const mediumCount = wordCounts.filter(c => c >= shortMax && c <= longMin).length;
+    const longCount = wordCounts.filter(c => c > longMin).length;
+    const totalSentenceCount = wordCounts.length;
+
+    const distribution = {
+      short: shortCount / totalSentenceCount,
+      medium: mediumCount / totalSentenceCount,
+      long: longCount / totalSentenceCount
+    };
+
+    return {
+      avgLength: Math.round(avgLength * 100) / 100,
+      medianLength: Math.round(medianLength * 100) / 100,
+      trimmedMean: Math.round(trimmedMean * 100) / 100,
+      minLength,
+      maxLength,
+      stdDeviation: Math.round(stdDeviation * 100) / 100,
+      percentile25: Math.round(percentile25 * 100) / 100,
+      percentile75: Math.round(percentile75 * 100) / 100,
+      distribution,
+      examples: []  // No examples for aggregate
+    };
   }
 }

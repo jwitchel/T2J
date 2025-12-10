@@ -12,11 +12,14 @@ import { EmailProcessor } from './email-processor';
 import { RelationshipDetector } from './relationships/relationship-detector';
 import { nameRedactor } from './name-redactor';
 import { extractEmailFeatures, EmailFeatures } from './pipeline/types';
-import { simpleParser, ParsedMail } from 'mailparser';
+import { ParsedMail } from 'mailparser';
 import { EmailMessageWithRaw } from './imap-operations';
 import { pool } from './db';
+import { PoolClient } from 'pg';
 import { EmailRepository } from './repositories/email-repository';
 import { EmailMarkers, hasActualUserContent } from './email-markers';
+import { withTransaction } from './db/transaction-utils';
+import { EmailActionType, EmailDirection } from '../types/email-action-tracking';
 
 /**
  * Validates that a raw RFC 5322 email message exists and is non-empty
@@ -38,11 +41,10 @@ export function validateRawMessage(
   return fullMessage;
 }
 
-export interface SaveEmailParams {
+interface SaveEmailParamsBase {
   userId: string;
   emailAccountId: string;
   emailData: EmailMessageWithRaw;
-  emailType: 'incoming' | 'sent';
   folderName: string;
   llmResponse?: {  // AI evaluation metadata from draft generation
     meta: any;
@@ -53,12 +55,26 @@ export interface SaveEmailParams {
     relationship: {
       type: string;
       confidence: number;
-      detectionMethod: string;
     };
     spamAnalysis: any;
     generatedContent: string;
   };
+  client?: PoolClient;  // Optional transaction client
 }
+
+interface SaveSentEmailParams extends SaveEmailParamsBase {
+  emailType: EmailDirection.SENT;
+}
+
+interface SaveIncomingEmailParams extends SaveEmailParamsBase {
+  emailType: EmailDirection.INCOMING;
+  // Action tracking fields (required for incoming emails)
+  actionTaken: EmailActionType;
+  destinationFolder: string | null;
+  uid: number;
+}
+
+export type SaveEmailParams = SaveSentEmailParams | SaveIncomingEmailParams;
 
 export interface SaveEmailResult {
   success: boolean;
@@ -95,152 +111,322 @@ export class EmailStorageService {
   }
 
   /**
-   * Save an email to PostgreSQL with complete metadata and vector embeddings
-   * For sent emails: Creates one entry per recipient (TO/CC/BCC)
-   * For incoming emails: Creates one entry with sender
+   * Process user reply and determine if email should be saved
+   * Returns null if email should be skipped, otherwise returns the processed reply
+   *
+   * @param processedContent - Content from email processor
+   * @param parsedEmail - Parsed email for attachment checking
+   * @returns Processed user reply or null if should skip
    */
-  public async saveEmail(params: SaveEmailParams): Promise<SaveEmailResult> {
+  private _processUserReply(
+    processedContent: { userReply: string },
+    parsedEmail: ParsedMail
+  ): string | null {
+    const hasUserContent = hasActualUserContent(processedContent.userReply);
+
+    if (hasUserContent) {
+      // Redact names and trim
+      const redactionResult = nameRedactor.redactNames(processedContent.userReply);
+      const redactedUserReply = redactionResult.text.trim();
+
+      // If after trimming we have only whitespace, skip this email
+      if (redactedUserReply === '') {
+        return null;
+      }
+
+      return redactedUserReply;
+    } else {
+      // No user content - check if this is an attachment-only email
+      const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
+
+      if (hasAttachments) {
+        // Email has attachments but no body text - mark as attachment-only
+        return EmailMarkers.ATTACHMENT_ONLY;
+      } else {
+        // No content and no attachments - skip this email
+        return null;
+      }
+    }
+  }
+
+  /**
+   * Extract unique recipient addresses from parsed email (to/cc/bcc)
+   */
+  private _getRecipientAddresses(parsedEmail: ParsedMail): Array<{ address?: string; name?: string }> {
+    const getAddresses = (field: any) => {
+      if (!field) return [];
+      if (Array.isArray(field)) {
+        return field.flatMap(f => f.value);
+      }
+      return field.value;
+    };
+
+    const allRecipients = [
+      ...getAddresses(parsedEmail.to),
+      ...getAddresses(parsedEmail.cc),
+      ...getAddresses(parsedEmail.bcc)
+    ];
+
+    // Remove duplicates by email address
+    return Array.from(
+      new Map(allRecipients.map(r => [r.address?.toLowerCase(), r])).values()
+    );
+  }
+
+  /**
+   * Save sent email to all recipients, returns count saved
+   */
+  private async _saveSentEmailToRecipients(params: {
+    userId: string;
+    emailAccountId: string;
+    emailData: EmailMessageWithRaw;
+    parsedEmail: ParsedMail;
+    subject: string;
+    redactedUserReply: string;
+    features: EmailFeatures | null;
+    semanticVector: number[];
+    styleVector: number[];
+    client?: PoolClient;
+  }): Promise<{ count: number; error?: string }> {
+    const recipients = this._getRecipientAddresses(params.parsedEmail);
+
+    if (recipients.length === 0) {
+      return { count: 0, error: 'No recipients found for sent email' };
+    }
+
+    let savedCount = 0;
+    for (const recipient of recipients) {
+      if (!recipient.address) continue;
+
+      const saved = await this._saveEmailEntry({
+        userId: params.userId,
+        emailAccountId: params.emailAccountId,
+        emailData: params.emailData,
+        parsedEmail: params.parsedEmail,
+        subject: params.subject,
+        redactedUserReply: params.redactedUserReply,
+        features: params.features,
+        semanticVector: params.semanticVector,
+        styleVector: params.styleVector,
+        emailType: EmailDirection.SENT,
+        otherPartyEmail: recipient.address,
+        otherPartyName: recipient.name,
+        client: params.client
+      });
+
+      if (saved) savedCount++;
+    }
+
+    return { count: savedCount };
+  }
+
+  /**
+   * Save multiple emails in batch with optimized embedding generation
+   * Batches embedding generation to reduce overhead and improve performance
+   *
+   * @param emailBatch - Array of email save parameters
+   * @returns Array of save results
+   */
+  public async saveEmailBatch(emailBatch: SaveEmailParams[]): Promise<SaveEmailResult[]> {
+    if (emailBatch.length === 0) {
+      return [];
+    }
+
+    const startTime = Date.now();
+    console.log(`\n[EmailStorage] ========================================`);
+    console.log(`[EmailStorage] Starting batch processing of ${emailBatch.length} emails`);
+    console.log(`[EmailStorage] ========================================\n`);
+
+    // Step 1: Process all emails and extract text content
+    const step1Start = Date.now();
+    const processedEmails: Array<{
+      params: SaveEmailParams;
+      parsedEmail: ParsedMail;
+      subject: string;
+      redactedUserReply: string;
+      features: EmailFeatures | null;
+      hasUserContent: boolean;
+    }> = [];
+
+    for (const params of emailBatch) {
+      const { emailData } = params;
+
+      // Basic validation - skip invalid emails
+      if (!emailData.messageId || !emailData.date) {
+        continue;
+      }
+
+      const parsedEmail = emailData.parsed;
+      if (!parsedEmail.text || parsedEmail.text.trim() === '') {
+        continue;
+      }
+
+      const subject = parsedEmail.subject?.trim();
+      const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
+        userId: params.userId,
+        emailAccountId: params.emailAccountId
+      });
+
+      // Process and validate user reply
+      const redactedUserReply = this._processUserReply(processedContent, parsedEmail);
+      if (redactedUserReply === null) {
+        // Skip this email - no content
+        continue;
+      }
+
+      const hasUserContent = hasActualUserContent(processedContent.userReply);
+      const features = hasUserContent ? extractEmailFeatures(redactedUserReply, {
+        email: emailData.from,
+        name: ''
+      }) : null;
+
+      processedEmails.push({
+        params,
+        parsedEmail,
+        subject: subject!,
+        redactedUserReply,
+        features,
+        hasUserContent
+      });
+    }
+
+    const step1Duration = Date.now() - step1Start;
+    console.log(`[EmailStorage] Step 1 (Processing): ${step1Duration}ms - Processed ${processedEmails.length}/${emailBatch.length} valid emails`);
+
+    // Step 2: Batch generate semantic embeddings for all emails with content
+    const step2Start = Date.now();
+    const textsForSemanticEmbedding = processedEmails
+      .filter(e => e.hasUserContent)
+      .map(e => e.redactedUserReply);
+
+    let semanticEmbeddings: number[][] = [];
+    let step2Duration = 0;
+    if (textsForSemanticEmbedding.length > 0) {
+      console.log(`[EmailStorage] Step 2: Generating semantic embeddings for ${textsForSemanticEmbedding.length} emails (batches of 50)...`);
+      const result = await this.embeddingService.embedBatch(textsForSemanticEmbedding, { batchSize: 50 });
+      semanticEmbeddings = result.embeddings.map(e => e.vector);
+      step2Duration = Date.now() - step2Start;
+      console.log(`[EmailStorage] Step 2 (Semantic Embeddings): ${step2Duration}ms - Generated ${semanticEmbeddings.length} embeddings`);
+    } else {
+      console.log(`[EmailStorage] Step 2: Skipped (no emails with user content)`);
+    }
+
+    // Step 3: Batch generate style embeddings for sent emails with content
+    const step3Start = Date.now();
+    const sentEmailsWithContent = processedEmails.filter(e => e.hasUserContent && e.params.emailType === EmailDirection.SENT);
+    const textsForStyleEmbedding = sentEmailsWithContent.map(e => e.redactedUserReply);
+
+    let styleEmbeddings: number[][] = [];
+    let step3Duration = 0;
+    if (textsForStyleEmbedding.length > 0) {
+      console.log(`[EmailStorage] Step 3: Generating style embeddings for ${textsForStyleEmbedding.length} sent emails (batches of 50)...`);
+      const result = await this.styleEmbeddingService.embedBatch(textsForStyleEmbedding, { batchSize: 50 });
+      styleEmbeddings = result.embeddings.map(e => e.vector);
+      step3Duration = Date.now() - step3Start;
+      console.log(`[EmailStorage] Step 3 (Style Embeddings): ${step3Duration}ms - Generated ${styleEmbeddings.length} embeddings`);
+    } else {
+      console.log(`[EmailStorage] Step 3: Skipped (no sent emails with user content)`);
+    }
+
+    // Step 4: Map embeddings back to emails and save
+    const step4Start = Date.now();
+    console.log(`[EmailStorage] Step 4: Saving ${processedEmails.length} emails to database...`);
+
+    const results: SaveEmailResult[] = [];
+    let semanticIdx = 0;
+    let styleIdx = 0;
+
+    for (const processed of processedEmails) {
+      const { params, parsedEmail, subject, redactedUserReply, features, hasUserContent } = processed;
+
+      // Determine vectors for this email
+      let semanticVector: number[];
+      let styleVector: number[];
+
+      if (hasUserContent) {
+        semanticVector = semanticEmbeddings[semanticIdx++];
+        styleVector = params.emailType === EmailDirection.SENT ? styleEmbeddings[styleIdx++] : new Array(768).fill(0);
+      } else {
+        semanticVector = new Array(384).fill(0);
+        styleVector = new Array(768).fill(0);
+      }
+
+      // Save email using the same logic as saveEmail but with pre-computed vectors
+      const result = await this._saveWithPrecomputedVectors(
+        params,
+        parsedEmail,
+        subject,
+        redactedUserReply,
+        features,
+        semanticVector,
+        styleVector
+      );
+
+      results.push(result);
+    }
+
+    const step4Duration = Date.now() - step4Start;
+    const totalDuration = Date.now() - startTime;
+    const successCount = results.filter(r => r.success && !r.skipped).length;
+    const skippedCount = results.filter(r => r.skipped).length;
+    const errorCount = results.filter(r => !r.success).length;
+
+    console.log(`[EmailStorage] Step 4 (Database Save): ${step4Duration}ms - Saved ${successCount}, Skipped ${skippedCount}, Errors ${errorCount}`);
+    console.log(`\n[EmailStorage] ========================================`);
+    console.log(`[EmailStorage] BATCH COMPLETE: ${totalDuration}ms total`);
+    console.log(`[EmailStorage]   - Step 1 (Processing):         ${step1Duration}ms`);
+    console.log(`[EmailStorage]   - Step 2 (Semantic Embeddings): ${step2Duration}ms`);
+    console.log(`[EmailStorage]   - Step 3 (Style Embeddings):    ${step3Duration}ms`);
+    console.log(`[EmailStorage]   - Step 4 (Database):           ${step4Duration}ms`);
+    console.log(`[EmailStorage]   - Success: ${successCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`);
+    console.log(`[EmailStorage] ========================================\n`);
+
+    return results;
+  }
+
+  /**
+   * Internal helper to save email with pre-computed vectors
+   * Used by saveEmailBatch to avoid re-generating embeddings
+   */
+  private async _saveWithPrecomputedVectors(
+    params: SaveEmailParams,
+    parsedEmail: ParsedMail,
+    subject: string,
+    redactedUserReply: string,
+    features: EmailFeatures | null,
+    semanticVector: number[],
+    styleVector: number[]
+  ): Promise<SaveEmailResult> {
     const { userId, emailAccountId, emailData, emailType } = params;
 
     try {
-      // Validate message ID
-      if (!emailData.messageId) {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Missing message-id'
-        };
-      }
-
-      // Validate email date (required for proper storage)
-      if (!emailData.date) {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Missing email date'
-        };
-      }
-
-      // Parse raw message with mailparser
-      const parsedEmail = await simpleParser(emailData.fullMessage);
-
-      // Validate required parsed fields (fail fast)
-      if (!parsedEmail.text || parsedEmail.text.trim() === '') {
-        return {
-          success: false,
-          skipped: false,
-          error: 'Email has no text content'
-        };
-      }
-
-      // Subject is allowed to be empty - store as empty string
-      const subject = parsedEmail.subject?.trim() || '';
-
-      // Process email to extract user content (remove signatures, quotes)
-      const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
-        userId,
-        emailAccountId
-      });
-
-      // Check if we have user content to generate vectors
-      // Special markers should not be treated as user content
-      const hasUserContent = hasActualUserContent(processedContent.userReply);
-
-      let redactedUserReply = '';
-      let features: EmailFeatures | null = null;
-      let semanticVector: number[] = [];
-      let styleVector: number[] = [];
-
-      if (hasUserContent) {
-        // Redact names from user reply
-        const redactionResult = nameRedactor.redactNames(processedContent.userReply);
-        redactedUserReply = redactionResult.text;
-
-        // Extract features from redacted text
-        features = extractEmailFeatures(redactedUserReply, {
-          email: emailData.from || '',
-          name: ''
-        });
-
-        // Generate semantic embedding from redacted user reply
-        const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
-        semanticVector = embeddingResult.vector;
-
-        // Generate style embedding (only for sent emails)
-        styleVector = emailType === 'sent'
-          ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
-          : new Array(768).fill(0);  // Incoming emails don't need style vectors
-      } else {
-        // No user content - check if this is an attachment-only email
-        const hasAttachments = parsedEmail.attachments && parsedEmail.attachments.length > 0;
-
-        if (hasAttachments) {
-          // Email has attachments but no body text - mark as attachment-only
-          redactedUserReply = EmailMarkers.ATTACHMENT_ONLY;
-        } else {
-          // No attachments either - use the processed reply (may be empty or marker)
-          redactedUserReply = processedContent.userReply || '';
-        }
-
-        features = null;
-        semanticVector = new Array(384).fill(0);  // Semantic embedding dimension
-        styleVector = new Array(768).fill(0);     // Style embedding dimension
-      }
-
       // Determine recipients/senders based on email type
       let savedCount = 0;
 
-      if (emailType === 'sent') {
+      if (emailType === EmailDirection.SENT) {
         // For sent emails: Create one entry per recipient
-        // parsedEmail.to/cc/bcc can be AddressObject or AddressObject[]
-        const getAddresses = (field: any) => {
-          if (!field) return [];
-          if (Array.isArray(field)) {
-            return field.flatMap(f => f.value || []);
-          }
-          return field.value || [];
-        };
+        const result = await this._saveSentEmailToRecipients({
+          userId,
+          emailAccountId,
+          emailData,
+          parsedEmail,
+          subject,
+          redactedUserReply,
+          features,
+          semanticVector,
+          styleVector,
+          client: undefined
+        });
 
-        const allRecipients = [
-          ...getAddresses(parsedEmail.to),
-          ...getAddresses(parsedEmail.cc),
-          ...getAddresses(parsedEmail.bcc)
-        ];
-
-        // Remove duplicates
-        const uniqueRecipients = Array.from(
-          new Map(allRecipients.map(r => [r.address?.toLowerCase(), r])).values()
-        );
-
-        if (uniqueRecipients.length === 0) {
+        if (result.error && result.count === 0) {
           return {
             success: false,
             skipped: false,
-            error: 'No recipients found for sent email'
+            error: result.error
           };
         }
 
-        // Save one entry per recipient
-        for (const recipient of uniqueRecipients) {
-          if (!recipient.address) continue;
-
-          const saved = await this.saveEmailEntry({
-            userId,
-            emailAccountId,
-            emailData,
-            parsedEmail,
-            subject,
-            redactedUserReply,
-            features,
-            semanticVector,
-            styleVector,
-            emailType,
-            otherPartyEmail: recipient.address,
-            otherPartyName: recipient.name
-          });
-
-          if (saved) savedCount++;
-        }
+        savedCount = result.count;
 
       } else {
         // For incoming emails: Create one entry with sender
@@ -255,7 +441,7 @@ export class EmailStorageService {
           };
         }
 
-        const saved = await this.saveEmailEntry({
+        const saved = await this._saveEmailEntry({
           userId,
           emailAccountId,
           emailData,
@@ -267,44 +453,11 @@ export class EmailStorageService {
           styleVector,
           emailType,
           otherPartyEmail: senderEmail,
-          otherPartyName: senderName
+          otherPartyName: senderName,
+          client: undefined
         });
 
-        if (saved) {
-          savedCount++;
-
-          // Save draft tracking data if LLM analysis was performed
-          if (params.llmResponse) {
-            try {
-              await pool.query(`
-                INSERT INTO draft_tracking (
-                  user_id, email_account_id, original_message_id,
-                  draft_message_id, generated_content, relationship_type,
-                  context_data, created_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-              `, [
-                userId,
-                emailAccountId,
-                emailData.messageId,
-                params.llmResponse.draftId || null,  // Allow null for silent actions
-                params.llmResponse.generatedContent || null,  // Allow null for silent actions
-                params.llmResponse.relationship.type,
-                JSON.stringify({
-                  meta: params.llmResponse.meta,
-                  providerId: params.llmResponse.providerId,
-                  modelName: params.llmResponse.modelName,
-                  relationship: params.llmResponse.relationship,
-                  spamAnalysis: params.llmResponse.spamAnalysis  // Include spam analysis
-                })
-              ]);
-            } catch (draftError) {
-              // Log but don't fail - draft tracking is supplementary data
-              console.error('[EmailStorage] Failed to save draft tracking:', draftError);
-              console.error('[EmailStorage] llmResponse data:', JSON.stringify(params.llmResponse, null, 2));
-            }
-          }
-        }
+        if (saved) savedCount++;
       }
 
       return {
@@ -324,10 +477,212 @@ export class EmailStorageService {
   }
 
   /**
+   * Extract and process email content
+   * Returns null if email should be skipped
+   */
+  private async _extractContent(
+    emailData: EmailMessageWithRaw,
+    userId: string,
+    emailAccountId: string
+  ): Promise<{
+    parsedEmail: ParsedMail;
+    subject: string;
+    redactedUserReply: string;
+    processedContent: { userReply: string };
+  } | null> {
+    const parsedEmail = emailData.parsed;
+    const subject = parsedEmail.subject?.trim();
+
+    const processedContent = await this.emailProcessor.processEmail(parsedEmail, {
+      userId,
+      emailAccountId
+    });
+
+    const redactedUserReply = this._processUserReply(processedContent, parsedEmail);
+    if (redactedUserReply === null) {
+      return null;
+    }
+
+    return { parsedEmail, subject: subject!, redactedUserReply, processedContent };
+  }
+
+  /**
+   * Generate embeddings for email content
+   * Returns features and vectors (semantic and style)
+   */
+  private async _generateEmbeddings(
+    redactedUserReply: string,
+    emailData: EmailMessageWithRaw,
+    emailType: EmailDirection,
+    processedContent: { userReply: string }
+  ): Promise<{
+    features: EmailFeatures | null;
+    semanticVector: number[];
+    styleVector: number[];
+  }> {
+    const hasUserContent = hasActualUserContent(processedContent.userReply);
+
+    if (hasUserContent) {
+      const features = extractEmailFeatures(redactedUserReply, {
+        email: emailData.from,
+        name: ''
+      });
+
+      const embeddingResult = await this.embeddingService.embedText(redactedUserReply);
+      const semanticVector = embeddingResult.vector;
+
+      const styleVector = emailType === EmailDirection.SENT
+        ? (await this.styleEmbeddingService.embedText(redactedUserReply)).vector
+        : new Array(768).fill(0);
+
+      return { features, semanticVector, styleVector };
+    }
+
+    return {
+      features: null,
+      semanticVector: new Array(384).fill(0),
+      styleVector: new Array(768).fill(0)
+    };
+  }
+
+  /**
+   * Extract sender/recipient parties based on email type
+   * For sent emails, returns null (handled by _saveSentEmailToRecipients)
+   * For incoming emails, returns sender info
+   */
+  private _extractParties(
+    parsedEmail: ParsedMail,
+    emailType: EmailDirection
+  ): { email: string; name?: string } | null {
+    if (emailType === EmailDirection.SENT) {
+      return null;
+    }
+
+    const senderEmail = parsedEmail.from?.value[0]?.address;
+    const senderName = parsedEmail.from?.value[0]?.name;
+
+    if (!senderEmail) {
+      throw new Error('No sender email found for incoming email');
+    }
+
+    return { email: senderEmail, name: senderName };
+  }
+
+  /**
+   * Save an email to PostgreSQL with complete metadata and vector embeddings
+   * For sent emails: Creates one entry per recipient (TO/CC/BCC)
+   * For incoming emails: Creates one entry with sender
+   */
+  public async saveEmail(params: SaveEmailParams): Promise<SaveEmailResult> {
+    const { userId, emailAccountId, emailData, emailType, client } = params;
+    const db = client || pool;
+
+    try {
+      const content = await this._extractContent(emailData, userId, emailAccountId);
+      if (!content) {
+        return { success: true, skipped: true, error: 'Email has no content' };
+      }
+
+      const { parsedEmail, subject, redactedUserReply, processedContent } = content;
+
+      const { features, semanticVector, styleVector } = await this._generateEmbeddings(
+        redactedUserReply,
+        emailData,
+        emailType,
+        processedContent
+      );
+
+      let savedCount = 0;
+
+      if (emailType === EmailDirection.SENT) {
+        const result = await this._saveSentEmailToRecipients({
+          userId,
+          emailAccountId,
+          emailData,
+          parsedEmail,
+          subject,
+          redactedUserReply,
+          features,
+          semanticVector,
+          styleVector,
+          client
+        });
+
+        if (result.error && result.count === 0) {
+          return { success: false, skipped: false, error: result.error };
+        }
+
+        savedCount = result.count;
+      } else {
+        const party = this._extractParties(parsedEmail, emailType);
+        if (!party) {
+          return { success: false, skipped: false, error: 'No sender email found for incoming email' };
+        }
+
+        const saved = await this._saveEmailEntry({
+          userId,
+          emailAccountId,
+          emailData,
+          parsedEmail,
+          subject,
+          redactedUserReply,
+          features,
+          semanticVector,
+          styleVector,
+          emailType,
+          otherPartyEmail: party.email,
+          otherPartyName: party.name,
+          client,
+          actionTaken: params.actionTaken,
+          destinationFolder: params.destinationFolder,
+          uid: params.uid
+        });
+
+        if (saved) {
+          savedCount++;
+
+          if (params.llmResponse) {
+            await db.query(`
+              INSERT INTO draft_tracking (
+                user_id, email_account_id, original_message_id,
+                draft_message_id, generated_content,
+                context_data, created_at
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            `, [
+              userId,
+              emailAccountId,
+              emailData.messageId,
+              params.llmResponse.draftId || null,
+              params.llmResponse.generatedContent || null,
+              JSON.stringify({
+                meta: params.llmResponse.meta,
+                providerId: params.llmResponse.providerId,
+                modelName: params.llmResponse.modelName,
+                spamAnalysis: params.llmResponse.spamAnalysis
+              })
+            ]);
+          }
+        }
+      }
+
+      return { success: true, skipped: false, saved: savedCount };
+
+    } catch (error: unknown) {
+      console.error('[EmailStorage] Error saving email:', error);
+      return {
+        success: false,
+        skipped: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
    * Save a single email entry to PostgreSQL with vector embeddings
    * (For sent emails with multiple recipients, this is called once per recipient)
    */
-  private async saveEmailEntry(params: {
+  private async _saveEmailEntry(params: {
     userId: string;
     emailAccountId: string;
     emailData: EmailMessageWithRaw;
@@ -337,9 +692,14 @@ export class EmailStorageService {
     features: EmailFeatures | null;
     semanticVector: number[];
     styleVector: number[];
-    emailType: 'incoming' | 'sent';
+    emailType: EmailDirection;
     otherPartyEmail: string;
     otherPartyName?: string;
+    client?: PoolClient;
+    // Action tracking fields (required when emailType === EmailDirection.INCOMING)
+    actionTaken?: EmailActionType;
+    destinationFolder?: string | null;
+    uid?: number;
   }): Promise<boolean> {
     const {
       userId,
@@ -353,27 +713,26 @@ export class EmailStorageService {
       styleVector,
       emailType,
       otherPartyEmail,
-      otherPartyName
+      otherPartyName,
+      client: externalClient,
+      actionTaken,
+      destinationFolder,
+      uid
     } = params;
 
-    try {
+    // Use a database transaction to ensure person creation and email insertion are atomic
+    // If external client provided, use it; otherwise create new transaction
+    const executeInTransaction = async (client: PoolClient) => {
       // Generate unique email_id (the email's message-id)
       const messageId = emailData.messageId!;
 
       // Validate that we have the raw message (required for proper storage)
       validateRawMessage(emailData.fullMessage, `EmailStorage - ${messageId}`);
 
-      // Check if already exists (deduplication) using repository
-      const exists = emailType === 'sent'
-        ? await this.emailRepository.sentEmailExists(messageId, userId, otherPartyEmail)
-        : await this.emailRepository.receivedEmailExists(messageId, userId, emailAccountId);
-
-      if (exists) {
-        return false;
-      }
-
       // Detect relationship (fail fast - throws on error)
       // Use default values if features are not available (emails without user content)
+      // This creates/finds the person record and returns the person_email_id
+      // Pass client to ensure person creation is part of the transaction
       const relationshipDetection = await this.relationshipDetector.detectRelationship({
         userId,
         recipientEmail: otherPartyEmail,
@@ -390,58 +749,71 @@ export class EmailStorageService {
           hasProfessionalMarkers: false,
           formalityScore: 0.5
         }
-      });
+      }, client);
 
-      // Store to PostgreSQL
-      if (emailType === 'sent') {
+      // Check if already exists (deduplication) using repository - use transaction client
+      const exists = emailType === EmailDirection.SENT
+        ? await this.emailRepository.sentEmailExists(messageId, userId, relationshipDetection.personEmailId, client)
+        : await this.emailRepository.receivedEmailExists(messageId, userId, emailAccountId, client);
+
+      if (exists) {
+        // Email already exists - commit person creation (if any) and skip
+        // Note: commitAndRelease will be handled by withTransaction wrapper
+        return false;
+      }
+
+      // Store to PostgreSQL - pass client to ensure it's part of the transaction
+      if (emailType === EmailDirection.SENT) {
         await this.emailRepository.insertSentEmail({
           emailId: messageId,
           userId,
           emailAccountId,
           userReply: redactedUserReply,
           subject,  // Empty string if no subject
-          recipientEmail: otherPartyEmail,
-          relationshipType: relationshipDetection.relationship,
-          wordCount: features?.stats.wordCount || 0,
+          recipientPersonEmailId: relationshipDetection.personEmailId,  // FK to person_emails
+          wordCount: features?.stats.wordCount!,
           sentDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
           fullMessage: emailData.fullMessage  // Validated at entry point
-        });
+        }, client);
       } else {
-        // Incoming email - use email address as fallback if sender name is missing
-        const finalSenderName = (otherPartyName && otherPartyName.trim() !== '')
-          ? otherPartyName
-          : otherPartyEmail;
-
         await this.emailRepository.insertReceivedEmail({
           emailId: messageId,
           userId,
           emailAccountId,
           rawText: parsedEmail.text!,  // Validated above at line 127
           subject,  // Empty string if no subject
-          senderEmail: otherPartyEmail,
-          senderName: finalSenderName,  // Use email as fallback if name missing
-          wordCount: features?.stats.wordCount || 0,
+          senderPersonEmailId: relationshipDetection.personEmailId,  // FK to person_emails
+          wordCount: features?.stats.wordCount!,
           receivedDate: emailData.date!,  // Validated above at line 115
           semanticVector,
           styleVector,
-          fullMessage: emailData.fullMessage  // Validated at entry point
-        });
+          fullMessage: emailData.fullMessage,  // Validated at entry point
+          // Action tracking fields (required for incoming emails - callers ensure these are set)
+          actionTaken: actionTaken!,
+          destinationFolder: destinationFolder ?? null,
+          uid: uid!
+        }, client);
       }
 
       return true;
+    };
 
-    } catch (error: any) {
-      // Handle duplicate key constraint silently (expected when re-loading emails)
-      if (error?.code === '23505' && error?.constraint?.includes('email_id_key')) {
-        // Duplicate email_id - this is expected, skip silently
-        return false;
-      }
-
-      // Log other unexpected errors
-      console.error('[EmailStorage] Error saving email entry:', error);
-      return false;
+    // Execute in transaction - use external client if provided, otherwise create new transaction
+    if (externalClient) {
+      return await executeInTransaction(externalClient);
+    } else {
+      return await withTransaction(pool, executeInTransaction).catch((error: any) => {
+        // Handle duplicate key constraint - race condition where another transaction inserted first
+        if (error?.code === '23505' && error?.constraint?.includes('email_id_key')) {
+          // Another transaction beat us to it - our person creation was rolled back
+          // (the other transaction already created person, so no data loss)
+          return false;
+        }
+        // All other errors re-throw
+        throw error;
+      });
     }
   }
 

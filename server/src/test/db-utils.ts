@@ -29,53 +29,41 @@ export async function setupTestDb() {
     await mainPool.end();
   }
 
-  try {
-    // Run better-auth schema first (creates user table)
-    const betterAuthSchemaPath = path.join(__dirname, '..', '..', '..', 'db', 'better-auth-schema.sql');
-    const betterAuthSchema = fs.readFileSync(betterAuthSchemaPath, 'utf8');
-    await testPool.query(betterAuthSchema);
+  // Run better-auth schema first (creates user table)
+  const betterAuthSchemaPath = path.join(__dirname, '..', '..', '..', 'db', 'better-auth-schema.sql');
+  const betterAuthSchema = fs.readFileSync(betterAuthSchemaPath, 'utf8');
+  await testPool.query(betterAuthSchema);
 
-    // Then run the main schema
-    const schemaPath = path.join(__dirname, '..', '..', '..', 'db', 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-    await testPool.query(schema);
+  // Then run the main schema
+  const schemaPath = path.join(__dirname, '..', '..', '..', 'db', 'schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+  await testPool.query(schema);
 
-    // Finally run the relationship schema
-    const relationshipSchemaPath = path.join(__dirname, '..', '..', '..', 'db', 'relationship-schema.sql');
-    const relationshipSchema = fs.readFileSync(relationshipSchemaPath, 'utf8');
-    await testPool.query(relationshipSchema);
+  // Finally run the relationship schema
+  const relationshipSchemaPath = path.join(__dirname, '..', '..', '..', 'db', 'relationship-schema.sql');
+  const relationshipSchema = fs.readFileSync(relationshipSchemaPath, 'utf8');
+  await testPool.query(relationshipSchema);
 
-    console.log('Applied database schemas to test database');
-  } catch (error) {
-    console.error('Error setting up test database:', error);
-    throw error;
-  }
+  console.log('Applied database schemas to test database');
 }
 
 export async function cleanupTestDb() {
-  try {
-    // Drop relationship tables first (due to foreign keys)
-    await testPool.query('DROP TABLE IF EXISTS tone_preferences CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS person_relationships CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS person_emails CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS people CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS user_relationships CASCADE');
-    
-    // Drop main application tables
-    await testPool.query('DROP TABLE IF EXISTS draft_tracking CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS email_accounts CASCADE');
-    
-    // Drop better-auth tables
-    await testPool.query('DROP TABLE IF EXISTS verification CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS session CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS account CASCADE');
-    await testPool.query('DROP TABLE IF EXISTS "user" CASCADE');
+  // Drop relationship tables first (due to foreign keys)
+  await testPool.query('DROP TABLE IF EXISTS tone_preferences CASCADE');
+  await testPool.query('DROP TABLE IF EXISTS person_emails CASCADE');
+  await testPool.query('DROP TABLE IF EXISTS people CASCADE');
 
-    console.log('Cleaned up test database tables');
-  } catch (error) {
-    console.error('Error cleaning up test database:', error);
-    throw error;
-  }
+  // Drop main application tables
+  await testPool.query('DROP TABLE IF EXISTS draft_tracking CASCADE');
+  await testPool.query('DROP TABLE IF EXISTS email_accounts CASCADE');
+
+  // Drop better-auth tables
+  await testPool.query('DROP TABLE IF EXISTS verification CASCADE');
+  await testPool.query('DROP TABLE IF EXISTS session CASCADE');
+  await testPool.query('DROP TABLE IF EXISTS account CASCADE');
+  await testPool.query('DROP TABLE IF EXISTS "user" CASCADE');
+
+  console.log('Cleaned up test database tables');
 }
 
 export async function seedTestUser(email: string, _password: string) {

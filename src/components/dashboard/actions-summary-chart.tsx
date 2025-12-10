@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import useSWR from 'swr';
 import ReactECharts from 'echarts-for-react';
-import { EmailActions } from '../../../server/src/lib/email-actions';
+import { EmailActionType } from '../../../server/src/types/email-action-tracking';
 
 // Raw action counts from API (all possible actions)
 interface RawActionCounts {
@@ -47,24 +47,13 @@ function aggregateActions(raw: RawActionCounts): ActionCounts {
   };
 
   Object.entries(raw).forEach(([action, count]) => {
-    // Draft actions (reply, forward, etc.)
-    if (action === EmailActions.REPLY || action === EmailActions.REPLY_ALL || action === EmailActions.FORWARD || action === EmailActions.FORWARD_WITH_COMMENT) {
+    if (EmailActionType.isDraftAction(action)) {
       result.drafted += count;
-    }
-    // Spam
-    else if (action === EmailActions.SILENT_SPAM) {
+    } else if (EmailActionType.isSpamAction(action)) {
       result.spam += count;
-    }
-    // Moved (FYI, Large List, Unsubscribe, Todo)
-    else if (action === EmailActions.SILENT_FYI_ONLY || action === EmailActions.SILENT_LARGE_LIST || action === EmailActions.SILENT_UNSUBSCRIBE || action === EmailActions.SILENT_TODO) {
+    } else if (EmailActionType.isMovedAction(action)) {
       result.moved += count;
-    }
-    // Legacy draft_created - we can't distinguish these in aggregate, so count as drafted
-    else if (action === 'draft_created') {
-      result.drafted += count;
-    }
-    // Everything else is No Action (including SILENT_AMBIGUOUS which stays in inbox)
-    else {
+    } else {
       result.noAction += count;
     }
   });
@@ -294,29 +283,7 @@ export function ActionsSummaryChart() {
             shadowColor: 'rgba(0, 0, 0, 0.3)',
           },
         },
-        label: {
-          show: true,
-          position: 'insideTop',
-          formatter: (params: { dataIndex: number }) => {
-            const count = actualCounts.noAction[params.dataIndex];
-            const pct = noActionData[params.dataIndex] as number;
-            // Hide label if segment is too small (<8%) or count is 0
-            return (count > 0 && pct >= 8) ? `${count} No Action` : '';
-          },
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 11,
-        },
-      },
-      // Invisible series LAST to display totals at the very top of the full stacked column
-      {
-        name: 'Total',
-        type: 'bar',
-        stack: 'total',
-        data: [0, 0, 0, 0],
-        itemStyle: { color: 'transparent' },
-        emphasis: { disabled: true },
-        tooltip: { show: false },
+        // No Action is topmost visible series - show total label above it
         label: {
           show: true,
           position: 'top',

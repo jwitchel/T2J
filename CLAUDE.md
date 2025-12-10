@@ -3,36 +3,6 @@
 ## Project Overview
 This is an AI Email Assistant application that generates email reply drafts matching the user's personal writing tone. The project is managed through GitHub Issues and Projects.
 
-## Current Project State
-
-### ✅ What's Working
-- **Authentication System**: Full auth flow with better-auth
-  - Sign up, sign in, sign out functionality
-  - Protected routes with automatic redirects
-  - Session persistence with httpOnly cookies
-  - Cross-origin auth between Next.js (3001) and Express (3002)
-- **Frontend**: Next.js with TypeScript on port 3001
-- **Backend**: Express.js API on port 3002
-- **Database**: PostgreSQL on port 5434 (Docker)
-- **Cache**: Redis on port 6380 (Docker)
-- **UI Components**: shadcn/ui with Zinc/Indigo theme
-
-### 🚀 Quick Development Start
-```bash
-# Start Docker services
-docker compose up -d
-
-# Start frontend, backend, and workers
-npm run dev:all
-
-# Seed demo data (creates users, styles, emails, etc.)
-npm run seed
-```
-
-Test users available:
-- test1@example.com / password123
-- test2@example.com / password456
-
 ## GitHub CLI Reference
 
 **IMPORTANT**: The `gh project list` command does NOT accept --repo flag. Only use --owner flag.
@@ -59,15 +29,22 @@ gh issue list --repo jwitchel/test-repo --json number,title,body,labels --limit 
 ```
 
 ### Managing Tasks
+
+**🚨 IMPORTANT: Always add new issues to the project!**
+When creating a new issue, you MUST also add it to project 3. The `--project` flag on `gh issue create` does not reliably add issues to projects, so always follow up with `gh project item-add`:
+
 ```bash
-# Create a new issue and add to project
-gh issue create --repo jwitchel/test-repo --title "Task Title" --body "Task description" --project PROJECT_NUMBER
+# Create a new issue
+gh issue create --repo jwitchel/T2J --title "Task Title" --body "Task description"
+
+# REQUIRED: Add the issue to project 3 (issues not in the project won't appear in the backlog!)
+gh project item-add 3 --owner jwitchel --url https://github.com/jwitchel/T2J/issues/ISSUE_NUMBER
 
 # Edit issue body/description (preferred method for updating subtasks)
-gh issue edit ISSUE_NUMBER --repo jwitchel/test-repo --body "New content here"
+gh issue edit ISSUE_NUMBER --repo jwitchel/T2J --body "New content here"
 
 # Add comments ONLY when explicitly requested by user
-gh issue comment ISSUE_NUMBER --repo jwitchel/test-repo --body "Progress update..."
+gh issue comment ISSUE_NUMBER --repo jwitchel/T2J --body "Progress update..."
 ```
 
 ### Project Management
@@ -131,6 +108,21 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 7. **IMAP Monitoring**: Polling-based (60s interval via JobSchedulerManager creates BullMQ jobs). IMAP IDLE exists but is opt-in via API - TODO: auto-enable for real-time push
 
 ## Development Best Practices
+
+### 🚨 MANDATORY Design Principles - READ THIS FIRST 🚨
+
+**These six principles govern ALL code in this project. Violations are treated as bugs.**
+
+| # | Principle | Rule |
+|---|-----------|------|
+| 1 | **Trust the Caller** | NEVER validate typed parameters. If the type is `string`, don't check `if (!param)`. |
+| 2 | **Throw Hard** | NO try/catch for safety. Let errors propagate. Only catch when you can actually handle it. |
+| 3 | **Named Types** | NEVER return anonymous objects. NEVER use `any`. Define interfaces for everything. |
+| 4 | **Private Extraction** | Extract helpers WITHIN existing files. Do NOT create new modules for helpers. |
+| 5 | **No Defensive Defaults** | NEVER use `|| {}` or `|| []`. If data is missing, that's a bug to fix at the source. |
+| 6 | **Search Before Creating** | ALWAYS search the codebase before writing new code. The solution likely exists. |
+
+---
 
 ### Fail-Fast Patterns
 
@@ -217,6 +209,36 @@ const timeout = config.timeout;
 ```
 If a value is required for the system to operate correctly, let it throw when missing. Don't hide configuration errors with fallback values.
 
+**🚨 NEVER use `|| {}` or `|| []` on database results:**
+```typescript
+// ❌ BAD - hides schema bugs, masks data issues
+const writingPatterns = row.profile_data.writingPatterns || {};
+const emails = result.rows || [];
+const preferences = user.preferences || {};
+
+// ✅ GOOD - trust the schema, let bugs surface
+const writingPatterns = row.profile_data.writingPatterns;
+const emails = result.rows;
+const preferences = user.preferences;
+```
+If data is missing from the database, that's a bug in the data creation code. Fix it at the source, don't paper over it at retrieval time.
+
+**Use `??` for protocol-defined optional fields:**
+```typescript
+// RFC 5322: To, Cc, Reply-To are optional headers in valid emails.
+// Marketing emails often use Bcc (empty To), and most emails lack Cc/Reply-To.
+// This is NOT a defensive default - these are legitimately optional per protocol.
+
+// ✅ Good - nullish coalescing for protocol-optional fields
+const to = (parsed.to ?? []).map(addr => addr.address);
+const cc = (parsed.cc ?? []).map(addr => addr.address);
+const replyTo = (parsed.replyTo ?? []).map(addr => addr.address);
+
+// ❌ Bad - using || which also triggers on empty arrays
+const to = (parsed.to || []).map(addr => addr.address);
+```
+Use `??` (nullish coalescing) instead of `||` when the field is legitimately optional per protocol/spec. The `??` operator only triggers on `null`/`undefined`, not on empty strings, empty arrays, or `0`.
+
 ### DRY Principles - CRITICAL
 
 **🚨 BEFORE WRITING NEW CODE: SEARCH THE CODEBASE FIRST 🚨**
@@ -291,7 +313,9 @@ if (!hasReplied) { /* duplicate logic */ }
 - ❌ Writing custom LLM calls (use LLMClient)
 - ❌ Duplicating validation logic (create shared validators)
 
-### Private Methods
+### Private Methods (NO New Module Decomposition)
+
+**CRITICAL: Extract helpers WITHIN existing files. Do NOT create new files/modules for helper functions.**
 
 Use private methods to hide implementation details and expose clean public APIs.
 
@@ -300,6 +324,12 @@ Use private methods to hide implementation details and expose clean public APIs.
 - Step-by-step breakdown of complex public methods
 - Functions that depend on internal state
 - Implementation details that might change
+
+**What NOT to do:**
+- ❌ Create `server/src/lib/utils/my-helper.ts` for a one-off helper
+- ❌ Create `server/src/lib/helpers/` directories
+- ❌ Extract a private method into a separate module "for reuse"
+- ❌ Create new files just to reduce line count in existing files
 
 **Pattern:**
 
@@ -462,8 +492,55 @@ function handleWebhook(payload: unknown): void {
 // Server types
 server/src/types/email.ts         // Email-related types
 server/src/types/llm.ts           // LLM provider types
+server/src/types/express.d.ts     // Express Request extensions (user, session, isServiceToken)
 server/src/lib/vector/types.ts    // Vector search types
 server/src/lib/email-processing/types.ts  // Processing result types
+```
+
+### Extending Express Request Type
+
+The Express Request type is extended globally in `server/src/types/express.d.ts` to add typed properties set by auth middleware:
+
+```typescript
+// server/src/types/express.d.ts
+declare global {
+  namespace Express {
+    interface Request {
+      user: { id: string; };      // Always set by requireAuth middleware
+      session?: unknown;          // Set for session-based auth only
+      isServiceToken?: boolean;   // Set for service token auth only
+    }
+  }
+}
+export {};
+```
+
+**Usage in route handlers:**
+```typescript
+// ✅ Good - use typed req.user directly
+router.get('/', requireAuth, async (req, res) => {
+  const userId = req.user.id;  // Typed!
+});
+
+// ❌ Bad - casting to any
+router.get('/', requireAuth, async (req, res) => {
+  const userId = (req as any).user.id;  // Loses type safety
+});
+```
+
+**Important:** Files that set these properties (like `server/src/middleware/auth.ts`) must include a triple-slash reference to ensure ts-node picks up the type declaration at runtime:
+```typescript
+/// <reference path="../types/express.d.ts" />
+import express from 'express';
+```
+
+The `server/tsconfig.json` includes `typeRoots` configuration to make these types available:
+```json
+{
+  "compilerOptions": {
+    "typeRoots": ["../node_modules/@types", "./src/types"]
+  }
+}
 ```
 
 **Examples:**
@@ -669,7 +746,6 @@ source ~/.zshrc && PGPASSWORD=aiemailpass psql -U aiemailuser -h localhost -p 54
 ### Database Issues
 1. **Connection refused**: Check Docker is running and using port 5434
 2. **Missing tables**: better-auth auto-creates tables on first use
-3. **Test users**: Use `npm run create-test-users` script
 
 ### Development Tips
 1. Use `npm run dev:all` to start both servers

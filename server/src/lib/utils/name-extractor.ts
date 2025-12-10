@@ -43,6 +43,7 @@ export class NameExtractor {
    * cleanRecipientName('  John   Doe  ') // => 'John Doe'
    * cleanRecipientName('Viola, John L.') // => 'John L. Viola'
    * cleanRecipientName('Smith, Jane') // => 'Jane Smith'
+   * cleanRecipientName('john doe') // => 'John Doe'
    * cleanRecipientName('""') // => ''
    */
   private static cleanRecipientName(recipientName: string): string {
@@ -66,7 +67,13 @@ export class NameExtractor {
     cleanName = this.flipLastFirstName(cleanName);
 
     // 6. Normalize internal whitespace
-    return cleanName.replace(/\s+/g, ' ');
+    cleanName = cleanName.replace(/\s+/g, ' ');
+
+    // 7. Capitalize each word
+    return cleanName
+      .split(' ')
+      .map(word => this.capitalizeWord(word))
+      .join(' ');
   }
 
   /**
@@ -143,11 +150,22 @@ export class NameExtractor {
    * capitalizeWord('john') // => 'John'
    * capitalizeWord('j') // => 'J'
    * capitalizeWord('') // => ''
+   * capitalizeWord('"the') // => '"The' (capitalizes first letter after quote)
    */
   private static capitalizeWord(word: string): string {
     if (word.length === 0) {
       return word;
     }
+
+    // Handle words that start with quotes
+    if (word.charAt(0) === '"' || word.charAt(0) === "'") {
+      if (word.length === 1) {
+        return word;
+      }
+      // Capitalize the second character (first letter after quote)
+      return word.charAt(0) + word.charAt(1).toUpperCase() + word.slice(2).toLowerCase();
+    }
+
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   }
 }

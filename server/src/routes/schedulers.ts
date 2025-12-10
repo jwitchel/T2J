@@ -7,7 +7,7 @@ const router = express.Router();
 // Get global scheduler summary for the authenticated user
 router.get('/', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const schedulers = await jobSchedulerManager.getSchedulerSummary(userId);
 
     res.json({
@@ -26,7 +26,7 @@ router.get('/', requireAuth, async (req, res): Promise<void> => {
 // Toggle scheduler globally (enable/disable for all monitored accounts)
 router.put('/:id', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const schedulerId = req.params.id;
     const { enabled } = req.body;
 
@@ -93,7 +93,7 @@ router.get('/:id/:accountId', requireAuth, async (req, res): Promise<void> => {
 // Update scheduler (enable/disable) for a specific account (per-account management)
 router.put('/:id/:accountId', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const schedulerId = req.params.id;
     const accountId = req.params.accountId;
     const { enabled } = req.body;
@@ -136,7 +136,7 @@ router.put('/:id/:accountId', requireAuth, async (req, res): Promise<void> => {
 // Initialize schedulers for user (called when user logs in or app starts)
 router.post('/initialize', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     await jobSchedulerManager.initializeUserSchedulers(userId);
 
     const schedulers = await jobSchedulerManager.getAllSchedulerStatuses(userId);

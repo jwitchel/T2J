@@ -30,8 +30,10 @@ describe('NameExtractor', () => {
           .toBe('John Doe');
       });
 
-      it('should preserve quotes in the middle of names', () => {
+      it('should capitalize all words including quoted nicknames', () => {
         expect(NameExtractor.extractName('test@example.com', 'John "The Rock" Doe'))
+          .toBe('John "The Rock" Doe');
+        expect(NameExtractor.extractName('test@example.com', 'john "the rock" doe'))
           .toBe('John "The Rock" Doe');
       });
 

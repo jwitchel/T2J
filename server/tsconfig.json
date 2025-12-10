@@ -29,7 +29,8 @@
       "@/middleware/*": ["middleware/*"],
       "@/types/*": ["types/*"]
     },
-    "types": ["node", "pg"]
+    "types": ["node", "pg"],
+    "typeRoots": ["../node_modules/@types", "./src/types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.integration.test.ts", "src/__tests__/**/*", "src/**/__tests__/**/*", "src/**/__mocks__/**/*"]

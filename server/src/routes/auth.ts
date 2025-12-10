@@ -6,8 +6,8 @@ const router = express.Router();
 // Get current user session
 router.get('/session', requireAuth, (req, res) => {
   res.json({
-    user: (req as any).user,
-    session: (req as any).session,
+    user: req.user,
+    session: req.session,
   });
 });
 

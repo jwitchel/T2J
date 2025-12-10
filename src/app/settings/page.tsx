@@ -13,6 +13,15 @@ import { useState, useEffect } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet, apiPost } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -26,6 +35,16 @@ export default function SettingsPage() {
     spamFolder: '',
     todoFolder: ''
   })
+  const [actionPreferences, setActionPreferences] = useState({
+    spamDetection: true,
+    silentActions: {
+      'silent-fyi-only': true,
+      'silent-large-list': true,
+      'silent-unsubscribe': true,
+      'silent-todo': true
+    },
+    draftGeneration: true
+  })
   const [workDomainsCSV, setWorkDomainsCSV] = useState('')
   const [familyEmailsCSV, setFamilyEmailsCSV] = useState('')
   const [spouseEmailsCSV, setSpouseEmailsCSV] = useState('')
@@ -36,6 +55,8 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTestingFolders, setIsTestingFolders] = useState(false)
+  const [isCreatingFolders, setIsCreatingFolders] = useState(false)
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const [folderTestResult, setFolderTestResult] = useState<{
     requiredFolders?: string[];
     existing?: string[];
@@ -67,6 +88,16 @@ export default function SettingsPage() {
             spamFolder?: string;
             todoFolder?: string;
           };
+          actionPreferences?: {
+            spamDetection?: boolean;
+            silentActions?: {
+              'silent-fyi-only'?: boolean;
+              'silent-large-list'?: boolean;
+              'silent-unsubscribe'?: boolean;
+              'silent-todo'?: boolean;
+            };
+            draftGeneration?: boolean;
+          };
           workDomainsCSV?: string;
           familyEmailsCSV?: string;
           spouseEmailsCSV?: string;
@@ -88,6 +119,19 @@ export default function SettingsPage() {
             setFolderPreferences(prev => ({
               ...prev,
               ...data.preferences.folderPreferences
+            }))
+          }
+          if (data.preferences.actionPreferences) {
+            setActionPreferences(prev => ({
+              ...prev,
+              spamDetection: data.preferences.actionPreferences?.spamDetection ?? prev.spamDetection,
+              silentActions: {
+                'silent-fyi-only': data.preferences.actionPreferences?.silentActions?.['silent-fyi-only'] ?? prev.silentActions['silent-fyi-only'],
+                'silent-large-list': data.preferences.actionPreferences?.silentActions?.['silent-large-list'] ?? prev.silentActions['silent-large-list'],
+                'silent-unsubscribe': data.preferences.actionPreferences?.silentActions?.['silent-unsubscribe'] ?? prev.silentActions['silent-unsubscribe'],
+                'silent-todo': data.preferences.actionPreferences?.silentActions?.['silent-todo'] ?? prev.silentActions['silent-todo'],
+              },
+              draftGeneration: data.preferences.actionPreferences?.draftGeneration ?? prev.draftGeneration,
             }))
           }
         } else {
@@ -167,11 +211,24 @@ export default function SettingsPage() {
     }
   }
 
-  const handleTestFolders = async () => {
+  /**
+   * Unified folder settings flow:
+   * 1. User clicks "Save Folder Settings"
+   * 2. We test folders on IMAP (using current UI values, not saved values)
+   * 3. Show modal with results
+   * 4. If all exist → auto-save and close
+   * 5. If missing → show "Create Folders" button
+   * 6. On create success → save preferences and close
+   */
+  const handleSaveFolderSettings = async () => {
     setIsTestingFolders(true)
     setFolderTestResult(null)
-    
+
     try {
+      // First, temporarily save the preferences so test-folders uses them
+      await apiPost('/api/settings/folder-preferences', folderPreferences)
+
+      // Then test folders
       const result = await apiPost<{
         success: boolean;
         requiredFolders: string[];
@@ -184,26 +241,35 @@ export default function SettingsPage() {
           error?: string;
         }>;
       }>('/api/settings/test-folders', {})
-      
+
       // Combine results from all accounts
       const allExisting = new Set<string>()
       const allMissing = new Set<string>()
-      
+      let hasConnectionErrors = false
+
       result.accounts?.forEach(account => {
         if (account.success) {
           account.existing?.forEach(f => allExisting.add(f))
           account.missing?.forEach(f => allMissing.add(f))
+        } else {
+          hasConnectionErrors = true
         }
       })
-      
-      setFolderTestResult({
+
+      const testResult = {
         ...result,
         existing: Array.from(allExisting),
         missing: Array.from(allMissing)
-      })
-      
-      if (allMissing.size === 0) {
-        success('All required folders exist across all accounts!')
+      }
+
+      setFolderTestResult(testResult)
+
+      // If all folders exist and no connection errors, save is complete
+      if (allMissing.size === 0 && !hasConnectionErrors) {
+        success('Folder settings saved! All folders verified.')
+      } else {
+        // Show modal for user to create missing folders or acknowledge errors
+        setFolderDialogOpen(true)
       }
     } catch (err) {
       error('Failed to test folders')
@@ -213,9 +279,9 @@ export default function SettingsPage() {
     }
   }
 
-  const handleCreateFolders = async () => {
-    setIsTestingFolders(true)
-    
+  const handleCreateFoldersInModal = async () => {
+    setIsCreatingFolders(true)
+
     try {
       const result = await apiPost<{
         success: boolean;
@@ -228,12 +294,12 @@ export default function SettingsPage() {
           error?: string;
         }>;
       }>('/api/settings/create-folders', {})
-      
+
       // Count total created and failed across all accounts
       let totalCreated = 0
       let totalFailed = 0
       let accountsWithErrors = 0
-      
+
       result.accounts?.forEach(account => {
         if (account.success) {
           totalCreated += account.created?.length || 0
@@ -242,25 +308,69 @@ export default function SettingsPage() {
           accountsWithErrors++
         }
       })
-      
-      if (totalCreated > 0) {
-        success(`Created ${totalCreated} folders across ${result.accounts.length} accounts!`)
-        // Re-test to update the display
-        await handleTestFolders()
-      }
-      
-      if (totalFailed > 0) {
-        error(`Failed to create ${totalFailed} folders`)
-      }
-      
-      if (accountsWithErrors > 0) {
-        error(`${accountsWithErrors} accounts had connection errors`)
+
+      if (totalFailed > 0 || accountsWithErrors > 0) {
+        // Some folders failed to create
+        error(`Failed to create some folders. Please check your email account connections.`)
+        // Re-test to show updated status
+        const retestResult = await apiPost<{
+          success: boolean;
+          requiredFolders: string[];
+          accounts: Array<{
+            accountId: string;
+            email: string;
+            success: boolean;
+            existing?: string[];
+            missing?: string[];
+            error?: string;
+          }>;
+        }>('/api/settings/test-folders', {})
+
+        const allExisting = new Set<string>()
+        const allMissing = new Set<string>()
+        retestResult.accounts?.forEach(account => {
+          if (account.success) {
+            account.existing?.forEach(f => allExisting.add(f))
+            account.missing?.forEach(f => allMissing.add(f))
+          }
+        })
+
+        setFolderTestResult({
+          ...retestResult,
+          existing: Array.from(allExisting),
+          missing: Array.from(allMissing)
+        })
+      } else {
+        // All folders created successfully - preferences already saved, close modal
+        success(`Created ${totalCreated} folders. Settings saved!`)
+        setFolderDialogOpen(false)
+        setFolderTestResult(null)
       }
     } catch (err) {
       error('Failed to create folders')
       console.error(err)
     } finally {
-      setIsTestingFolders(false)
+      setIsCreatingFolders(false)
+    }
+  }
+
+  const handleCancelFolderDialog = () => {
+    setFolderDialogOpen(false)
+    setFolderTestResult(null)
+  }
+
+  const [isSavingActionPreferences, setIsSavingActionPreferences] = useState(false)
+
+  const handleSaveActionPreferences = async () => {
+    setIsSavingActionPreferences(true)
+    try {
+      await apiPost('/api/settings/action-preferences', { actionPreferences })
+      success('Action preferences saved')
+    } catch (err) {
+      error('Failed to save action preferences')
+      console.error(err)
+    } finally {
+      setIsSavingActionPreferences(false)
     }
   }
 
@@ -274,7 +384,7 @@ export default function SettingsPage() {
             <TabsList className="w-full mb-6">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="relationships">Relationships</TabsTrigger>
-              <TabsTrigger value="email">Email</TabsTrigger>
+              <TabsTrigger value="services">Services</TabsTrigger>
               <TabsTrigger value="signatures">Signatures</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
@@ -336,6 +446,35 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <TypedNameSettings />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Email Signature Block</CardTitle>
+                <CardDescription>
+                  Add a signature that will be included in your generated email replies
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signatureBlock">Signature Block</Label>
+                  <Textarea
+                    id="signatureBlock"
+                    value={signatureBlock}
+                    onChange={(e) => setSignatureBlock(e.target.value)}
+                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
+                    className="min-h-[120px] font-mono text-sm"
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    This signature will be added to your email replies before the quoted original message.
+                    You can use multiple lines.
+                  </p>
+                </div>
+                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                  {isSaving ? 'Saving...' : 'Save Signature'}
+                </Button>
               </CardContent>
             </Card>
             </TabsContent>
@@ -415,32 +554,123 @@ export default function SettingsPage() {
             </Card>
             </TabsContent>
 
-            <TabsContent value="email" className="space-y-6">
+            <TabsContent value="services" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Email Signature Block</CardTitle>
+                <CardTitle>Email Processing</CardTitle>
                 <CardDescription>
-                  Add a signature that will be included in your generated email replies
+                  Configure which processing stages are enabled. Unprocessed emails will remain in your inbox.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signatureBlock">Signature Block</Label>
-                  <Textarea
-                    id="signatureBlock"
-                    value={signatureBlock}
-                    onChange={(e) => setSignatureBlock(e.target.value)}
-                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
-                    className="min-h-[120px] font-mono text-sm"
+              <CardContent className="space-y-6">
+                {/* Spam Detection Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="spamDetection">Spam Detection</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Detect and move spam emails to spam folder
+                    </p>
+                  </div>
+                  <Switch
+                    id="spamDetection"
+                    checked={actionPreferences.spamDetection}
+                    onCheckedChange={(checked) =>
+                      setActionPreferences(prev => ({ ...prev, spamDetection: checked }))
+                    }
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    This signature will be added to your email replies before the quoted original message.
-                    You can use multiple lines.
-                  </p>
                 </div>
-                <Button onClick={handleSave} disabled={isSaving || isLoading}>
-                  {isSaving ? 'Saving...' : 'Save Signature'}
+
+                {/* Silent Actions Toggle with Sub-toggles */}
+                <div className="space-y-4">
+                  <div className="space-y-0.5">
+                    <Label>Organize Your Email</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically move emails that do <b>not</b> require a response to a specific folder. 
+                    </p>
+                  </div>
+
+                  {/* Sub-toggles - indented */}
+                  <div style={{ marginLeft: '1.5rem' }} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-fyi-only" className="font-normal">FYI Only. <span className="text-muted-foreground">Emails that do not require a response from you.</span></Label>
+                      <Switch
+                        id="silent-fyi-only"
+                        checked={actionPreferences.silentActions['silent-fyi-only']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-fyi-only': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-large-list" className="font-normal">Large Distribution Lists. <span className="text-muted-foreground">Emails that are sent to a large number of people.</span></Label>
+                      <Switch
+                        id="silent-large-list"
+                        checked={actionPreferences.silentActions['silent-large-list']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-large-list': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-unsubscribe" className="font-normal">Unsubscribe Candidates. <span className="text-muted-foreground">Emails that are asking you to unsubscribe from a mailing list.</span></Label>
+                      <Switch
+                        id="silent-unsubscribe"
+                        checked={actionPreferences.silentActions['silent-unsubscribe']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-unsubscribe': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-todo" className="font-normal">Todo Items. <span className="text-muted-foreground">Emails that are asking you to complete a task.</span></Label>
+                      <Switch
+                        id="silent-todo"
+                        checked={actionPreferences.silentActions['silent-todo']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-todo': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Draft Generation Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="draftGeneration">Draft Generation</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Upload AI-generated reply drafts to your Drafts folder
+                    </p>
+                  </div>
+                  <Switch
+                    id="draftGeneration"
+                    checked={actionPreferences.draftGeneration}
+                    onCheckedChange={(checked) =>
+                      setActionPreferences(prev => ({ ...prev, draftGeneration: checked }))
+                    }
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <Button onClick={handleSaveActionPreferences} disabled={isSavingActionPreferences || isLoading}>
+                  {isSavingActionPreferences ? 'Saving...' : 'Save Action Preferences'}
                 </Button>
               </CardContent>
             </Card>
@@ -458,40 +688,40 @@ export default function SettingsPage() {
                   <Input
                     id="rootFolder"
                     value={folderPreferences.rootFolder}
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, rootFolder: e.target.value }))}
                     placeholder="Leave empty for root level"
-                    disabled={true}
-                    readOnly
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
                     Leave empty to create folders at the root level
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="noActionFolder">No Action Folder</Label>
                   <Input
                     id="noActionFolder"
                     value={folderPreferences.noActionFolder}
-                    placeholder="e.g., AI-No-Action"
-                    disabled={true}
-                    readOnly
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, noActionFolder: e.target.value }))}
+                    placeholder="e.g., *No Action"
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
-                    For: FYI only, large lists, unsubscribe candidates
+                    For: FYI only, large lists, unsubscribe candidates. Names starting with * appear at top.
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="spamFolder">Spam Folder</Label>
                   <Input
                     id="spamFolder"
                     value={folderPreferences.spamFolder}
-                    placeholder="e.g., AI-Spam"
-                    disabled={true}
-                    readOnly
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, spamFolder: e.target.value }))}
+                    placeholder="e.g., *Spam"
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
-                    For: emails identified as spam
+                    For: emails identified as spam. Names starting with * appear at top.
                   </p>
                 </div>
 
@@ -500,92 +730,21 @@ export default function SettingsPage() {
                   <Input
                     id="todoFolder"
                     value={folderPreferences.todoFolder}
-                    placeholder="t2j-todo"
-                    disabled={true}
-                    readOnly
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, todoFolder: e.target.value }))}
+                    placeholder="e.g., *Todo"
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
-                    For: action items requiring external action (no email response needed)
+                    For: action items requiring external action (no email response needed). Names starting with * appear at top.
                   </p>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={handleTestFolders}
-                    disabled={isTestingFolders || isLoading}
-                  >
-                    {isTestingFolders ? 'Testing...' : 'Test Folders'}
-                  </Button>
-                </div>
-                
-                {folderTestResult && (
-                  <div className="mt-4 p-4 bg-muted rounded-md">
-                    <h4 className="font-medium mb-3">Folder Test Results</h4>
-                    
-                    {/* Required Folders */}
-                    <div className="mb-4">
-                      <span className="font-medium text-sm">Required Folders:</span>
-                      <ul className="list-disc list-inside mt-1 text-sm text-muted-foreground">
-                        {folderTestResult.requiredFolders?.map((folder: string) => (
-                          <li key={folder}>{folder || 'Root Level'}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    {/* Per-Account Results */}
-                    <div className="space-y-3">
-                      <span className="font-medium text-sm">Account Status:</span>
-                      {folderTestResult.accounts?.map((account) => (
-                        <div key={account.accountId} className="border-l-2 border-muted-foreground/20 pl-3 ml-2">
-                          <div className="font-medium text-sm mb-1">{account.email}</div>
-                          
-                          {account.success ? (
-                            <div className="space-y-1 text-xs">
-                              {account.existing && account.existing.length > 0 && (
-                                <div className="text-green-600">
-                                  ✓ Existing: {account.existing.join(', ')}
-                                </div>
-                              )}
-                              {account.missing && account.missing.length > 0 && (
-                                <div className="text-orange-600">
-                                  ⚠ Missing: {account.missing.join(', ')}
-                                </div>
-                              )}
-                              {account.existing && folderTestResult.requiredFolders && 
-                               account.existing.length === folderTestResult.requiredFolders.length && (
-                                <div className="text-green-600">
-                                  ✓ All folders exist
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-red-600">
-                              ✗ Error: {account.error || 'Connection failed'}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {/* Create Missing Folders Button */}
-                    {folderTestResult.missing && folderTestResult.missing.length > 0 && (
-                      <div className="mt-4 pt-3 border-t border-muted-foreground/20">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={handleCreateFolders}
-                          disabled={isTestingFolders}
-                          className="w-full"
-                        >
-                          Create All Missing Folders
-                        </Button>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          This will create missing folders on all connected accounts
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <Button
+                  onClick={handleSaveFolderSettings}
+                  disabled={isTestingFolders || isLoading}
+                >
+                  {isTestingFolders ? 'Verifying...' : 'Save Folder Settings'}
+                </Button>
               </CardContent>
             </Card>
             </TabsContent>
@@ -628,6 +787,80 @@ export default function SettingsPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Folder Verification Dialog */}
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Folder Verification</DialogTitle>
+            <DialogDescription>
+              {folderTestResult?.missing && folderTestResult.missing.length > 0
+                ? 'Some folders need to be created on your email accounts.'
+                : 'There were issues connecting to some accounts.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {folderTestResult && (
+            <div className="space-y-4">
+              {/* Required Folders */}
+              <div>
+                <span className="font-medium text-sm">Required Folders:</span>
+                <ul className="list-disc list-inside mt-1 text-sm text-muted-foreground">
+                  {folderTestResult.requiredFolders?.map((folder: string) => (
+                    <li key={folder}>{folder || 'Root Level'}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Per-Account Results */}
+              <div className="space-y-3">
+                <span className="font-medium text-sm">Account Status:</span>
+                {folderTestResult.accounts?.map((account) => (
+                  <div key={account.accountId} className="border-l-2 border-muted-foreground/20 pl-3 ml-2">
+                    <div className="font-medium text-sm mb-1">{account.email}</div>
+
+                    {account.success ? (
+                      <div className="space-y-1 text-xs">
+                        {account.existing && account.existing.length > 0 && (
+                          <div className="text-green-600">
+                            ✓ Existing: {account.existing.join(', ')}
+                          </div>
+                        )}
+                        {account.missing && account.missing.length > 0 && (
+                          <div className="text-orange-600">
+                            ⚠ Missing: {account.missing.join(', ')}
+                          </div>
+                        )}
+                        {account.existing && folderTestResult.requiredFolders &&
+                         account.existing.length === folderTestResult.requiredFolders.length && (
+                          <div className="text-green-600">
+                            ✓ All folders exist
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-red-600">
+                        ✗ Error: {account.error || 'Connection failed'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleCancelFolderDialog}>
+              Cancel
+            </Button>
+            {folderTestResult?.missing && folderTestResult.missing.length > 0 && (
+              <Button onClick={handleCreateFoldersInModal} disabled={isCreatingFolders}>
+                {isCreatingFolders ? 'Creating...' : 'Create Missing Folders'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   )
 }

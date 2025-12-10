@@ -1,3 +1,4 @@
+/// <reference path="../types/express.d.ts" />
 import express from 'express';
 import { auth } from '../lib/auth';
 
@@ -14,8 +15,8 @@ export const requireAuth = async (req: express.Request, res: express.Response, n
         res.status(400).json({ error: 'userId required when using service token' });
         return;
       }
-      (req as any).user = { id: (req.body as any).userId };
-      (req as any).isServiceToken = true;
+      req.user = { id: (req.body as any).userId };
+      req.isServiceToken = true;
       next();
       return;
     }
@@ -42,8 +43,8 @@ export const requireAuth = async (req: express.Request, res: express.Response, n
     }
 
     // Add user info to request
-    (req as any).user = session.user;
-    (req as any).session = session;
+    req.user = session.user;
+    req.session = session;
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);

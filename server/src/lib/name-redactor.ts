@@ -36,13 +36,13 @@ export class NameRedactor {
     
     // Step 3: Clean and process each person found
     peopleMatches.forEach((match: any) => {
-      const terms = match.terms || [];
+      const terms = match.terms;
       
       // Extract just the name parts, excluding punctuation
       const nameParts = terms
         .filter((term: any) => {
           // Keep only terms tagged as names or proper nouns
-          const tags = term.tags || [];
+          const tags = term.tags;
           return tags.includes('Person') || 
                  tags.includes('FirstName') || 
                  tags.includes('LastName') ||
@@ -108,7 +108,7 @@ export class NameRedactor {
       // - Captures optional possessive 's
       // - Doesn't match if preceded by @ (email)
       const nameRegex = new RegExp(
-        `(?<!@)\\b${this.escapeRegex(name)}(?:'s)?\\b`,
+        `(?<!@)\\b${this._escapeRegex(name)}(?:'s)?\\b`,
         'gi'
       );
       
@@ -156,8 +156,8 @@ export class NameRedactor {
   clearCustomNames(): void {
     this.customNames.clear();
   }
-  
-  private escapeRegex(str: string): string {
+
+  private _escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

@@ -57,7 +57,7 @@ async function getProviderConfig(userId: string, providerId?: string): Promise<L
 // Generic generation endpoint (for testing or direct use)
 router.post('/', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const data = req.body as LLMGenerateRequest;
     
     // Validate request

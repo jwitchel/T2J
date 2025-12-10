@@ -34,7 +34,7 @@ export class RelationshipService {
    * Returns null if no preference exists
    * @private
    */
-  private async getTonePreference(
+  private async _getTonePreference(
     userId: string,
     relationshipType: string
   ): Promise<any | null> {
@@ -76,23 +76,23 @@ export class RelationshipService {
     if (!person) {
       return null;
     }
-    
-    const primaryRel = person.relationships.find(r => r.is_primary) || person.relationships[0];
-    if (!primaryRel) {
+
+    // Relationship is now directly on the person
+    if (!person.relationship_type) {
       return null;
     }
-    
-    const relationshipType = primaryRel.relationship_type;
-    
+
+    const relationshipType = person.relationship_type;
+
     // Get basic profile
     const basicProfile = await this.getRelationshipProfile(userId, relationshipType);
     if (!basicProfile) {
       return null;
     }
-    
+
     // Get aggregated style data
     const aggregatedStyle = await this.getAggregatedStyle(userId, relationshipType);
-    
+
     // Build enhanced profile
     const enhancedProfile: EnhancedRelationshipProfile = {
       ...basicProfile,
@@ -100,13 +100,13 @@ export class RelationshipService {
       relationshipType: relationshipType,
       aggregatedStyle: aggregatedStyle || undefined
     };
-    
+
     return enhancedProfile;
   }
   
-  public async getStylePreferences(userId: string, relationshipType: string): Promise<StylePreferences | null> {
+  public async getStylePreferences(userId: string, relationshipType: string): Promise<StylePreferences> {
     // First check if user has custom preferences
-    const profileData = await this.getTonePreference(userId, relationshipType);
+    const profileData = await this._getTonePreference(userId, relationshipType);
 
     if (profileData) {
       
@@ -116,7 +116,7 @@ export class RelationshipService {
       // Check if this is AggregatedStyle format (has emailCount property)
       if ('emailCount' in storedData) {
         // Convert AggregatedStyle to StylePreferences
-        return this.convertAggregatedToPreferences(storedData as AggregatedStyle, relationshipType);
+        return this._convertAggregatedToPreferences(storedData as AggregatedStyle, relationshipType);
       } else {
         // Legacy format - merge with defaults
         const defaultPrefs = DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
@@ -129,7 +129,7 @@ export class RelationshipService {
   }
   
   public async getAggregatedStyle(userId: string, relationshipType: string): Promise<AggregatedStyle | null> {
-    const profileData = await this.getTonePreference(userId, relationshipType);
+    const profileData = await this._getTonePreference(userId, relationshipType);
 
     if (profileData) {
       
@@ -147,32 +147,28 @@ export class RelationshipService {
   
   public async getVectorSearchContext(userId: string, recipientEmail: string): Promise<VectorSearchContext> {
     // Detect relationship
-    const detection = await personService.findPersonByEmail(recipientEmail, userId);
-    
-    if (!detection) {
+    const person = await personService.findPersonByEmail(recipientEmail, userId);
+
+    if (!person) {
       throw new PersonServiceError('Person not found', 'NOT_FOUND');
     }
-    
-    const primaryRel = detection.relationships.find(r => r.is_primary) || detection.relationships[0];
-    if (!primaryRel) {
+
+    // Relationship is now directly on the person
+    if (!person.relationship_type) {
       throw new PersonServiceError('No relationship found for person', 'NO_RELATIONSHIP');
     }
-    
-    const relationshipType = primaryRel.relationship_type;
+
+    const relationshipType = person.relationship_type;
     const stylePrefs = await this.getStylePreferences(userId, relationshipType);
-    
-    if (!stylePrefs) {
-      throw new PersonServiceError('No style preferences found', 'NO_PREFERENCES');
-    }
-    
+
     // Calculate formality range for search
     const minFormality = Math.max(0, stylePrefs.formality - RELATIONSHIP_THRESHOLDS.FORMALITY_BUFFER);
     const maxFormality = Math.min(1, stylePrefs.formality + RELATIONSHIP_THRESHOLDS.FORMALITY_BUFFER);
-    
+
     return {
       relationship: relationshipType,
       stylePreferences: stylePrefs,
-      personId: detection.id,
+      personId: person.id,
       searchFilters: {
         relationship: relationshipType,
         formality_range: [minFormality, maxFormality]
@@ -275,19 +271,19 @@ export class RelationshipService {
     }
     
     // Specific greetings if consistent (optional field)
-    const topGreetings = aggregated.greetings?.filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD) || [];
-    if (topGreetings.length > 0) {
+    const topGreetings = aggregated.greetings?.filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD);
+    if (topGreetings && topGreetings.length > 0) {
       parts.push(`Preferred greetings: ${topGreetings.map(g => g.text).join(', ')}.`);
     }
 
     // Specific closings if consistent (optional field)
-    const topClosings = aggregated.closings?.filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD) || [];
-    if (topClosings.length > 0) {
+    const topClosings = aggregated.closings?.filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PROMPT_INCLUSION_THRESHOLD);
+    if (topClosings && topClosings.length > 0) {
       parts.push(`Preferred closings: ${topClosings.map(c => c.text).join(', ')}.`);
     }
 
     // Common phrases if frequent (optional field - not yet implemented)
-    const commonPhrases: PhraseFrequency[] = aggregated.commonPhrases || [];
+    const commonPhrases: PhraseFrequency[] = aggregated.commonPhrases!;
     if (commonPhrases.length > 0) {
       const topPhrases = commonPhrases
         .slice(0, 5)
@@ -296,7 +292,7 @@ export class RelationshipService {
     }
 
     // Emoji usage (optional field)
-    const emojis: EmojiFrequency[] = aggregated.emojis || [];
+    const emojis: EmojiFrequency[] = aggregated.emojis!;
     if (emojis.length > 0) {
       const topEmojis = emojis.slice(0, 5).map(e => e.emoji);
       parts.push(`Feel free to use emojis like: ${topEmojis.join(' ')}.`);
@@ -312,29 +308,29 @@ export class RelationshipService {
     return parts.join(' ');
   }
 
-  private convertAggregatedToPreferences(aggregated: AggregatedStyle, relationshipType: string): StylePreferences {
+  private _convertAggregatedToPreferences(aggregated: AggregatedStyle, relationshipType: string): StylePreferences {
     // Start with defaults as base
     const defaults = DEFAULT_STYLE_PREFERENCES[relationshipType] || DEFAULT_STYLE_PREFERENCES.external;
     
     // Extract top greetings and closings (optional fields)
-    const preferredGreetings = (aggregated.greetings || [])
+    const preferredGreetings = (aggregated.greetings!)
       .filter(g => g.percentage > PHRASE_FREQUENCY_THRESHOLDS.PREFERRED_THRESHOLD)
       .map(g => g.text)
       .slice(0, 5);
 
-    const preferredClosings = (aggregated.closings || [])
+    const preferredClosings = (aggregated.closings!)
       .filter(c => c.percentage > PHRASE_FREQUENCY_THRESHOLDS.PREFERRED_THRESHOLD)
       .map(c => c.text)
       .slice(0, 5);
 
     // Extract common phrases (used frequently) - optional field not yet implemented
-    const commonPhrases: string[] = (aggregated.commonPhrases || [])
+    const commonPhrases: string[] = (aggregated.commonPhrases!)
       .filter(p => p.frequency > RELATIONSHIP_THRESHOLDS.MIN_PHRASE_FREQUENCY)
       .map(p => p.phrase)
       .slice(0, 10);
 
     // Extract emojis if used frequently enough (optional field)
-    const commonEmojis: string[] = (aggregated.emojis || [])
+    const commonEmojis: string[] = (aggregated.emojis!)
       .filter(e => e.frequency > RELATIONSHIP_THRESHOLDS.MIN_PHRASE_FREQUENCY)
       .map(e => e.emoji)
       .slice(0, 10);
@@ -387,18 +383,16 @@ export class RelationshipService {
     family: number;
     colleague: number;
   }> {
-    // Fetch all people and their emails for this user
+    // Fetch all people and their emails for this user (relationship is now on people table)
     const peopleResult = await pool.query(
-      `SELECT p.id, p.user_id, pe.email_address, ur.relationship_type, pr.confidence, pr.id as pr_id, pr.user_relationship_id
+      `SELECT p.id, p.user_id, pe.email_address, p.relationship_type, p.relationship_confidence, p.relationship_user_set
        FROM people p
        JOIN person_emails pe ON p.id = pe.person_id
-       LEFT JOIN person_relationships pr ON p.id = pr.person_id AND pr.is_primary = true
-       LEFT JOIN user_relationships ur ON pr.user_relationship_id = ur.id
        WHERE p.user_id = $1`,
       [userId]
     );
 
-    const updates: {personId: string; prId: string | null; newRelationship: RelationshipType}[] = [];
+    const updates: {personId: string; newRelationship: RelationshipType}[] = [];
     let spouseCount = 0;
     let familyCount = 0;
     let colleagueCount = 0;
@@ -418,40 +412,23 @@ export class RelationshipService {
 
         // Only update if relationship changed
         if (newRelationship !== currentRelationship) {
-          updates.push({ personId: row.id, prId: row.pr_id, newRelationship });
+          updates.push({ personId: row.id, newRelationship });
         }
       }
     }
 
-    // Batch update all changed relationships
+    // Batch update all changed relationships directly on people table
     if (updates.length > 0) {
-      for (const {personId, prId, newRelationship} of updates) {
-        // Get or create the user_relationship record for this relationship type
-        const urResult = await pool.query(
-          `INSERT INTO user_relationships (user_id, relationship_type, display_name, is_system_default)
-           VALUES ($1, $2, $3, true)
-           ON CONFLICT (user_id, relationship_type) DO UPDATE SET updated_at = NOW()
-           RETURNING id`,
-          [userId, newRelationship, newRelationship]
+      for (const {personId, newRelationship} of updates) {
+        await pool.query(
+          `UPDATE people
+           SET relationship_type = $1,
+               relationship_confidence = 1.0,
+               relationship_user_set = true,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [newRelationship, personId]
         );
-        const userRelationshipId = urResult.rows[0].id;
-
-        if (prId) {
-          // Update existing person_relationship
-          await pool.query(
-            `UPDATE person_relationships
-             SET user_relationship_id = $1, confidence = 1.0, updated_at = NOW()
-             WHERE id = $2`,
-            [userRelationshipId, prId]
-          );
-        } else {
-          // Create new person_relationship
-          await pool.query(
-            `INSERT INTO person_relationships (user_id, person_id, user_relationship_id, is_primary, confidence, user_set)
-             VALUES ($1, $2, $3, true, 1.0, true)`,
-            [userId, personId, userRelationshipId]
-          );
-        }
       }
     }
 

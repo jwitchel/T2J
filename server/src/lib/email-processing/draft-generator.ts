@@ -12,7 +12,8 @@ import { TypedNameRemover } from '../typed-name-remover';
 import { pool } from '../db';
 import { ParsedEmailData, UserContext } from './email-processing-service';
 import { encode as encodeHtml } from 'he';
-import { ActionHelpers } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
+import { RelationshipType } from '../relationships/relationship-detector';
 import { StyleAggregationService } from '../style/style-aggregation-service';
 import type { Email as PostalMimeEmail, Address } from 'postal-mime';
 
@@ -30,7 +31,6 @@ interface EmailAddress {
 interface RelationshipResult {
   type: string;
   confidence: number;
-  detectionMethod: string;
 }
 
 /**
@@ -41,7 +41,7 @@ function extractAddresses(field: Address[] | undefined): EmailAddress[] {
   if (!field) return [];
 
   return field.map(addr => ({
-    address: addr.address || '',
+    address: addr.address!,
     name: addr.name
   }));
 }
@@ -93,73 +93,59 @@ export class DraftGenerator {
     const recipientEmail = processedEmail.from[0].address;
     const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
 
-    try {
-      // Step 1: Get provider-specific orchestrator (cached, already initialized)
-      const orchestrator = await getOrchestrator(providerId);
+    // Step 1: Get provider-specific orchestrator (cached, already initialized)
+    const orchestrator = await getOrchestrator(providerId);
 
-      // Validate required fields for draft generation (fail fast)
-      if (!parsed.messageId) {
-        throw new Error('Email missing message-id, cannot generate draft');
-      }
-      if (!parsed.subject) {
-        throw new Error('Email missing subject, cannot generate draft');
-      }
-
-      // Initialize constants
-      const incomingEmailMetadata = {
-        from: processedEmail.from,
-        to: processedEmail.to,
-        cc: processedEmail.cc,
-        subject: processedEmail.subject,
-        date: processedEmail.date,
-        fullMessage: processedEmail.fullMessage
-      };
-
-      // Step 2: Run AI pipeline with timeout protection
-      const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
-      const aiResult = await this.runAIPipelineWithTimeout(
-        orchestrator,
-        processedEmail,
-        recipientEmail,
-        userId,
-        userContext,
-        maxExamples,
-        incomingEmailMetadata,
-        spamCheckResult,
-        llmTimeout
-      );
-
-      // Step 3: Clean any typed name that the LLM may have added
-      const cleanedBody = await this.removeTypedName(aiResult.body, userId);
-
-      // Step 4: Determine if this is a silent action
-      const isSilentAction = aiResult.meta && ActionHelpers.isSilentAction(aiResult.meta.recommendedAction);
-
-      // Step 5: Format complete draft response
-      const formattedDraft = isSilentAction
-        ? this.buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
-        : this.buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
-
-      // Step 6: Log completion
-      this.logDraftCompletion(userId, aiResult);
-
-      return {
-        success: true,
-        draft: formattedDraft
-      };
-
-    } catch (error: unknown) {
-      console.error('[DraftGenerator] Error generating draft:', error);
-
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorCode = errorMessage.includes('timeout') ? 'LLM_TIMEOUT' : 'UNKNOWN';
-
-      return {
-        success: false,
-        error: errorMessage,
-        errorCode
-      };
+    // Validate required fields for draft generation (fail fast)
+    if (!parsed.messageId) {
+      throw new Error('Email missing message-id, cannot generate draft');
     }
+    if (!parsed.subject) {
+      throw new Error('Email missing subject, cannot generate draft');
+    }
+
+    // Initialize constants
+    const incomingEmailMetadata = {
+      from: processedEmail.from,
+      to: processedEmail.to,
+      cc: processedEmail.cc,
+      subject: processedEmail.subject,
+      date: processedEmail.date,
+      fullMessage: processedEmail.fullMessage
+    };
+
+    // Step 2: Run AI pipeline with timeout protection
+    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
+    const aiResult = await this._runAIPipelineWithTimeout(
+      orchestrator,
+      processedEmail,
+      recipientEmail,
+      userId,
+      userContext,
+      maxExamples,
+      incomingEmailMetadata,
+      spamCheckResult,
+      llmTimeout
+    );
+
+    // Step 3: Clean any typed name that the LLM may have added
+    const cleanedBody = await this._removeTypedName(aiResult.body, userId);
+
+    // Step 4: Determine if this is a silent action
+    const isSilentAction = aiResult.meta && EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
+
+    // Step 5: Format complete draft response
+    const formattedDraft = isSilentAction
+      ? this._buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
+      : this._buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
+
+    // Step 6: Log completion
+    this._logDraftCompletion(userId, aiResult);
+
+    return {
+      success: true,
+      draft: formattedDraft
+    };
   }
 
   /**
@@ -167,7 +153,7 @@ export class DraftGenerator {
    * Incorporates: example selection, pattern analysis, LLM calls (meta-context, action, response)
    * @private
    */
-  private async runAIPipelineWithTimeout(
+  private async _runAIPipelineWithTimeout(
     orchestrator: ToneLearningOrchestrator,
     processedEmail: ProcessedEmail,
     recipientEmail: string,
@@ -185,7 +171,6 @@ export class DraftGenerator {
     }
 
     const pipelinePromise = (async () => {
-      const t0 = Date.now();
 
       // Step 1: Select relevant examples
       const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
@@ -194,23 +179,20 @@ export class DraftGenerator {
         recipientEmail,
         desiredCount: maxExamples
       });
-      console.log(`[DraftGenerator] ⏱️  selectExamples: ${Date.now() - t0}ms`);
-
       // Log selected examples for draft generation
       const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
       const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;
       console.log(`[DraftGenerator] 📧 Selected ${exampleSelection.examples.length} examples for ${exampleSelection.relationship} relationship: ${directCount} direct, ${categoryCount} category`);
-      exampleSelection.examples.forEach((example, idx) => {
-        const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
-        const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
-        const subject = example.metadata?.subject || 'No subject';
-        const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
-        const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
-        console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
-      });
+      // exampleSelection.examples.forEach((example, idx) => {
+      //   const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
+      //   const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
+      //   const subject = example.metadata?.subject || 'No subject';
+      //   const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
+      //   const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
+      //   console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
+      // });
 
       // Get the detected relationship
-      const t1 = Date.now();
       const replyToEmail = processedEmail.replyTo[0]?.address;
       const recipientName = processedEmail.from[0]?.name;
       const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
@@ -219,21 +201,18 @@ export class DraftGenerator {
         recipientName,
         replyToEmail
       });
-      console.log(`[DraftGenerator] ⏱️  detectRelationship: ${Date.now() - t1}ms`);
 
       // Get enhanced profile with aggregated style from PostgreSQL
-      const t2 = Date.now();
       const styleService = new StyleAggregationService(pool);
       const aggregatedStyle = await styleService.getAggregatedStyle(userId, exampleSelection.relationship);
-      console.log(`[DraftGenerator] ⏱️  getAggregatedStyle: ${Date.now() - t2}ms`);
 
       // Wrap aggregated style in enhanced profile structure
       const enhancedProfile = aggregatedStyle ? {
         // Basic relationship profile fields (all optional for now)
         typicalFormality: aggregatedStyle.sentimentProfile.averageFormality.toFixed(2),
-        commonGreetings: aggregatedStyle.greetings?.map(g => g.text) || [],
-        commonClosings: aggregatedStyle.closings?.map(c => c.text) || [],
-        useEmojis: (aggregatedStyle.emojis?.length || 0) > 0,
+        commonGreetings: aggregatedStyle.greetings?.map(g => g.text) ?? [],
+        commonClosings: aggregatedStyle.closings?.map(c => c.text) ?? [],
+        useEmojis: (aggregatedStyle.emojis?.length ?? 0) > 0,
         useHumor: false,  // Not detected in current system
         preferredTopics: [],
         avoidTopics: [],
@@ -241,12 +220,10 @@ export class DraftGenerator {
       } : null;
 
       // Step 2: Load writing patterns (pre-computed during training)
-      const t3 = Date.now();
       const writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
         userId,
         exampleSelection.relationship
       );
-      console.log(`[DraftGenerator] ⏱️  loadPatterns: ${Date.now() - t3}ms`);
 
       // Note: If no patterns exist, we should NOT analyze on-demand during draft generation
       // Pattern analysis is expensive (LLM calls + sentence stats calculation)
@@ -258,7 +235,6 @@ export class DraftGenerator {
 
       // Step 3: Action Analysis (First LLM Call)
       // Single source of truth for email classification and action determination
-      const t4 = Date.now();
       const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
@@ -268,17 +244,15 @@ export class DraftGenerator {
       });
 
       const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
-      console.log(`[DraftGenerator] ⏱️  actionAnalysis (LLM 1): ${Date.now() - t4}ms`);
 
       // Use action analysis as complete metadata (no merging needed)
       const combinedMeta: LLMMetadata = actionAnalysis.meta;
 
       // Step 4: Response Generation (Second LLM Call - conditional)
-      const needsResponse = !ActionHelpers.isSilentAction(combinedMeta.recommendedAction);
+      const needsResponse = !EmailActionType.isSilentAction(combinedMeta.recommendedAction);
       let responseMessage = '';
 
       if (needsResponse) {
-        console.log(`[DraftGenerator] Generating response: action=${combinedMeta.recommendedAction}, examples=${exampleSelection.examples?.length || 0}, relationship=${exampleSelection.relationship}, patterns=${!!writingPatterns}`);
 
         const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
           incomingEmail: processedEmail.userReply,
@@ -298,9 +272,13 @@ export class DraftGenerator {
       }
 
       // Build final relationship
-      const finalRelationship = ActionHelpers.isSpamAction(combinedMeta.recommendedAction)
-        ? { type: 'external', confidence: 0.9, detectionMethod: 'spam-override' }
-        : { type: exampleSelection.relationship, confidence: detectedRelationship.confidence, detectionMethod: detectedRelationship.method };
+      // Use detectedRelationship for both type and confidence (not exampleSelection.relationship)
+      // exampleSelection.relationship is only for finding similar historical examples, not the actual relationship
+      const finalRelationship = EmailActionType.isSpamAction(combinedMeta.recommendedAction)
+        ? { type: RelationshipType.SPAM, confidence: 0.9 }
+        : { type: detectedRelationship.relationship, confidence: detectedRelationship.confidence };
+
+      console.log(`[DraftGenerator] action=${combinedMeta.recommendedAction}, relationship=${finalRelationship.type}, examples=${exampleSelection.examples?.length || 0}, patterns=${!!writingPatterns}, needsResponse=${needsResponse}`);
 
       return {
         body: responseMessage,
@@ -329,8 +307,8 @@ export class DraftGenerator {
    * Remove typed name signature from draft body
    * @private
    */
-  private async removeTypedName(body: string, userId: string): Promise<string> {
-    const typedNameRemover = new TypedNameRemover(pool);
+  private async _removeTypedName(body: string, userId: string): Promise<string> {
+    const typedNameRemover = new TypedNameRemover();
     const cleaned = await typedNameRemover.removeTypedName(body, userId);
     return cleaned.cleanedText;
   }
@@ -339,7 +317,7 @@ export class DraftGenerator {
    * Build base draft email structure with common fields
    * @private
    */
-  private buildBaseDraft(
+  private _buildBaseDraft(
     parsed: PostalMimeEmail,
     meta: LLMMetadata,
     relationship: RelationshipResult,
@@ -371,7 +349,7 @@ export class DraftGenerator {
    * Build draft for silent actions (no reply needed)
    * @private
    */
-  private buildSilentDraft(
+  private _buildSilentDraft(
     parsed: PostalMimeEmail,
     meta: LLMMetadata,
     relationship: RelationshipResult,
@@ -380,8 +358,8 @@ export class DraftGenerator {
   ): DraftEmail {
     const fromAddress = extractSingleAddress(parsed.from);
     return {
-      ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
-      to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''),
+      ...this._buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
+      to: this._formatEmailAddress(fromAddress?.name, fromAddress!.address),
       cc: '',
       subject: parsed.subject!,  // Validated at entry point
       body: ''
@@ -392,7 +370,7 @@ export class DraftGenerator {
    * Build draft for reply actions
    * @private
    */
-  private buildReplyDraft(
+  private _buildReplyDraft(
     parsed: PostalMimeEmail,
     emailBody: string,
     cleanedBody: string,
@@ -402,9 +380,9 @@ export class DraftGenerator {
     spamCheckResult: SpamCheckResult
   ): DraftEmail {
     const fromAddress = extractSingleAddress(parsed.from);
-    const formattedReply = this.formatReplyEmail(
-      fromAddress?.name || fromAddress?.address || '',
-      fromAddress?.address || '',
+    const formattedReply = this._formatReplyEmail(
+      fromAddress?.name || fromAddress!.address,
+      fromAddress!.address,
       parsed.date ? new Date(parsed.date) : new Date(),
       emailBody,
       cleanedBody,
@@ -417,13 +395,13 @@ export class DraftGenerator {
       ? parsed.subject!
       : `Re: ${parsed.subject!}`;
 
-    const isReplyAll = ActionHelpers.isReplyAll(meta.recommendedAction);
+    const isReplyAll = EmailActionType.isReplyAll(meta.recommendedAction);
     const { to, cc } = isReplyAll
-      ? this.calculateReplyAllRecipients(parsed, userContext.userEmail)
-      : { to: this.formatEmailAddress(fromAddress?.name, fromAddress?.address || ''), cc: '' };
+      ? this._calculateReplyAllRecipients(parsed, userContext.userEmail)
+      : { to: this._formatEmailAddress(fromAddress?.name, fromAddress!.address), cc: '' };
 
     return {
-      ...this.buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
+      ...this._buildBaseDraft(parsed, meta, relationship, userContext, spamCheckResult),
       to,
       cc,
       subject: replySubject,
@@ -436,7 +414,7 @@ export class DraftGenerator {
    * Format reply email with quoted original message
    * @private
    */
-  private formatReplyEmail(
+  private _formatReplyEmail(
     originalFromName: string,
     originalFromEmail: string,
     originalDate: Date,
@@ -446,7 +424,7 @@ export class DraftGenerator {
     originalHtml?: string,
     signatureBlock?: string
   ): { text: string; html?: string } {
-    const formattedDate = this.formatEmailDate(originalDate);
+    const formattedDate = this._formatEmailDate(originalDate);
     const senderInfo = originalFromName && originalFromName !== originalFromEmail
       ? `${originalFromName} (${originalFromEmail})`
       : originalFromEmail;
@@ -462,7 +440,7 @@ export class DraftGenerator {
 
     // HTML version if original had HTML
     const htmlReply = originalHtml
-      ? this.formatHtmlReply(replyBody, typedName, signatureBlock, formattedDate, originalFromName, originalFromEmail, originalHtml)
+      ? this._formatHtmlReply(replyBody, typedName, signatureBlock, formattedDate, originalFromName, originalFromEmail, originalHtml)
       : undefined;
 
     return { text: textReply, html: htmlReply };
@@ -472,7 +450,7 @@ export class DraftGenerator {
    * Format HTML version of reply
    * @private
    */
-  private formatHtmlReply(
+  private _formatHtmlReply(
     replyBody: string,
     typedName: string | undefined,
     signatureBlock: string | undefined,
@@ -510,21 +488,21 @@ ${originalHtml}
    * Calculate recipients for reply-all
    * @private
    */
-  private calculateReplyAllRecipients(parsed: PostalMimeEmail, userEmail: string): { to: string; cc: string } {
+  private _calculateReplyAllRecipients(parsed: PostalMimeEmail, userEmail: string): { to: string; cc: string } {
     const allTo: string[] = [];
     const allCc: string[] = [];
 
     // Add sender to TO
     const from = extractSingleAddress(parsed.from);
     if (from) {
-      allTo.push(this.formatEmailAddress(from.name, from.address));
+      allTo.push(this._formatEmailAddress(from.name, from.address));
     }
 
     // Add all TO recipients (except the user)
     const toAddresses = extractAddresses(parsed.to);
     toAddresses.forEach(addr => {
       if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
-        allTo.push(this.formatEmailAddress(addr.name, addr.address));
+        allTo.push(this._formatEmailAddress(addr.name, addr.address));
       }
     });
 
@@ -532,7 +510,7 @@ ${originalHtml}
     const ccAddresses = extractAddresses(parsed.cc);
     ccAddresses.forEach(addr => {
       if (addr.address && addr.address.toLowerCase() !== userEmail.toLowerCase()) {
-        allCc.push(this.formatEmailAddress(addr.name, addr.address));
+        allCc.push(this._formatEmailAddress(addr.name, addr.address));
       }
     });
 
@@ -546,7 +524,7 @@ ${originalHtml}
    * Format email address with optional name
    * @private
    */
-  private formatEmailAddress(name: string | undefined, email: string): string {
+  private _formatEmailAddress(name: string | undefined, email: string): string {
     return name && name !== email ? `${name} <${email}>` : email;
   }
 
@@ -554,7 +532,7 @@ ${originalHtml}
    * Format date for email reply header
    * @private
    */
-  private formatEmailDate(date: Date): string {
+  private _formatEmailDate(date: Date): string {
     const formatted = date.toLocaleString('en-US', {
       month: 'long',
       day: 'numeric',
@@ -581,7 +559,7 @@ ${originalHtml}
    * Log draft generation completion
    * @private
    */
-  private logDraftCompletion(
+  private _logDraftCompletion(
     userId: string,
     aiResult: { body: string; meta: LLMMetadata; relationship: RelationshipResult }
   ): void {

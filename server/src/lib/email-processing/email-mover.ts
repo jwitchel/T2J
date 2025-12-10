@@ -11,8 +11,9 @@ import { v4 as uuidv4 } from 'uuid';
 import * as nodemailer from 'nodemailer';
 import { EmailActionRouter } from '../email-action-router';
 import { LLMMetadata } from '../llm-client';
-import { EmailActionTracker } from '../email-action-tracker';
-import { ActionHelpers } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
+import { EmailRepository } from '../repositories/email-repository';
+import { preferencesService } from '../preferences-service';
 
 // Helper function to create RFC2822 formatted email using nodemailer
 async function createEmailMessage(
@@ -99,7 +100,7 @@ export interface MoveEmailParams {
   emailAccountId: string;
   userId: string;
   messageUid: number;
-  messageId?: string;
+  messageId: string; // The email's message ID for tracking (required for action updates)
   sourceFolder: string;
   recommendedAction: LLMMetadata['recommendedAction'];
 }
@@ -147,17 +148,10 @@ export class EmailMover {
 
       const fromEmail = accountResult.rows[0].email_address;
 
-      // Get user's folder preferences
-      const userResult = await pool.query(
-        'SELECT preferences FROM "user" WHERE id = $1',
-        [userId]
-      );
-      const preferences = userResult.rows[0]?.preferences || {};
-      const folderPrefs = preferences.folderPreferences;
-
-      // Determine saved Drafts folder path from user preferences
-      // Default to [Gmail]/Drafts for Gmail accounts if not configured
-      const draftsFolderPath = ((folderPrefs as any)?.draftsFolderPath as string) || '[Gmail]/Drafts';
+      // Get user's folder preferences (single call returns all preferences)
+      const prefs = await preferencesService.getPreferences(userId);
+      const folderPrefs = prefs.folderPreferences;
+      const draftsFolderPath = folderPrefs.draftsFolderPath;
 
       await withImapContext(emailAccountId, userId, async () => {
         // Create IMAP operations instance (connection managed by context)
@@ -212,39 +206,39 @@ export class EmailMover {
     } = params;
 
     try {
-      // Get user's folder preferences (trust caller validated inputs)
-      const userResult = await pool.query(
-        'SELECT preferences FROM "user" WHERE id = $1',
-        [userId]
-      );
-      const preferences = userResult.rows[0]?.preferences || {};
-      const folderPrefs = preferences.folderPreferences;
-      const draftsFolderPath = folderPrefs?.draftsFolderPath;
+      // Get user's folder preferences (single call returns all preferences)
+      const prefs = await preferencesService.getPreferences(userId);
+      const folderPrefs = prefs.folderPreferences;
 
       // Resolve destination folder and flags
-      const actionRouter = new EmailActionRouter(folderPrefs, draftsFolderPath);
+      const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);
       const routeResult = actionRouter.getActionRoute(recommendedAction as any);
 
-      await withImapContext(emailAccountId, userId, async () => {
-        const imapOps = await ImapOperations.fromAccountId(emailAccountId, userId);
-        await imapOps.moveMessage(sourceFolder, routeResult.folder, messageUid, routeResult.flags, true);
-      });
+      // Skip IMAP operation if source === destination (e.g., KEEP_IN_INBOX)
+      const skipMove = sourceFolder === routeResult.folder;
 
-      // Record the action taken (map recommended action to action type)
-      if (messageId) {
-        let actionType: 'manually_handled' | 'draft_created' = 'manually_handled';
-        if (ActionHelpers.isSilentAction(recommendedAction)) {
-          actionType = 'manually_handled'; // Silent actions mean the email was handled without a draft
-        }
-        await EmailActionTracker.recordAction(userId, emailAccountId, messageId, actionType);
+      if (!skipMove) {
+        await withImapContext(emailAccountId, userId, async () => {
+          const imapOps = await ImapOperations.fromAccountId(emailAccountId, userId);
+          await imapOps.moveMessage(sourceFolder, routeResult.folder, messageUid, routeResult.flags, true);
+        });
       }
+
+      // Update the action in email_received with the action the user chose
+      const emailRepository = new EmailRepository(pool);
+      await emailRepository.updateReceivedEmailAction(
+        messageId,
+        emailAccountId,
+        recommendedAction as EmailActionType,
+        routeResult.folder
+      );
 
       return {
         success: true,
-        message: `Email moved to ${routeResult.displayName}`,
+        message: skipMove ? `Kept in ${routeResult.displayName}` : `Email moved to ${routeResult.displayName}`,
         folder: routeResult.folder,
         action: recommendedAction,
-        removedFromInbox: !!(messageUid && sourceFolder)
+        removedFromInbox: !skipMove && !!(messageUid && sourceFolder)
       };
 
     } catch (error: unknown) {

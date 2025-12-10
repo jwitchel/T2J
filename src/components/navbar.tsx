@@ -17,8 +17,6 @@ import {
   ChevronDown,
   Mail,
   Database,
-  Code2,
-  Home,
   Sparkles,
   Settings,
   LogOut,
@@ -83,12 +81,7 @@ export function Navbar() {
 
   const isActive = (path: string) => pathname === path
 
-  const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/inbox', label: 'Inbox', icon: Mail },
-    { href: '/tone', label: 'Tone Analysis', icon: Sparkles },
-    { href: '/dashboard/jobs', label: 'Jobs', icon: Briefcase },
-  ]
+  const navItems: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = []
 
   const handleSignOut = async () => {
     await signOut()
@@ -98,8 +91,8 @@ export function Navbar() {
     <nav className="bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo/Brand */}
-          <div className="flex items-center">
+          {/* Logo/Brand and Main Navigation */}
+          <div className="flex items-center space-x-12">
             <Link href="/dashboard" className="flex items-center space-x-3">
               <Image
                 src="/logo.png"
@@ -133,65 +126,28 @@ export function Navbar() {
                 </span>
               </span>
             </Link>
-          </div>
 
-          {/* Main Navigation */}
-          <div className="hidden md:flex items-center space-x-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    isActive(item.href)
-                      ? "bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100"
-                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 hover:text-zinc-900 dark:hover:text-zinc-100"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              )
-            })}
-
-            {/* Dev Tools Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="flex items-center gap-1 text-sm font-medium"
-                >
-                  <Code2 className="h-4 w-4" />
-                  Dev Tools
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Development Tools</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/webmail" className="flex items-center gap-2 cursor-pointer">
-                    <Mail className="h-4 w-4" />
-                    Webmail Client
+            {/* Main Navigation */}
+            <div className="hidden md:flex items-center space-x-1 ml-4">
+              {navItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                      isActive(item.href)
+                        ? "bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100"
+                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 hover:text-zinc-900 dark:hover:text-zinc-100"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
                   </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/db-browser" className="flex items-center gap-2 cursor-pointer">
-                    <Database className="h-4 w-4" />
-                    Database Browser
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/components-test" className="flex items-center gap-2 cursor-pointer">
-                    <Code2 className="h-4 w-4" />
-                    Component Test
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                )
+              })}
+            </div>
           </div>
 
           {/* Right side - User menu */}
@@ -209,6 +165,13 @@ export function Navbar() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href="/tone" className="flex items-center gap-2 cursor-pointer">
+                    <Sparkles className="h-4 w-4" />
+                    Tone Analysis
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/settings" className="flex items-center gap-2 cursor-pointer">
                     <Settings className="h-4 w-4" />
@@ -228,7 +191,21 @@ export function Navbar() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuLabel>Development Tools</DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/jobs" className="flex items-center gap-2 cursor-pointer">
+                    <Briefcase className="h-4 w-4" />
+                    Jobs
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/db-browser" className="flex items-center gap-2 cursor-pointer">
+                    <Database className="h-4 w-4" />
+                    Database Browser
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onClick={handleSignOut}
                   className="flex items-center gap-2 cursor-pointer text-red-600 dark:text-red-400"
                 >

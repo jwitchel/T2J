@@ -96,7 +96,7 @@ interface ToneProfile extends Partial<WritingPatterns> {
     [key: string]: unknown
   }
   emails_analyzed: number
-  last_updated: string
+  updated_at: string
   preference_type: string
 }
 
@@ -245,6 +245,7 @@ export default function TonePage() {
     }
 
     setIsLoadingEmails(true)
+    success(`Loading ${emailCount} emails...`)
     try {
       const response = await fetch(`${apiUrl}/api/training/load-sent-emails`, {
         method: 'POST',
@@ -258,7 +259,7 @@ export default function TonePage() {
 
       if (response.ok) {
         const data = await response.json()
-        success(`Loading ${data.count || emailCount} emails...`)
+        success(`Loaded ${data.count || emailCount} emails successfully`)
         setTimeout(() => fetchToneData(), 2000)
       } else {
         const data = await response.json()
@@ -296,6 +297,7 @@ export default function TonePage() {
 
   const handleAnalyzePatterns = async () => {
     setIsAnalyzing(true)
+    success('Analyzing email patterns...')
     try {
       const response = await fetch(`${apiUrl}/api/training/analyze-patterns`, {
         method: 'POST',
@@ -305,7 +307,7 @@ export default function TonePage() {
       })
 
       if (response.ok) {
-        success('Pattern analysis started...')
+        success('Pattern analysis completed successfully')
         setTimeout(() => fetchToneData(), 2000)
       } else {
         const data = await response.json()
@@ -367,10 +369,6 @@ export default function TonePage() {
           {/* Training Tab */}
           <TabsContent value="training" className="mt-0 flex-1 flex flex-col min-h-0">
             <Card className="flex flex-col flex-1 min-h-0">
-              <CardHeader className="flex-shrink-0">
-                <CardTitle>Training</CardTitle>
-                <CardDescription>Load and analyze emails from your account</CardDescription>
-              </CardHeader>
               <CardContent className="space-y-4 flex flex-col flex-1 min-h-0">
                 {/* Compact Toolbar */}
                 <div className="flex gap-2 items-center flex-shrink-0">
@@ -651,27 +649,36 @@ export default function TonePage() {
                       <CardDescription>How you typically respond</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Immediate responses</p>
-                          <div className="flex items-center gap-2">
-                            <Progress value={(patterns.responsePatterns.immediate || 0) * 100} className="flex-1 h-2" />
-                            <span className="text-sm font-medium">{Math.round((patterns.responsePatterns.immediate || 0) * 100)}%</span>
+                      {selectedRelationship === 'aggregate' && patterns.responsePatterns.immediate === 0 && patterns.responsePatterns.contemplative === 0 ? (
+                        <div className="text-sm text-zinc-500">
+                          <p>Response style analysis is available in specific relationship tabs.</p>
+                          <p className="mt-1 text-xs">Select a relationship above to view response patterns for that category.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Immediate responses</p>
+                              <div className="flex items-center gap-2">
+                                <Progress value={(patterns.responsePatterns.immediate || 0) * 100} className="flex-1 h-2" />
+                                <span className="text-sm font-medium">{Math.round((patterns.responsePatterns.immediate || 0) * 100)}%</span>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Contemplative responses</p>
+                              <div className="flex items-center gap-2">
+                                <Progress value={(patterns.responsePatterns.contemplative || 0) * 100} className="flex-1 h-2" />
+                                <span className="text-sm font-medium">{Math.round((patterns.responsePatterns.contemplative || 0) * 100)}%</span>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Contemplative responses</p>
-                          <div className="flex items-center gap-2">
-                            <Progress value={(patterns.responsePatterns.contemplative || 0) * 100} className="flex-1 h-2" />
-                            <span className="text-sm font-medium">{Math.round((patterns.responsePatterns.contemplative || 0) * 100)}%</span>
-                          </div>
-                        </div>
-                      </div>
-                      {patterns.responsePatterns.questionHandling && (
-                        <div className="pt-4 border-t">
-                          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Question handling style</p>
-                          <p className="text-sm mt-1">{patterns.responsePatterns.questionHandling}</p>
-                        </div>
+                          {patterns.responsePatterns.questionHandling && patterns.responsePatterns.questionHandling !== 'varies' && (
+                            <div className="pt-4 border-t">
+                              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Question handling style</p>
+                              <p className="text-sm mt-1">{patterns.responsePatterns.questionHandling}</p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </Card>
@@ -765,6 +772,11 @@ export default function TonePage() {
                             </div>
                           </div>
                         ))
+                      ) : selectedRelationship === 'aggregate' ? (
+                        <div className="text-sm text-zinc-500">
+                          <p>Unique expressions are available in specific relationship tabs.</p>
+                          <p className="mt-1 text-xs">Select a relationship above to view unique expressions for that category.</p>
+                        </div>
                       ) : (
                         <p className="text-sm text-zinc-500">No unique expressions found</p>
                       )}
@@ -773,15 +785,15 @@ export default function TonePage() {
                 </Card>
 
                 {/* Things to Avoid */}
-                {patterns?.negativePatterns && patterns.negativePatterns.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Expressions to Avoid</CardTitle>
-                      <CardDescription>Phrases you typically don&apos;t use</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {patterns.negativePatterns.map((pattern, idx) => (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Expressions to Avoid</CardTitle>
+                    <CardDescription>Phrases you typically don&apos;t use</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {patterns?.negativePatterns && patterns.negativePatterns.length > 0 ? (
+                        patterns.negativePatterns.map((pattern, idx) => (
                           <div key={idx} className="border-b border-zinc-100 dark:border-zinc-800 pb-3 last:border-0">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
@@ -804,11 +816,18 @@ export default function TonePage() {
                               )}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+                        ))
+                      ) : selectedRelationship === 'aggregate' ? (
+                        <div className="text-sm text-zinc-500">
+                          <p>Expression avoidance patterns are available in specific relationship tabs.</p>
+                          <p className="mt-1 text-xs">Select a relationship above to view avoidance patterns for that category.</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-zinc-500">No avoidance patterns found</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Analysis Details */}
                 {currentProfile && (
@@ -819,7 +838,7 @@ export default function TonePage() {
                   <CardContent>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <Stat label="Emails Analyzed" value={currentProfile.emails_analyzed} />
-                      <Stat label="Last Updated" value={new Date(currentProfile.last_updated).toLocaleDateString()} />
+                      <Stat label="Last Updated" value={new Date(currentProfile.updated_at).toLocaleDateString()} />
                       {(() => {
                         const modelUsed = currentProfile.meta?.modelUsed
                         return modelUsed && typeof modelUsed === 'string' ? (

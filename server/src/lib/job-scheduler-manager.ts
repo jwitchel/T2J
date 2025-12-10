@@ -42,7 +42,7 @@ export class JobSchedulerManager {
   private constructor() {
 
     // Initialize scheduler configurations
-    this.initializeSchedulerConfigs();
+    this._initializeSchedulerConfigs();
   }
 
   static getInstance(): JobSchedulerManager {
@@ -52,12 +52,12 @@ export class JobSchedulerManager {
     return JobSchedulerManager.instance;
   }
 
-  private initializeSchedulerConfigs(): void {
+  private _initializeSchedulerConfigs(): void {
     // Check Mail scheduler configuration
     this.schedulerConfigs.set(SchedulerId.CHECK_MAIL, {
       id: SchedulerId.CHECK_MAIL,
       queue: inboxQueue,
-      interval: parseInt(process.env.CHECK_MAIL_INTERVAL || '60000'), // Default 60 seconds
+      interval: parseInt(process.env.CHECK_MAIL_INTERVAL!),
       jobType: JobType.PROCESS_INBOX,
       jobData: async (userId: string, accountId: string) => ({
         userId,
@@ -72,7 +72,7 @@ export class JobSchedulerManager {
     this.schedulerConfigs.set(SchedulerId.UPDATE_TONE, {
       id: SchedulerId.UPDATE_TONE,
       queue: trainingQueue,
-      interval: parseInt(process.env.UPDATE_TONE_INTERVAL || '86400000'), // Default 24 hours
+      interval: parseInt(process.env.UPDATE_TONE_INTERVAL!),
       jobType: JobType.BUILD_TONE_PROFILE,
       jobData: async (userId: string, accountId: string) => ({
         userId,
@@ -88,10 +88,8 @@ export class JobSchedulerManager {
    * Enable a scheduler for a specific user and account
    */
   async enableScheduler(schedulerId: string, userId: string, accountId: string): Promise<void> {
-    const config = this.schedulerConfigs.get(schedulerId);
-    if (!config) {
-      throw new Error(`Unknown scheduler: ${schedulerId}`);
-    }
+    // Trust caller - let fail naturally if schedulerId is invalid
+    const config = this.schedulerConfigs.get(schedulerId)!;
 
     // Create or update the JobScheduler using BullMQ's native functionality
     // Note: JobScheduler ID includes userId AND accountId to make it unique per account
@@ -126,10 +124,8 @@ export class JobSchedulerManager {
    * @param userId - Included for signature consistency with enableScheduler (not used internally)
    */
   async disableScheduler(schedulerId: string, _userId: string, accountId: string): Promise<void> {
-    const config = this.schedulerConfigs.get(schedulerId);
-    if (!config) {
-      throw new Error(`Unknown scheduler: ${schedulerId}`);
-    }
+    // Trust caller - let fail naturally if schedulerId is invalid
+    const config = this.schedulerConfigs.get(schedulerId)!;
 
     // Remove the JobScheduler
     const jobSchedulerId = `${schedulerId}-${accountId}`;
@@ -152,10 +148,8 @@ export class JobSchedulerManager {
     accountId: string;
     nextRun?: Date;
   } | null> {
-    const config = this.schedulerConfigs.get(schedulerId);
-    if (!config) {
-      throw new Error(`Unknown scheduler: ${schedulerId}`);
-    }
+    // Trust caller - let fail naturally if schedulerId is invalid
+    const config = this.schedulerConfigs.get(schedulerId)!;
 
     const jobSchedulerId = `${schedulerId}-${accountId}`;
 
@@ -355,9 +349,9 @@ export class JobSchedulerManager {
     // Import pool here to avoid circular dependencies
     const { pool } = await import('../server');
 
-    // Get user's name for logging
+    // Get user's name for logging (user exists - validated by auth)
     const userResult = await pool.query('SELECT name FROM "user" WHERE id = $1', [userId]);
-    const userName = userResult.rows[0]?.name || 'Unknown User';
+    const userName = userResult.rows[0].name;
 
     // Query ALL accounts for this user with email addresses
     const result = await pool.query(

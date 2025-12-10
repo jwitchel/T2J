@@ -29,14 +29,14 @@ export class EmailContentParser {
   parseFromMailparser(parsedMail: ParsedMail): ParsedEmailContent {
     // Extract basic metadata
     const messageId = parsedMail.messageId || `generated-${Date.now()}`;
-    const from = this.extractFromAddress(parsedMail);
-    const to = this.extractToAddresses(parsedMail);
+    const from = this._extractFromAddress(parsedMail);
+    const to = this._extractToAddresses(parsedMail);
     const sentDate = parsedMail.date || new Date();
 
     // Extract text content
     // Handle malformed emails that have empty text/plain parts (e.g., Venmo receipts)
     // If text/plain exists but is empty/whitespace-only, fall back to HTML conversion
-    let userTextPlain = parsedMail.text || '';
+    let userTextPlain = parsedMail.text!;
 
     if (userTextPlain.trim().length === 0 && parsedMail.html) {
       // text/plain is empty but HTML exists - convert HTML to text
@@ -65,7 +65,7 @@ export class EmailContentParser {
   /**
    * Extract sender email address
    */
-  private extractFromAddress(parsedMail: ParsedMail): string {
+  private _extractFromAddress(parsedMail: ParsedMail): string {
     if (!parsedMail.from) {
       return 'unknown@email.com';
     }
@@ -81,12 +81,12 @@ export class EmailContentParser {
 
     // Handle array of addresses
     if (Array.isArray(from) && from.length > 0) {
-      return from[0].address || 'unknown@email.com';
+      return from[0].address!;
     }
 
     // Handle single address object
     if (from && from.value && Array.isArray(from.value) && from.value.length > 0) {
-      return from.value[0].address || 'unknown@email.com';
+      return from.value[0].address!;
     }
 
     return 'unknown@email.com';
@@ -95,7 +95,7 @@ export class EmailContentParser {
   /**
    * Extract recipient email addresses
    */
-  private extractToAddresses(parsedMail: ParsedMail): string[] {
+  private _extractToAddresses(parsedMail: ParsedMail): string[] {
     const addresses: string[] = [];
 
     if (parsedMail.to) {
@@ -111,14 +111,14 @@ export class EmailContentParser {
           // Simple email without angle brackets
           addresses.push(...toField.text.split(',').map((e: string) => e.trim()));
         }
-      } 
+      }
       // Handle array format
       else if (Array.isArray(toField)) {
-        addresses.push(...toField.map((addr: any) => addr.address || '').filter(Boolean));
+        addresses.push(...toField.map((addr: any) => addr.address).filter(Boolean));
       }
       // Handle object with value array
       else if (toField && toField.value && Array.isArray(toField.value)) {
-        addresses.push(...toField.value.map((addr: any) => addr.address || '').filter(Boolean));
+        addresses.push(...toField.value.map((addr: any) => addr.address).filter(Boolean));
       }
     }
 

@@ -11,17 +11,16 @@
  */
 
 import PostalMime from 'postal-mime';
-
-// Helper to format milliseconds as seconds (e.g., 8234ms → 8.2s)
-function formatDuration(ms: number): string {
-  return (ms / 1000).toFixed(1) + 's';
-}
+import { normalizeMessageId } from '../message-id-utils';
 import { pool } from '../db';
 import { getSpamDetector } from './spam-detector';
 import { draftGenerator } from './draft-generator';
 import { ProcessedEmail, EmailProcessingResult, SpamCheckResult } from '../pipeline/types';
-import { EmailActions } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
 import { stripAttachments } from '../email-attachment-stripper';
+import { RelationshipType } from '../relationships/types';
+import { personService } from '../relationships/person-service';
+import { preferencesService } from '../preferences-service';
 
 /**
  * User context needed for email processing
@@ -57,20 +56,23 @@ export class EmailProcessingService {
    * Extract email body, handling HTML if no plain text is available
    * @private
    */
-  private async extractEmailBody(parsed: any): Promise<string> {
-    let emailBody = parsed.text || '';
+  private async _extractEmailBody(parsed: any): Promise<string> {
+    let emailBody = parsed.text;
 
-    // Handle malformed emails with empty text/plain parts
-    if (emailBody.trim().length === 0 && parsed.html) {
-      const { convert } = await import('html-to-text');
-      emailBody = convert(parsed.html, {
-        wordwrap: false,
-        preserveNewlines: true,
-        selectors: [
-          { selector: 'a', options: { ignoreHref: true } },
-          { selector: 'img', format: 'skip' }
-        ]
-      });
+    // MIME allows emails with only HTML content (no text/plain part)
+    // This is common for marketing emails and rich-text newsletters
+    if (!emailBody || emailBody.trim().length === 0) {
+      if (parsed.html) {
+        const { convert } = await import('html-to-text');
+        emailBody = convert(parsed.html, {
+          wordwrap: false,
+          preserveNewlines: true,
+          selectors: [
+            { selector: 'a', options: { ignoreHref: true } },
+            { selector: 'img', format: 'skip' }
+          ]
+        });
+      }
     }
 
     if (!emailBody || emailBody.trim().length === 0) {
@@ -85,22 +87,25 @@ export class EmailProcessingService {
    * Parse email exactly once
    * @private
    */
-  private async parseEmail(fullMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
+  private async _parseEmail(fullMessage: string, emailAccountId: string): Promise<ParsedEmailData> {
     const parser = new PostalMime();
     const parsed = await parser.parse(fullMessage);
 
-    const fromAddress = parsed.from?.address || '';
-    const fromName = parsed.from?.name || parsed.from?.address || '';
-    const subject = parsed.subject || '';
-    const to = (parsed.to || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
-    const cc = (parsed.cc || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
-    const replyTo = (parsed.replyTo || []).map((addr: any) => ({ address: addr.address || '', name: addr.name || '' }));
-    const messageId = parsed.messageId || `<${Date.now()}@${emailAccountId}>`;
+    const fromAddress = parsed.from!.address!;
+    const fromName = parsed.from!.name || parsed.from!.address!;
+    const subject = parsed.subject!;
+    // RFC 5322: To, Cc, and Reply-To are optional headers in valid emails.
+    // Marketing emails often have empty To (using Bcc), and most emails lack Cc/Reply-To.
+    // This is NOT a defensive default - these are legitimately optional per email protocol.
+    const to = (parsed.to ?? []).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const cc = (parsed.cc ?? []).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const replyTo = (parsed.replyTo ?? []).map((addr: any) => ({ address: addr.address!, name: addr.name! }));
+    const messageId = normalizeMessageId(parsed.messageId) || `${Date.now()}@${emailAccountId}`;
     const messageDate = parsed.date ? new Date(parsed.date) : new Date();
     const inReplyTo = parsed.inReplyTo || null;
 
     // Extract email body
-    const emailBody = await this.extractEmailBody(parsed);
+    const emailBody = await this._extractEmailBody(parsed);
 
     // Create ProcessedEmail with ORIGINAL fullMessage (unmodified, with all attachments)
     // This will be stored in the database and used for draft generation
@@ -129,7 +134,7 @@ export class EmailProcessingService {
    * Create a minimal draft for spam emails
    * @private
    */
-  private createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext, spamCheckResult: SpamCheckResult): any {
+  private _createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext, spamCheckResult: SpamCheckResult): any {
     const { processedEmail } = parsedData;
 
     return {
@@ -137,13 +142,13 @@ export class EmailProcessingService {
       from: userContext.userEmail,
       to: processedEmail.from[0].address,
       cc: '',
-      subject: processedEmail.subject || '',
+      subject: processedEmail.subject!,
       body: '',
       bodyHtml: undefined,
       inReplyTo: processedEmail.messageId || `<${Date.now()}>`,
       references: processedEmail.messageId || `<${Date.now()}>`,
       meta: {
-        recommendedAction: EmailActions.SILENT_SPAM,
+        recommendedAction: EmailActionType.SILENT_SPAM,
         keyConsiderations: spamCheckResult.indicators,
         inboundMsgAddressedTo: 'you',
         inboundMsgIsRequesting: 'none',
@@ -155,9 +160,8 @@ export class EmailProcessingService {
         }
       },
       relationship: {
-        type: 'external',
-        confidence: 0.9,
-        detectionMethod: 'spam-detection'
+        type: RelationshipType.SPAM,
+        confidence: 0.9
       },
       draftMetadata: {
         exampleCount: 0,
@@ -177,7 +181,7 @@ export class EmailProcessingService {
    * Load user context exactly once (single query joining account and user data)
    * @private
    */
-  private async loadUserContext(userId: string, emailAccountId: string): Promise<UserContext> {
+  private async _loadUserContext(userId: string, emailAccountId: string): Promise<UserContext> {
     // Single query to get both account email and user preferences
     const result = await pool.query(`
       SELECT
@@ -194,16 +198,16 @@ export class EmailProcessingService {
     }
 
     const row = result.rows[0];
-    const preferences = row.preferences || {};
+    const preferences = row.preferences;
 
     return {
       userEmail: row.email_address,
       userNames: {
-        name: preferences.name || row.name || '',
-        nicknames: preferences.nicknames || ''
+        name: preferences.name,
+        nicknames: preferences.nicknames
       },
-      typedNameSignature: preferences.typedName?.appendString || '',
-      signatureBlock: preferences.signatureBlock || ''
+      typedNameSignature: preferences.typedName?.appendString,
+      signatureBlock: preferences.signatureBlock
     };
   }
 
@@ -213,14 +217,13 @@ export class EmailProcessingService {
    */
   async processEmail(params: ProcessEmailParams): Promise<EmailProcessingResult> {
     const { fullMessage, emailAccountId, providerId, userId } = params;
-    const totalStartTime = Date.now();
 
     try {
       // Step 1: Parse email
-      const parsedData = await this.parseEmail(fullMessage, emailAccountId);
+      const parsedData = await this._parseEmail(fullMessage, emailAccountId);
 
       // Step 2: Load user context
-      const userContext = await this.loadUserContext(userId, emailAccountId);
+      const userContext = await this._loadUserContext(userId, emailAccountId);
 
       // Step 3: Create LLM-safe version (strip ALL attachments for LLM processing)
       // This prevents massive PDFs, images, etc. from bloating token count
@@ -228,33 +231,50 @@ export class EmailProcessingService {
       const llmSafeMessage = await stripAttachments(fullMessage, parsedData.parsed);
 
       // Step 4: Check for spam (using stripped version for LLM)
-      const spamCheckStartTime = Date.now();
-      const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase() || '';
+      // Only run spam detection if enabled in user preferences
+      const prefs = await preferencesService.getPreferences(userId);
+      const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase();
       const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
-      const spamDetector = await getSpamDetector(providerId);
-      const spamCheckResult = await spamDetector.checkSpam({
-        senderEmail,
-        replyTo,
-        fullMessage: llmSafeMessage, // Use stripped version for LLM
-        subject: parsedData.processedEmail.subject,
-        userNames: userContext.userNames,
-        userId
-      });
-      const spamCheckDuration = Date.now() - spamCheckStartTime;
+
+      let spamCheckResult: SpamCheckResult;
+
+      if (prefs.actionPreferences.spamDetection) {
+        const spamDetector = await getSpamDetector(providerId);
+        spamCheckResult = await spamDetector.checkSpam({
+          senderEmail,
+          replyTo,
+          fullMessage: llmSafeMessage, // Use stripped version for LLM
+          subject: parsedData.processedEmail.subject,
+          userNames: userContext.userNames,
+          userId
+        });
+      } else {
+        // Spam detection disabled - treat as non-spam
+        spamCheckResult = {
+          isSpam: false,
+          indicators: ['Spam detection disabled by user preference'],
+          senderResponseCount: 0
+        };
+      }
 
       // Step 5: Generate draft (or create spam draft)
-      const draftStartTime = Date.now();
-      let draftDuration = 0;
-      let llmCalls = 1; // Spam check is always 1 LLM call
-
       // If spam detected, create a silent-spam draft instead of full generation
       if (spamCheckResult.isSpam) {
-        const spamDraft = this.createSpamDraft(parsedData, userContext, spamCheckResult);
-        draftDuration = Date.now() - draftStartTime;
+        // Update person relationship to spam
+        const senderEmail = parsedData.processedEmail.from[0]?.address;
+        const senderName = parsedData.processedEmail.from[0]?.name || senderEmail;
 
-        // Log concise summary
-        const totalDuration = Date.now() - totalStartTime;
-        console.log(`[EmailProcessingService] ⏱️ Processed in ${formatDuration(totalDuration)} (spam check: ${formatDuration(spamCheckDuration)}, LLM calls: ${llmCalls})`);
+        if (senderEmail) {
+          await personService.findOrCreatePerson({
+            userId,
+            name: senderName!,
+            emailAddress: senderEmail,
+            relationshipType: RelationshipType.SPAM,
+            confidence: 0.9
+          });
+        }
+
+        const spamDraft = this._createSpamDraft(parsedData, userContext, spamCheckResult);
 
         return {
           success: true,
@@ -273,38 +293,22 @@ export class EmailProcessingService {
       };
 
       const result = await draftGenerator.generateDraft(userId, providerId, llmParsedData, userContext, spamCheckResult);
-      draftDuration = Date.now() - draftStartTime;
-
-      // Draft generation includes 2-3 LLM calls (meta-context, action, optional response)
-      llmCalls += result.draft?.meta.recommendedAction.startsWith('silent') ? 2 : 3;
-
-      // Log concise summary
-      const totalDuration = Date.now() - totalStartTime;
-      console.log(`[EmailProcessingService] ⏱️ Processed in ${formatDuration(totalDuration)} (spam: ${formatDuration(spamCheckDuration)}, draft: ${formatDuration(draftDuration)}, LLM calls: ${llmCalls})`);
 
       return result;
 
     } catch (error: unknown) {
       console.error('[EmailProcessingService] Error processing email:', error);
 
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error processing email';
-
-      // Classify error by examining error message
-      let errorCode: 'ACCOUNT_NOT_FOUND' | 'LLM_TIMEOUT' | 'PARSE_ERROR' | 'SPAM_DETECTED' | 'UNKNOWN' = 'UNKNOWN';
-
-      if (errorMessage.includes('not found') || errorMessage.includes('does not belong')) {
-        errorCode = 'ACCOUNT_NOT_FOUND';
-      } else if (errorMessage.includes('timeout')) {
-        errorCode = 'LLM_TIMEOUT';
-      } else if (errorMessage.includes('parse') || errorMessage.includes('parsing')) {
-        errorCode = 'PARSE_ERROR';
+      // Mark permanent errors (configuration issues that won't resolve with retry)
+      if (error instanceof Error) {
+        const message = error.message;
+        if (message.includes('not found') || message.includes('does not belong')) {
+          (error as any).permanent = true;
+        }
       }
 
-      return {
-        success: false,
-        error: errorMessage,
-        errorCode
-      };
+      // Re-throw - let caller handle errors
+      throw error;
     }
   }
 }

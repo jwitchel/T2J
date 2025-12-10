@@ -185,10 +185,7 @@ export class ExampleSelector {
 
     try {
       // Use env variable for direct email fetch limit
-      const DIRECT_EMAIL_FETCH_LIMIT = parseInt(process.env.DIRECT_EMAIL_FETCH_LIMIT || '');
-      if (!DIRECT_EMAIL_FETCH_LIMIT) {
-        throw new Error('DIRECT_EMAIL_FETCH_LIMIT environment variable is required');
-      }
+      const DIRECT_EMAIL_FETCH_LIMIT = parseInt(process.env.DIRECT_EMAIL_FETCH_LIMIT!);
 
       const result = await vectorSearchService.search({
         userId,
@@ -226,10 +223,7 @@ export class ExampleSelector {
 
     try {
       // Use env variable for category email fetch limit
-      const CATEGORY_EMAIL_FETCH_LIMIT = parseInt(process.env.CATEGORY_EMAIL_FETCH_LIMIT || '');
-      if (!CATEGORY_EMAIL_FETCH_LIMIT) {
-        throw new Error('CATEGORY_EMAIL_FETCH_LIMIT environment variable is required');
-      }
+      const CATEGORY_EMAIL_FETCH_LIMIT = parseInt(process.env.CATEGORY_EMAIL_FETCH_LIMIT!);
 
       const result = await vectorSearchService.search({
         userId,
@@ -264,7 +258,7 @@ export class ExampleSelector {
   ): SelectedExample[] {
     return matches.slice(0, maxCount).map(match => ({
       id: match.id,
-      text: match.text || '',
+      text: match.text,
       metadata: {
         ...match.metadata,
         isDirectCorrespondence

@@ -11,7 +11,7 @@ interface AuthenticatedWebSocket extends WebSocket {
   subscribedChannels?: Set<string>;
 }
 
-export type EventType = 
+export type EventType =
   | 'log'           // General log entries (IMAP, jobs, monitoring, etc.)
   | 'job-event'     // Job state changes
   | 'ping'          // Keep-alive
@@ -51,11 +51,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
       noServer: true
     });
     
-    // Handle upgrade requests for the unified WebSocket path
+    // Handle upgrade requests for WebSocket path
     server.on('upgrade', (request, socket, head) => {
       const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
-      
-      // Only handle the unified WebSocket path
+
       if (pathname === '/ws') {
         this.wss.handleUpgrade(request, socket, head, (ws) => {
           this.wss.emit('connection', ws, request);
@@ -63,14 +62,14 @@ export class UnifiedWebSocketServer extends EventEmitter {
       }
     });
 
-    this.setupEventHandlers();
-    this.setupHeartbeat();
-    this.setupLoggerListeners();
+    this._setupEventHandlers();
+    this._setupHeartbeat();
+    this._setupLoggerListeners();
     
     UnifiedWebSocketServer.instance = this;
   }
 
-  private setupEventHandlers(): void {
+  private _setupEventHandlers(): void {
     this.wss.on('connection', async (ws: AuthenticatedWebSocket, request) => {
       try {
         // Create headers object for better-auth
@@ -110,7 +109,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
         this.clients.get(userId)!.add(ws);
         
         // Send initial logs
-        this.sendInitialLogs(ws, userId);
+        this._sendInitialLogs(ws, userId);
 
         // Set up ping/pong handlers
         ws.on('pong', () => {
@@ -121,7 +120,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
         ws.on('message', (data) => {
           try {
             const message = JSON.parse(data.toString()) as WebSocketMessage;
-            this.handleClientMessage(ws, message);
+            this._handleClientMessage(ws, message);
           } catch (error) {
             console.error('Invalid WebSocket message:', error);
             ws.send(JSON.stringify({
@@ -133,12 +132,12 @@ export class UnifiedWebSocketServer extends EventEmitter {
 
         // Handle disconnection
         ws.on('close', () => {
-          this.handleDisconnection(ws);
+          this._handleDisconnection(ws);
         });
 
         ws.on('error', (error) => {
           console.error(`WebSocket error for user ${userId}:`, error);
-          this.handleDisconnection(ws);
+          this._handleDisconnection(ws);
         });
       } catch (error) {
         console.error('WebSocket authentication error:', error);
@@ -147,7 +146,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
     });
   }
 
-  private setupHeartbeat(): void {
+  private _setupHeartbeat(): void {
     // Ping clients every 30 seconds
     this.heartbeatInterval = setInterval(() => {
       this.wss.clients.forEach((ws: AuthenticatedWebSocket) => {
@@ -167,10 +166,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
     });
   }
 
-  private setupLoggerListeners(): void {
+  private _setupLoggerListeners(): void {
     // Listen for all log events from realTimeLogger
     realTimeLogger.on('log', (logEntry: RealTimeLogEntry) => {
-      this.broadcastToUser(logEntry.userId, {
+      this._broadcastToUser(logEntry.userId, {
         type: 'log',
         log: logEntry,
         timestamp: new Date().toISOString()
@@ -179,19 +178,19 @@ export class UnifiedWebSocketServer extends EventEmitter {
 
     // Listen for logs cleared events
     realTimeLogger.on('logs-cleared', ({ userId }: { userId: string }) => {
-      this.broadcastToUser(userId, {
+      this._broadcastToUser(userId, {
         type: 'logs-cleared',
         timestamp: new Date().toISOString()
       });
     });
   }
 
-  private sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
+  private _sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
     try {
       const logs = realTimeLogger.getLogs(userId, 100);
       ws.send(JSON.stringify({
         type: 'initial-logs',
-        logs: logs,
+        logs,
         timestamp: new Date().toISOString()
       }));
     } catch (error) {
@@ -203,7 +202,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
     }
   }
 
-  private handleClientMessage(ws: AuthenticatedWebSocket, message: WebSocketMessage): void {
+  private _handleClientMessage(ws: AuthenticatedWebSocket, message: WebSocketMessage): void {
     const { type, ...payload } = message;
 
     switch (type) {
@@ -237,7 +236,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
     }
   }
 
-  private handleDisconnection(ws: AuthenticatedWebSocket): void {
+  private _handleDisconnection(ws: AuthenticatedWebSocket): void {
     if (ws.userId) {
       const userClients = this.clients.get(ws.userId);
       if (userClients) {
@@ -250,21 +249,20 @@ export class UnifiedWebSocketServer extends EventEmitter {
     }
   }
 
-  private broadcastToUser(userId: string, message: WebSocketMessage): void {
+  private _broadcastToUser(userId: string, message: WebSocketMessage): void {
     const userClients = this.clients.get(userId);
     if (!userClients) return;
 
-    const messageStr = JSON.stringify(message);
     userClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         // Check if client is subscribed to this type of message
         if (message.channel && client.subscribedChannels) {
-          if (!client.subscribedChannels.has('all') && 
+          if (!client.subscribedChannels.has('all') &&
               !client.subscribedChannels.has(message.channel)) {
             return; // Skip if not subscribed
           }
         }
-        client.send(messageStr);
+        client.send(JSON.stringify(message));
       }
     });
   }
@@ -273,7 +271,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
    * Broadcast a message to all connected clients of a user
    */
   public broadcast(userId: string, message: WebSocketMessage): void {
-    this.broadcastToUser(userId, message);
+    this._broadcastToUser(userId, message);
   }
 
   /**
@@ -281,7 +279,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
    */
   public broadcastJobEvent(event: any): void {
     if (event.userId) {
-      this.broadcastToUser(event.userId, {
+      this._broadcastToUser(event.userId, {
         type: 'job-event',
         channel: 'jobs',
         data: event,

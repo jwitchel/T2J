@@ -2,11 +2,12 @@ import { ImapConnection, ImapConnectionError } from './imap-connection';
 import { imapPool } from './imap-pool';
 import { decryptPassword, decrypt, encrypt } from './crypto';
 import { pool } from './db';
-import { simpleParser } from 'mailparser';
+import { simpleParser, ParsedMail } from 'mailparser';
 import { OAuthTokenService } from './oauth-token-service';
 import { getActiveContext, hasActiveContextFor, setContextConnection } from './imap-context';
 import { sharedConnection as redis } from './redis-connection';
 import { LLMClient } from './llm-client';
+import { normalizeMessageId } from './message-id-utils';
 
 export interface EmailAccountConfig {
   id: string;
@@ -46,6 +47,7 @@ export interface EmailMessage {
 
 export interface EmailMessageWithRaw extends EmailMessage {
   fullMessage: string;
+  parsed: ParsedMail;  // Pre-parsed email to avoid duplicate parsing
 }
 
 export interface SearchCriteria {
@@ -108,15 +110,15 @@ export class ImapOperations {
   /**
    * Get Redis key for storing last processed UID
    */
-  private getLastUidKey(folderName: string): string {
+  private _getLastUidKey(folderName: string): string {
     return `imap:last_uid:${this.account.id}:${folderName}`;
   }
 
   /**
    * Get last processed UID from Redis
    */
-  private async getLastProcessedUid(folderName: string): Promise<number> {
-    const key = this.getLastUidKey(folderName);
+  private async _getLastProcessedUid(folderName: string): Promise<number> {
+    const key = this._getLastUidKey(folderName);
     const value = await redis.get(key);
     return value ? parseInt(value, 10) : 0;
   }
@@ -124,12 +126,12 @@ export class ImapOperations {
   /**
    * Update last processed UID in Redis
    */
-  private async updateLastProcessedUid(folderName: string, uid: number): Promise<void> {
-    const key = this.getLastUidKey(folderName);
+  private async _updateLastProcessedUid(folderName: string, uid: number): Promise<void> {
+    const key = this._getLastUidKey(folderName);
     await redis.set(key, uid.toString());
   }
 
-  private async getConnection(): Promise<ImapConnection> {
+  private async _getConnection(): Promise<ImapConnection> {
     // Prefer context-managed connection if present
     const ctx = getActiveContext();
     if (ctx && ctx.userId === this.account.userId && ctx.accountId === this.account.id && ctx.connection && ctx.connection.isConnected()) {
@@ -216,7 +218,7 @@ export class ImapOperations {
   async testConnection(preserveConnection: boolean = false): Promise<boolean> {
     let success = false;
     try {
-      const conn = await this.getConnection();
+      const conn = await this._getConnection();
       
       // Try to list folders as a test
       await conn.listFolders();
@@ -238,7 +240,7 @@ export class ImapOperations {
    * This is much faster than getFolders() when you only need one folder's count
    */
   async getFolderMessageCount(folderName: string, preserveConnection: boolean = false): Promise<{ total: number; unseen: number }> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       const box = await conn.selectFolder(folderName);
@@ -254,7 +256,7 @@ export class ImapOperations {
   }
 
   async getFolders(preserveConnection: boolean = false): Promise<EmailFolder[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       const imapFolders = await conn.listFolders();
@@ -320,7 +322,7 @@ export class ImapOperations {
       updateLastUid?: boolean;  // Whether to update Redis tracking (default: true)
     } = {}
   ): Promise<EmailMessage[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
 
     try {
       await conn.selectFolder(folderName);
@@ -335,7 +337,7 @@ export class ImapOperations {
         const searchCriteria: any[] = [['SINCE', options.since]];
 
         // Also filter by UID if we have a last processed UID
-        const lastUid = await this.getLastProcessedUid(folderName);
+        const lastUid = await this._getLastProcessedUid(folderName);
         if (lastUid > 0) {
           searchCriteria.push(['UID', `${lastUid + 1}:*`]);
         }
@@ -344,11 +346,11 @@ export class ImapOperations {
         console.log(`[ImapOperations] SINCE search returned ${uids.length} UIDs from ${this.account.email} ${folderName}`);
       } else {
         // Standard mode: Use UID tracking for efficiency
-        const lastUid = await this.getLastProcessedUid(folderName);
+        const lastUid = await this._getLastProcessedUid(folderName);
 
         if (lastUid === 0) {
           // First run - use 15-min lookback to avoid processing ancient emails
-          const lookbackMinutes = parseInt(process.env.NEXT_PUBLIC_LOOK_BACK_DEFAULT_MINUTES || '15', 10);
+          const lookbackMinutes = parseInt(process.env.NEXT_PUBLIC_LOOK_BACK_DEFAULT_MINUTES!, 10);
           const since = new Date(Date.now() - lookbackMinutes * 60 * 1000);
           uids = await conn.search([['SINCE', since]]);
 
@@ -360,7 +362,7 @@ export class ImapOperations {
             const allUids = await conn.search([['ALL']]);
             if (allUids.length > 0) {
               const highestUid = Math.max(...allUids);
-              await this.updateLastProcessedUid(folderName, highestUid);
+              await this._updateLastProcessedUid(folderName, highestUid);
             }
           }
         } else {
@@ -415,12 +417,12 @@ export class ImapOperations {
       // Update last processed UID (if requested)
       if (options.updateLastUid !== false && paginatedUids.length > 0) {
         const highestUid = Math.max(...paginatedUids);
-        await this.updateLastProcessedUid(folderName, highestUid);
+        await this._updateLastProcessedUid(folderName, highestUid);
       }
 
       return messages.map((msg: any) => ({
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
@@ -444,49 +446,13 @@ export class ImapOperations {
       preserveConnection?: boolean;
     } = {}
   ): Promise<EmailMessage[]> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
       
       // Build IMAP search criteria
-      const imapCriteria: any[] = [];
-      
-      if (criteria.seen !== undefined) {
-        imapCriteria.push(criteria.seen ? 'SEEN' : 'UNSEEN');
-      }
-      if (criteria.flagged !== undefined) {
-        imapCriteria.push(criteria.flagged ? 'FLAGGED' : 'UNFLAGGED');
-      }
-      if (criteria.from) {
-        imapCriteria.push(['FROM', criteria.from]);
-      }
-      if (criteria.to) {
-        imapCriteria.push(['TO', criteria.to]);
-      }
-      if (criteria.subject) {
-        imapCriteria.push(['SUBJECT', criteria.subject]);
-      }
-      if (criteria.body) {
-        imapCriteria.push(['BODY', criteria.body]);
-      }
-      if (criteria.before) {
-        imapCriteria.push(['BEFORE', criteria.before]);
-      }
-      if (criteria.since) {
-        imapCriteria.push(['SINCE', criteria.since]);
-      }
-      if (criteria.larger) {
-        imapCriteria.push(['LARGER', criteria.larger]);
-      }
-      if (criteria.smaller) {
-        imapCriteria.push(['SMALLER', criteria.smaller]);
-      }
-
-      // Default to ALL if no criteria
-      if (imapCriteria.length === 0) {
-        imapCriteria.push('ALL');
-      }
+      const imapCriteria: any[] = this._buildImapSearchCriteria(criteria);
 
       const uids = await conn.search(imapCriteria);
       console.log(`IMAP search with criteria ${JSON.stringify(imapCriteria)} returned ${uids.length} UIDs`);
@@ -536,7 +502,7 @@ export class ImapOperations {
 
       return messages.map((msg: any) => ({
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
@@ -551,8 +517,88 @@ export class ImapOperations {
     }
   }
 
+  /**
+   * Search for message UIDs only (no fetching)
+   * Much faster than searchMessages() when you just need UIDs
+   */
+  async searchUidsOnly(
+    folderName: string,
+    criteria: SearchCriteria = {},
+    options: { offset?: number; limit?: number } = {}
+  ): Promise<number[]> {
+    const conn = await this._getConnection();
+
+    try {
+      await conn.selectFolder(folderName);
+
+      // Build IMAP search criteria
+      const imapCriteria: any[] = this._buildImapSearchCriteria(criteria);
+
+      const uids = await conn.search(imapCriteria);
+      console.log(`[IMAP] SEARCH with criteria ${JSON.stringify(imapCriteria)} returned ${uids.length} UIDs`);
+
+      if (uids.length === 0) {
+        return [];
+      }
+
+      // Sort UIDs in descending order to get newest emails first
+      const sortedUids = [...uids].sort((a, b) => b - a);
+
+      // Apply pagination
+      const offset = options.offset || 0;
+      const limit = options.limit || 50;
+      const paginatedUids = sortedUids.slice(offset, offset + limit);
+      console.log(`[IMAP] Pagination: offset=${offset}, limit=${limit}, result=${paginatedUids.length} UIDs`);
+
+      return paginatedUids;
+    } finally {
+      this.release();
+    }
+  }
+
+  private _buildImapSearchCriteria(criteria: SearchCriteria) {
+    const imapCriteria: any[] = [];
+
+    if (criteria.seen !== undefined) {
+      imapCriteria.push(criteria.seen ? 'SEEN' : 'UNSEEN');
+    }
+    if (criteria.flagged !== undefined) {
+      imapCriteria.push(criteria.flagged ? 'FLAGGED' : 'UNFLAGGED');
+    }
+    if (criteria.from) {
+      imapCriteria.push(['FROM', criteria.from]);
+    }
+    if (criteria.to) {
+      imapCriteria.push(['TO', criteria.to]);
+    }
+    if (criteria.subject) {
+      imapCriteria.push(['SUBJECT', criteria.subject]);
+    }
+    if (criteria.body) {
+      imapCriteria.push(['BODY', criteria.body]);
+    }
+    if (criteria.before) {
+      imapCriteria.push(['BEFORE', criteria.before]);
+    }
+    if (criteria.since) {
+      imapCriteria.push(['SINCE', criteria.since]);
+    }
+    if (criteria.larger) {
+      imapCriteria.push(['LARGER', criteria.larger]);
+    }
+    if (criteria.smaller) {
+      imapCriteria.push(['SMALLER', criteria.smaller]);
+    }
+
+    // Default to ALL if no criteria
+    if (imapCriteria.length === 0) {
+      imapCriteria.push('ALL');
+    }
+    return imapCriteria;
+  }
+
   async getMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessage & { body?: string; parsed?: any; fullMessage?: string }> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -592,7 +638,7 @@ export class ImapOperations {
       
       return {
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
@@ -612,86 +658,120 @@ export class ImapOperations {
 
   /**
    * Get multiple messages without parsing in a single batch (fast version)
-   * This uses the same connection for all fetches and can parallelize operations
+   * Batches IMAP fetch operations to reduce overhead
    */
   async getMessagesRaw(
-    folderName: string, 
-    uids: number[], 
+    folderName: string,
+    uids: number[],
     preserveConnection: boolean = false
   ): Promise<EmailMessageWithRaw[]> {
     if (uids.length === 0) {
       return [];
     }
 
-    const conn = await this.getConnection();
-    
+    const conn = await this._getConnection();
+
     try {
       await conn.selectFolder(folderName);
-      
-      // Fetch messages in parallel for better performance
-      const fetchPromises = uids.map(async (uid) => {
+
+      // Batch UIDs into groups for efficient IMAP fetch
+      // IMAP supports fetching multiple UIDs at once using UID sets
+      const BATCH_SIZE = 100;
+      const batches: number[][] = [];
+      for (let i = 0; i < uids.length; i += BATCH_SIZE) {
+        batches.push(uids.slice(i, i + BATCH_SIZE));
+      }
+
+      // PHASE 1: Fetch all raw messages (network I/O only, no parsing)
+      interface RawMessage {
+        uid: number;
+        bodyString: string;
+        flags: string[];
+        size: number;
+        date: Date;
+      }
+      const allRawMessages: RawMessage[] = [];
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batchUids = batches[batchIndex];
         try {
-          const messages = await conn.fetch(uid.toString(), {
+          const messages = await conn.fetch(batchUids, {
             bodies: '', // Empty string fetches the entire RFC 5322 message
             envelope: true,
             size: true,
             flags: true
           });
 
-          if (messages.length === 0) {
-            console.warn(`Message ${uid} not found`);
-            return null;
+          // Log progress after each batch (every 100 messages)
+          const totalFetched = allRawMessages.length + messages.length;
+          console.log(`[IMAP] Progress: ${totalFetched}/${uids.length} messages fetched (${((totalFetched/uids.length)*100).toFixed(1)}%)`);
+
+          if (messages.length !== batchUids.length) {
+            console.warn(`[IMAP] Batch ${batchIndex + 1}: Expected ${batchUids.length} messages but got ${messages.length}`);
           }
 
-          const msg = messages[0] as any;
+          // Just collect raw messages, don't parse yet
+          for (const msg of messages) {
+            if (!msg.body) {
+              console.warn(`Message ${msg.uid} has no body`);
+              continue;
+            }
 
-          if (!msg.body) {
-            console.warn(`Message ${uid} has no body`);
-            return null;
+            // Ensure body is a string with proper encoding
+            let bodyString: string;
+            if (Buffer.isBuffer(msg.body)) {
+              bodyString = msg.body.toString('utf8');
+            } else if (typeof msg.body === 'string') {
+              bodyString = msg.body;
+            } else {
+              console.warn(`Message ${msg.uid} has invalid body type`);
+              continue;
+            }
+
+            allRawMessages.push({
+              uid: msg.uid,
+              bodyString,
+              flags: msg.flags,
+              size: msg.size || 0,
+              date: msg.date || new Date()
+            });
           }
+        } catch (err) {
+          console.error(`[IMAP] ERROR in batch ${batchIndex + 1}/${batches.length}:`, err);
+          console.error(`[IMAP] Failed UIDs: ${batchUids.slice(0, 10).join(',')}`);
+        }
+      }
 
-          // Ensure body is a string with proper encoding
-          let bodyString: string;
-          if (Buffer.isBuffer(msg.body)) {
-            bodyString = msg.body.toString('utf8');
-          } else if (typeof msg.body === 'string') {
-            bodyString = msg.body;
-          } else {
-            console.warn(`Message ${uid} has invalid body type`);
-            return null;
-          }
+      // PHASE 2: Parse all messages in parallel (CPU-bound, can parallelize)
 
-          // Use mailparser to parse the complete message for proper header extraction
-          const parsedEmail = await simpleParser(bodyString);
+      const parsePromises = allRawMessages.map(async (raw) => {
+        try {
+          const parsedEmail = await simpleParser(raw.bodyString);
 
           const result: EmailMessageWithRaw = {
-            uid: msg.uid,
-            messageId: parsedEmail.messageId || undefined,
-            from: parsedEmail.from?.value?.[0]?.address || undefined,
+            uid: raw.uid,
+            messageId: normalizeMessageId(parsedEmail.messageId),
+            from: parsedEmail.from?.value?.[0]?.address ?? undefined,
             to: parsedEmail.to ? (Array.isArray(parsedEmail.to) ? parsedEmail.to : [parsedEmail.to]).flatMap((addr: any) => addr.value || []).map((a: any) => a.address || '') : undefined,
             subject: parsedEmail.subject || undefined,
-            date: parsedEmail.date || msg.date || new Date(),
-            flags: msg.flags,
-            size: msg.size,
-            fullMessage: bodyString
+            date: parsedEmail.date || raw.date || new Date(),
+            flags: raw.flags,
+            size: raw.size,
+            fullMessage: raw.bodyString,
+            parsed: parsedEmail
           };
           return result;
         } catch (err) {
-          console.error(`Error fetching UID ${uid}:`, err);
+          console.error(`Error parsing message ${raw.uid}:`, err);
           return null;
         }
       });
 
-      // Wait for all fetches to complete
-      const results = await Promise.all(fetchPromises);
-      
-      // Filter out nulls from failed fetches  
-      const validMessages: EmailMessageWithRaw[] = [];
-      for (const msg of results) {
-        if (msg !== null) {
-          validMessages.push(msg);
-        }
-      }
+      const parsedResults = await Promise.all(parsePromises);
+
+      // Filter out nulls
+      const validMessages: EmailMessageWithRaw[] = parsedResults.filter((msg): msg is EmailMessageWithRaw => msg !== null);
+
       return validMessages;
     } finally {
       if (!preserveConnection) {
@@ -705,7 +785,7 @@ export class ImapOperations {
    * This skips the expensive parsing step which includes decoding attachments
    */
   async getMessageRaw(folderName: string, uid: number, preserveConnection: boolean = false): Promise<EmailMessageWithRaw> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -740,17 +820,21 @@ export class ImapOperations {
         throw new ImapConnectionError('Unexpected body type', 'INVALID_BODY_TYPE');
       }
       
-      // Return without parsing - much faster for emails with attachments
+      // Parse email (required by EmailMessageWithRaw interface)
+      // This is necessary since downstream code expects a parsed email
+      const parsedEmail = await simpleParser(bodyString);
+
       return {
         uid: msg.uid,
-        messageId: msg.headers?.messageId?.[0],
+        messageId: normalizeMessageId(msg.headers?.messageId?.[0]),
         from: msg.headers?.from?.[0],
         to: msg.headers?.to,
         subject: msg.headers?.subject?.[0],
         date: msg.date,
         flags: msg.flags,
         size: msg.size,
-        fullMessage: bodyString  // This is the complete RFC 5322 message with headers and body
+        fullMessage: bodyString,  // This is the complete RFC 5322 message with headers and body
+        parsed: parsedEmail  // Include parsed email for downstream processing
       };
     } finally {
       if (!preserveConnection) {
@@ -760,7 +844,7 @@ export class ImapOperations {
   }
 
   async markAsRead(folderName: string, uid: number, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -780,7 +864,7 @@ export class ImapOperations {
   }
 
   async markAsUnread(folderName: string, uid: number, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -800,7 +884,7 @@ export class ImapOperations {
   }
 
   async deleteMessage(folderName: string, uid: number, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -828,7 +912,7 @@ export class ImapOperations {
   }
 
   async startIdleMonitoring(folderName: string, callback: (event: any) => void): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await conn.selectFolder(folderName);
@@ -943,7 +1027,7 @@ export class ImapOperations {
   }
 
   async createFolder(folderPath: string, preserveConnection: boolean = false): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       await new Promise<void>((resolve, reject) => {
@@ -970,7 +1054,7 @@ export class ImapOperations {
     flags?: string[],
     preserveConnection: boolean = false
   ): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     
     try {
       // Ensure the message has proper line endings (CRLF)
@@ -1001,7 +1085,7 @@ export class ImapOperations {
     flags?: string[],
     preserveConnection: boolean = false
   ): Promise<void> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
 
     try {
       // Select the source folder
@@ -1114,7 +1198,7 @@ export class ImapOperations {
   }
 
   async findMessageByMessageId(folderName: string, messageId: string, preserveConnection: boolean = false): Promise<number | null> {
-    const conn = await this.getConnection();
+    const conn = await this._getConnection();
     let result: number | null = null;
     
     try {

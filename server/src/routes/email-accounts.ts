@@ -63,7 +63,7 @@ async function testImapConnection(
 // Test email account connection
 router.post('/test', requireAuth, validateEmailAccount, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const accountData = req.body as CreateEmailAccountRequest;
     
     // Test IMAP connection
@@ -97,7 +97,7 @@ router.post('/test', requireAuth, validateEmailAccount, async (req, res): Promis
 // Get user's email accounts
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     const result = await pool.query(
       `SELECT id, email_address, imap_host, imap_port, imap_username,
@@ -132,7 +132,7 @@ router.get('/', requireAuth, async (req, res) => {
 // Add new email account
 router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const accountData = req.body as CreateEmailAccountRequest;
     
     // Check if email account already exists for this user
@@ -228,7 +228,7 @@ router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<vo
 // Test email account connection
 router.post('/:id/test', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const accountId = req.params.id;
 
     // Verify the account belongs to the user
@@ -290,7 +290,7 @@ router.post('/:id/test', requireAuth, async (req, res): Promise<void> => {
 // Toggle monitoring for email account
 router.post('/:id/monitoring', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const accountId = req.params.id;
     const { enabled } = req.body;
 
@@ -355,7 +355,7 @@ router.post('/:id/monitoring', requireAuth, async (req, res): Promise<void> => {
 // Update email account credentials (password, host, port, username)
 router.post('/:id/update-credentials', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const accountId = req.params.id;
     const { imap_host, imap_port, imap_username, imap_password } = req.body;
 
@@ -391,7 +391,7 @@ router.post('/:id/update-credentials', requireAuth, async (req, res): Promise<vo
 // Delete email account
 router.delete('/:id', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const accountId = req.params.id;
 
     // Validate UUID format

@@ -2,6 +2,7 @@ import Imap from 'imap';
 import { EventEmitter } from 'events';
 import { promisify } from 'util';
 import { realTimeLogger } from './real-time-logger';
+import { normalizeMessageIdArray } from './message-id-utils';
 
 export interface ImapConfig {
   user: string;
@@ -100,13 +101,13 @@ export class ImapConnection extends EventEmitter {
 
     this.imap = new Imap(imapConfig);
 
-    this.setupEventHandlers();
+    this._setupEventHandlers();
   }
 
-  private setupEventHandlers(): void {
+  private _setupEventHandlers(): void {
     this.imap.on('ready', () => {
       this.connected = true;
-      this.logOperation('CONNECT', {
+      this._logOperation('CONNECT', {
         raw: `Connection established for ${this.config.user}`,
         response: 'Connection established',
         parsed: {
@@ -119,7 +120,7 @@ export class ImapConnection extends EventEmitter {
     });
 
     this.imap.on('error', (err: Error) => {
-      this.logOperation('ERROR', {
+      this._logOperation('ERROR', {
         raw: `Error for ${this.config.user}: ${err.message}`,
         error: err.message,
         parsed: {
@@ -134,7 +135,7 @@ export class ImapConnection extends EventEmitter {
     this.imap.on('end', () => {
       this.connected = false;
       this.currentBox = null;
-      this.logOperation('DISCONNECT', {
+      this._logOperation('DISCONNECT', {
         raw: `Connection ended for ${this.config.user}`,
         response: 'Connection ended'
       });
@@ -144,7 +145,7 @@ export class ImapConnection extends EventEmitter {
     this.imap.on('close', (hadError: boolean) => {
       this.connected = false;
       this.currentBox = null;
-      this.logOperation('CLOSE', {
+      this._logOperation('CLOSE', {
         raw: `Connection closed for ${this.config.user}${hadError ? ' (with error)' : ''}`,
         response: hadError ? 'Connection closed with error' : 'Connection closed',
         parsed: { hadError, user: this.config.user }
@@ -153,7 +154,7 @@ export class ImapConnection extends EventEmitter {
     });
   }
 
-  private logOperation(
+  private _logOperation(
     command: string,
     data: Partial<{
       raw?: string;
@@ -221,13 +222,13 @@ export class ImapConnection extends EventEmitter {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
 
-      this.logOperation('LIST', {
+      this._logOperation('LIST', {
         raw: 'LIST "" "*"'
       }, 'debug');
 
       this.imap.getBoxes((err: Error | null, boxes: any) => {
         if (err) {
-          this.logOperation('LIST', {
+          this._logOperation('LIST', {
             error: err.message,
             duration: Date.now() - startTime
           }, 'error');
@@ -235,9 +236,9 @@ export class ImapConnection extends EventEmitter {
           return;
         }
 
-        const folders = this.parseBoxes(boxes);
-        
-        this.logOperation('LIST', {
+        const folders = this._parseBoxes(boxes);
+
+        this._logOperation('LIST', {
           response: `Found ${folders.length} folders`,
           parsed: folders.map(f => f.name),
           duration: Date.now() - startTime
@@ -248,7 +249,7 @@ export class ImapConnection extends EventEmitter {
     });
   }
 
-  private parseBoxes(boxes: any, parent?: string): ImapFolder[] {
+  private _parseBoxes(boxes: any, parent?: string): ImapFolder[] {
     const folders: ImapFolder[] = [];
 
     for (const [name, box] of Object.entries(boxes)) {
@@ -258,11 +259,11 @@ export class ImapConnection extends EventEmitter {
       const folder: ImapFolder = {
         name: parent ? `${parent}${boxObj.delimiter}${name}` : name,
         delimiter: boxObj.delimiter || '.',
-        flags: boxObj.attribs || []
+        flags: boxObj.attribs
       };
 
       if (boxObj.children) {
-        folder.children = this.parseBoxes(boxObj.children, folder.name);
+        folder.children = this._parseBoxes(boxObj.children, folder.name);
       }
 
       folders.push(folder);
@@ -298,7 +299,7 @@ export class ImapConnection extends EventEmitter {
     const searchAsync = promisify(this.imap.search.bind(this.imap));
     const startTime = Date.now();
 
-    this.logOperation('SEARCH', {
+    this._logOperation('SEARCH', {
       raw: `SEARCH ${criteria.join(' ')}`,
       parsed: { criteria }
     }, 'debug');
@@ -316,7 +317,7 @@ export class ImapConnection extends EventEmitter {
         }
       }
 
-      this.logOperation('SEARCH', {
+      this._logOperation('SEARCH', {
         response: `Found ${uids.length} messages on ${this.config.user}`,
         parsed: {
           count: uids.length,
@@ -328,7 +329,7 @@ export class ImapConnection extends EventEmitter {
 
       return uids;
     } catch (err: any) {
-      this.logOperation('SEARCH', {
+      this._logOperation('SEARCH', {
         error: err.message,
         duration: Date.now() - startTime
       }, 'error');
@@ -345,7 +346,7 @@ export class ImapConnection extends EventEmitter {
       const messages: ImapMessage[] = [];
       const startTime = Date.now();
 
-      this.logOperation('FETCH', {
+      this._logOperation('FETCH', {
         raw: `FETCH ${uids} (${Object.keys(options).join(' ')})`,
         parsed: { uids, options }
       }, 'debug');
@@ -368,7 +369,7 @@ export class ImapConnection extends EventEmitter {
                 to: headers.to,
                 subject: headers.subject,
                 date: headers.date,
-                messageId: headers['message-id']
+                messageId: normalizeMessageIdArray(headers['message-id'])
               };
             } else {
               message.body = buffer;
@@ -389,7 +390,7 @@ export class ImapConnection extends EventEmitter {
       });
 
       fetch.on('error', (err: Error) => {
-        this.logOperation('FETCH', {
+        this._logOperation('FETCH', {
           error: err.message,
           duration: Date.now() - startTime
         }, 'error');
@@ -397,7 +398,7 @@ export class ImapConnection extends EventEmitter {
       });
 
       fetch.on('end', () => {
-        this.logOperation('FETCH', {
+        this._logOperation('FETCH', {
           response: `Fetched ${messages.length} messages`,
           parsed: { count: messages.length },
           duration: Date.now() - startTime
@@ -412,7 +413,7 @@ export class ImapConnection extends EventEmitter {
       throw new ImapConnectionError('Not connected or no folder selected', 'INVALID_STATE');
     }
 
-    this.logOperation('IDLE', {
+    this._logOperation('IDLE', {
       raw: 'IDLE',
       parsed: { folder: this.currentBox }
     }, 'debug');
@@ -423,7 +424,7 @@ export class ImapConnection extends EventEmitter {
 
   stopIdle(): void {
     if (this.connected) {
-      this.logOperation('IDLE', {
+      this._logOperation('IDLE', {
         response: 'DONE',
         parsed: { action: 'stopped' }
       }, 'debug');
@@ -438,7 +439,7 @@ export class ImapConnection extends EventEmitter {
     }
 
     const startTime = Date.now();
-    this.logOperation('APPEND', {
+    this._logOperation('APPEND', {
       raw: `APPEND ${options.mailbox}`,
       parsed: { mailbox: options.mailbox, flags: options.flags, size: messageData.length }
     }, 'debug');
@@ -446,13 +447,13 @@ export class ImapConnection extends EventEmitter {
     return new Promise((resolve, reject) => {
       this.imap.append(messageData, options, (err: Error) => {
         if (err) {
-          this.logOperation('APPEND', {
+          this._logOperation('APPEND', {
             error: err.message,
             duration: Date.now() - startTime
           }, 'error');
           reject(new ImapConnectionError(`Append failed: ${err.message}`, 'APPEND_FAILED'));
         } else {
-          this.logOperation('APPEND', {
+          this._logOperation('APPEND', {
             response: 'Message appended successfully',
             duration: Date.now() - startTime
           }, 'debug');

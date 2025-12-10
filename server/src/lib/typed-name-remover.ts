@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { preferencesService } from './preferences-service';
 
 export interface TypedNameRemovalResult {
   cleanedText: string;
@@ -7,22 +7,18 @@ export interface TypedNameRemovalResult {
 }
 
 export class TypedNameRemover {
-  constructor(private pool: Pool) {}
+  constructor() {}
 
   /**
    * Remove typed name from user reply based on user preferences
    */
   async removeTypedName(text: string, userId: string): Promise<TypedNameRemovalResult> {
     try {
-      // Get user's typed name removal preference
-      const result = await this.pool.query(
-        `SELECT preferences->'typedName' as typed_name_prefs
-         FROM "user"
-         WHERE id = $1`,
-        [userId]
-      );
+      // Get user's preferences (single call returns all preferences)
+      const prefs = await preferencesService.getPreferences(userId);
+      const typedNamePrefs = prefs.typedName;
 
-      if (!result.rows.length || !result.rows[0].typed_name_prefs) {
+      if (!typedNamePrefs) {
         // No preferences set, return text as-is
         return {
           cleanedText: text,
@@ -31,8 +27,7 @@ export class TypedNameRemover {
         };
       }
 
-      const preferences = result.rows[0].typed_name_prefs;
-      const removalRegex = preferences.removalRegex;
+      const removalRegex = typedNamePrefs.removalRegex;
 
       if (!removalRegex) {
         // No removal regex configured
@@ -100,19 +95,13 @@ export class TypedNameRemover {
    */
   async getTypedNameAppend(userId: string): Promise<string | null> {
     try {
-      const result = await this.pool.query(
-        `SELECT preferences->'typedName'->'appendString' as append_string
-         FROM "user"
-         WHERE id = $1`,
-        [userId]
-      );
+      const prefs = await preferencesService.getPreferences(userId);
 
-      if (!result.rows.length || !result.rows[0].append_string) {
+      if (!prefs.typedName?.appendString) {
         return null;
       }
 
-      // Remove quotes from JSON string value
-      return result.rows[0].append_string.replace(/^"|"$/g, '');
+      return prefs.typedName.appendString;
     } catch (error: unknown) {
       console.error('Error getting typed name append:', error);
       return null;

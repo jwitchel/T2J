@@ -4,7 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType, getModelInfo } from '../types/llm-provider';
-import { RecommendedAction } from './email-actions';
+import { EmailActionType } from '../types/email-action-tracking';
 import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
 
 /**
@@ -26,7 +26,7 @@ export interface ContextFlags {
  * Single source of truth for email classification and action determination
  */
 export interface ActionData {
-  recommendedAction: RecommendedAction;
+  recommendedAction: EmailActionType;
   keyConsiderations: string[]; // Includes spam screening reasons for transparency (e.g., "Not spam - legitimate domain")
   contextFlags: ContextFlags;
 }
@@ -53,32 +53,32 @@ export class LLMClient {
   private modelName: string;
 
   constructor(config: LLMProviderConfig) {
-    this.model = this.createModel(config);
+    this.model = this._createModel(config);
     this.modelName = config.modelName;
   }
 
-  private createModel(config: LLMProviderConfig): any {
+  private _createModel(config: LLMProviderConfig): any {
     switch (config.type) {
       case 'openai': {
         const openai = createOpenAI({
           apiKey: config.apiKey,
-          baseURL: this.normalizeBaseURL(config.apiEndpoint, 'https://api.openai.com/v1')
+          baseURL: this._normalizeBaseURL(config.apiEndpoint, 'https://api.openai.com/v1')
         });
         return openai(config.modelName);
       }
-      
+
       case 'anthropic': {
         const anthropic = createAnthropic({
           apiKey: config.apiKey,
-          baseURL: this.normalizeBaseURL(config.apiEndpoint, 'https://api.anthropic.com')
+          baseURL: this._normalizeBaseURL(config.apiEndpoint, 'https://api.anthropic.com')
         });
         return anthropic(config.modelName);
       }
-      
+
       case 'google': {
         const google = createGoogleGenerativeAI({
           apiKey: config.apiKey,
-          baseURL: this.normalizeBaseURL(config.apiEndpoint, 'https://generativelanguage.googleapis.com/v1beta')
+          baseURL: this._normalizeBaseURL(config.apiEndpoint, 'https://generativelanguage.googleapis.com/v1beta')
         });
         return google(config.modelName);
       }
@@ -101,7 +101,7 @@ export class LLMClient {
     }
   }
 
-  private normalizeBaseURL(endpoint: string | undefined, defaultURL: string): string | undefined {
+  private _normalizeBaseURL(endpoint: string | undefined, defaultURL: string): string | undefined {
     if (!endpoint) {
       // Use SDK default by returning undefined
       return undefined;
@@ -129,12 +129,12 @@ export class LLMClient {
   async generate(prompt: string, options?: {
     temperature?: number;
   }): Promise<string> {
-    const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES || '1');
-    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
+    const maxRetries = parseInt(process.env.LLM_ACTION_RETRIES!);
+    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT!);
     let lastError: any;
 
     // Truncate prompt if it exceeds model's context window
-    const truncatedPrompt = this.truncatePromptToFit(prompt);
+    const truncatedPrompt = this._truncatePromptToFit(prompt);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Create AbortController for this attempt with timeout
@@ -178,7 +178,7 @@ export class LLMClient {
       }
     }
 
-    throw this.handleError(lastError);
+    throw this._handleError(lastError);
   }
 
   /**
@@ -190,9 +190,9 @@ export class LLMClient {
     try {
       const text = await this.generate(prompt, options);
 
-      const parsed = this.extractJSON(text, 'spam check');
+      const parsed = this._extractJSON(text, 'spam check');
 
-      this.validateJSON(
+      this._validateJSON(
         parsed,
         (p) => p.meta && typeof p.meta.isSpam === 'boolean',
         'missing meta.isSpam field',
@@ -201,7 +201,7 @@ export class LLMClient {
 
       return { meta: parsed.meta };
     } catch (error: unknown) {
-      this.handleJSONError(error, 'Spam check');
+      this._handleJSONError(error, 'Spam check');
     }
   }
 
@@ -215,9 +215,9 @@ export class LLMClient {
     try {
       const text = await this.generate(prompt, options);
 
-      const parsed = this.extractJSON(text, 'action analysis');
+      const parsed = this._extractJSON(text, 'action analysis');
 
-      this.validateJSON(
+      this._validateJSON(
         parsed,
         (p) => p.meta,
         'missing meta field',
@@ -226,7 +226,7 @@ export class LLMClient {
 
       return { meta: parsed.meta };
     } catch (error: unknown) {
-      this.handleJSONError(error, 'Action analysis');
+      this._handleJSONError(error, 'Action analysis');
     }
   }
 
@@ -239,9 +239,9 @@ export class LLMClient {
     try {
       const text = await this.generate(prompt, options);
 
-      const parsed = this.extractJSON(text, 'response generation');
+      const parsed = this._extractJSON(text, 'response generation');
 
-      this.validateJSON(
+      this._validateJSON(
         parsed,
         (p) => typeof p.message === 'string',
         'missing message field',
@@ -251,7 +251,7 @@ export class LLMClient {
       return parsed.message;
     } catch (error: unknown) {
       console.error('[LLMClient] Error in generateResponseMessage:', error);
-      this.handleJSONError(error, 'Response generation');
+      this._handleJSONError(error, 'Response generation');
     }
   }
 
@@ -282,7 +282,7 @@ export class LLMClient {
    * This is conservative to handle worst-case tokenization
    * @private
    */
-  private truncatePromptToFit(prompt: string): string {
+  private _truncatePromptToFit(prompt: string): string {
     const modelInfo = getModelInfo(this.modelName);
     const maxInputTokens = modelInfo.contextWindow - modelInfo.maxOutput;
 
@@ -310,7 +310,7 @@ export class LLMClient {
    * Extract and parse JSON from LLM response text
    * @private
    */
-  private extractJSON(text: string, context: string): any {
+  private _extractJSON(text: string, context: string): any {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error(`[LLMClient] No JSON found in ${context}. Full response:`, text);
@@ -330,7 +330,7 @@ export class LLMClient {
    * Validate JSON structure with custom validator
    * @private
    */
-  private validateJSON(
+  private _validateJSON(
     parsed: any,
     validator: (parsed: any) => boolean,
     errorMessage: string,
@@ -346,18 +346,18 @@ export class LLMClient {
    * Handle JSON parsing errors consistently
    * @private
    */
-  private handleJSONError(error: any, context: string): never {
+  private _handleJSONError(error: any, context: string): never {
     if (error.message?.includes('JSON')) {
       console.error(`${context} JSON parse error:`, error.message);
       throw new Error(`Failed to parse ${context} as JSON: ${error.message}`);
     }
-    throw this.handleError(error);
+    throw this._handleError(error);
   }
 
   /**
    * Handle errors from Vercel AI SDK
    */
-  private handleError(error: any): Error {
+  private _handleError(error: any): Error {
     // The Vercel AI SDK throws specific error types
     if (error.message?.includes('API key')) {
       throw new LLMProviderError('Invalid API key', 'INVALID_API_KEY');

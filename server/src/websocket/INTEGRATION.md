@@ -14,10 +14,11 @@ The WebSocket integration provides real-time visibility into email processing op
 - Maintains a circular buffer of logs per user (default: 1000 logs)
 - Sanitizes sensitive data (passwords, email content) before logging
 
-### 2. WebSocket Server (`websocket/imap-logs.ts`)
-- Authenticated WebSocket endpoint at `ws://localhost:3002/ws/imap-logs`
+### 2. WebSocket Server (`websocket/unified-websocket.ts`)
+- Authenticated WebSocket endpoint at `ws://localhost:3002/ws`
 - Uses better-auth for session validation
-- Broadcasts logs only to the authenticated user
+- Broadcasts logs and job events only to the authenticated user
+- Supports channel-based subscriptions
 - Supports heartbeat/ping-pong for connection health
 
 ### 3. Email Processor Integration (`lib/email-processor.ts`)

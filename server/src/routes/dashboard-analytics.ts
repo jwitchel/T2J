@@ -10,47 +10,43 @@ const router = Router();
  */
 router.get('/actions-summary', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
-    // Query all time periods in parallel
+    // Query all time periods in parallel from email_received
     const [last15min, lastHour, last24Hours, last30Days] = await Promise.all([
       // Last 15 minutes
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '15 minutes'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       ),
       // Last hour
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '1 hour'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       ),
       // Last 24 hours
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '24 hours'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       ),
       // Last 30 days
       pool.query(
         `SELECT action_taken, COUNT(*)::int as count
-         FROM email_action_tracking
+         FROM email_received
          WHERE user_id = $1
            AND updated_at >= NOW() - INTERVAL '30 days'
-           AND action_taken != 'none'
          GROUP BY action_taken`,
         [userId]
       )
@@ -86,27 +82,30 @@ router.get('/actions-summary', requireAuth, async (req, res) => {
  */
 router.get('/recent-actions', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
 
-    // Get recent actions with email account info, subject, sender, and destination
+    // Get recent actions from email_received with related info
     const result = await pool.query(
       `SELECT
-        eat.id,
-        eat.message_id,
-        eat.action_taken,
-        eat.subject,
-        eat.sender_email,
-        eat.destination_folder,
-        eat.updated_at,
-        eat.email_account_id,
-        ea.email_address
-       FROM email_action_tracking eat
-       JOIN email_accounts ea ON eat.email_account_id = ea.id
-       WHERE eat.user_id = $1
-         AND eat.action_taken != 'none'
-       ORDER BY eat.updated_at DESC
+        er.id,
+        er.email_id as message_id,
+        er.action_taken,
+        er.subject,
+        pe.email_address as sender_email,
+        er.destination_folder,
+        er.updated_at,
+        er.email_account_id,
+        ea.email_address,
+        p.relationship_type,
+        p.name as person_name
+       FROM email_received er
+       JOIN email_accounts ea ON er.email_account_id = ea.id
+       LEFT JOIN person_emails pe ON er.sender_person_email_id = pe.id
+       LEFT JOIN people p ON pe.person_id = p.id
+       WHERE er.user_id = $1
+       ORDER BY er.updated_at DESC
        LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
@@ -114,8 +113,8 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
     // Get total count
     const countResult = await pool.query(
       `SELECT COUNT(*)::int as total
-       FROM email_action_tracking
-       WHERE user_id = $1 AND action_taken != 'none'`,
+       FROM email_received
+       WHERE user_id = $1`,
       [userId]
     );
 
@@ -124,14 +123,16 @@ router.get('/recent-actions', requireAuth, async (req, res) => {
         id: row.id,
         messageId: row.message_id,
         actionTaken: row.action_taken,
-        subject: row.subject || '(Subject unavailable for old emails)',
+        subject: row.subject,
         senderEmail: row.sender_email,
+        senderName: row.person_name,
         destinationFolder: row.destination_folder,
         updatedAt: row.updated_at,
         emailAccountId: row.email_account_id,
-        emailAccount: row.email_address
+        emailAccount: row.email_address,
+        relationship: row.relationship_type
       })),
-      total: countResult.rows[0]?.total || 0
+      total: countResult.rows[0]?.total
     });
   } catch (error) {
     console.error('Error fetching recent actions:', error);

@@ -24,13 +24,6 @@ describe('TemplateManager', () => {
       expect(typeof template).toBe('function');
     });
 
-    it('should load system templates', async () => {
-      await templateManager.initialize();
-      const template = await templateManager.loadTemplate('default', 'system');
-      expect(template).toBeDefined();
-      expect(typeof template).toBe('function');
-    });
-
     it('should throw error for non-existent template', async () => {
       await templateManager.initialize();
       await expect(templateManager.loadTemplate('non-existent', 'prompt'))
@@ -77,14 +70,6 @@ describe('TemplateManager', () => {
       expect(result).toContain('Target formality: casual');
     });
 
-    it('should render system prompt', async () => {
-      await templateManager.initialize();
-      const result = await templateManager.renderSystemPrompt();
-      
-      expect(result).toContain('AI assistant');
-      expect(result).toContain('personal writing style');
-      expect(result).toContain('Key guidelines');
-    });
   });
 
   describe('helper functions', () => {

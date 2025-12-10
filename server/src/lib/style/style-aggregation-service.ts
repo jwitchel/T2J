@@ -94,18 +94,21 @@ export class StyleAggregationService {
     relationshipType: string
   ): Promise<AggregatedStyle> {
     // Query email_sent from PostgreSQL for this user and relationship
+    // Relationship type is now directly on the people table
     const emailsResult = await this.customPool.query(`
-      SELECT user_reply, word_count, sent_date
-      FROM email_sent
-      WHERE user_id = $1 AND relationship_type = $2
-      ORDER BY sent_date DESC
+      SELECT es.user_reply, es.word_count, es.sent_date
+      FROM email_sent es
+      INNER JOIN person_emails pe ON es.recipient_person_email_id = pe.id
+      INNER JOIN people p ON pe.person_id = p.id
+      WHERE es.user_id = $1 AND p.relationship_type = $2
+      ORDER BY es.sent_date DESC
       LIMIT $3
     `, [userId, relationshipType, MAX_EMAILS_TO_ANALYZE]);
 
     const emails = emailsResult.rows;
 
     if (emails.length === 0) {
-      return this.getDefaultStyle(relationshipType);
+      return this._getDefaultStyle(relationshipType);
     }
 
     // Extract basic features from each email (using stub extractor)
@@ -127,12 +130,12 @@ export class StyleAggregationService {
 
     const aggregated: AggregatedStyle = {
       sentimentProfile: {
-        primaryTone: this.determinePrimaryTone(averageWarmth),
+        primaryTone: this._determinePrimaryTone(averageWarmth),
         averageWarmth,
         averageFormality
       },
       vocabularyProfile: {
-        complexityLevel: this.determineComplexityLevel(averageSentenceLength),
+        complexityLevel: this._determineComplexityLevel(averageSentenceLength),
         technicalTerms: []
       },
       structuralPatterns: {
@@ -142,7 +145,7 @@ export class StyleAggregationService {
       },
       emailCount: emails.length,
       lastUpdated: new Date().toISOString(),
-      confidenceScore: this.calculateConfidence(emails.length)
+      confidenceScore: this._calculateConfidence(emails.length)
       // Future features (greetings, closings, emojis, commonPhrases) omitted until implemented
     };
 
@@ -212,7 +215,7 @@ export class StyleAggregationService {
     return null;
   }
   
-  private calculateConfidence(emailCount: number): number {
+  private _calculateConfidence(emailCount: number): number {
     // Confidence increases with sample size
     if (emailCount < CONFIDENCE_THRESHOLDS.MIN_SAMPLE) return 0.2;
     if (emailCount < CONFIDENCE_THRESHOLDS.LOW_CONFIDENCE) return 0.4;
@@ -221,7 +224,7 @@ export class StyleAggregationService {
     return 0.95;
   }
 
-  private determinePrimaryTone(warmth: number): string {
+  private _determinePrimaryTone(warmth: number): string {
     if (warmth > 0.8) return 'very warm';
     if (warmth > 0.6) return 'warm';
     if (warmth > 0.4) return 'neutral';
@@ -229,14 +232,14 @@ export class StyleAggregationService {
     return 'formal';
   }
 
-  private determineComplexityLevel(avgSentenceLength: number): string {
+  private _determineComplexityLevel(avgSentenceLength: number): string {
     if (avgSentenceLength < 10) return 'simple';
     if (avgSentenceLength < 15) return 'moderate';
     if (avgSentenceLength < 20) return 'complex';
     return 'very complex';
   }
   
-  private getDefaultStyle(_relationshipType: string): AggregatedStyle {
+  private _getDefaultStyle(_relationshipType: string): AggregatedStyle {
     // Return minimal default style when no data exists
     return {
       sentimentProfile: {
@@ -267,23 +270,23 @@ export class StyleAggregationService {
     emailCount?: number;
     lastUpdated?: string;
   }>> {
-    // Get all relationship types from user_relationships
+    // Get distinct relationship types from people table
     const relationshipsResult = await this.customPool.query(
-      `SELECT DISTINCT relationship_type, display_name 
-       FROM user_relationships 
-       WHERE user_id = $1 AND is_active = true
+      `SELECT DISTINCT relationship_type
+       FROM people
+       WHERE user_id = $1 AND relationship_type IS NOT NULL
        ORDER BY relationship_type`,
       [userId]
     );
-    
+
     // Get aggregated styles
     const stylesResult = await this.customPool.query(
-      `SELECT target_identifier, profile_data 
-       FROM tone_preferences 
+      `SELECT target_identifier, profile_data
+       FROM tone_preferences
        WHERE user_id = $1 AND preference_type = 'category'`,
       [userId]
     );
-    
+
     const styleMap = new Map<string, AggregatedStyle>();
     for (const row of stylesResult.rows) {
       const data = row.profile_data;
@@ -292,10 +295,13 @@ export class StyleAggregationService {
         styleMap.set(row.target_identifier, style as AggregatedStyle);
       }
     }
-    
+
+    // Use RelationshipType.LABELS for display names
+    const { RelationshipType } = require('../relationships/types');
+
     return relationshipsResult.rows.map(row => ({
       relationshipType: row.relationship_type,
-      displayName: row.display_name,
+      displayName: RelationshipType.LABELS[row.relationship_type] || row.relationship_type,
       hasAggregatedStyle: styleMap.has(row.relationship_type),
       emailCount: styleMap.get(row.relationship_type)?.emailCount,
       lastUpdated: styleMap.get(row.relationship_type)?.lastUpdated

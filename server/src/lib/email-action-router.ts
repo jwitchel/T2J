@@ -1,7 +1,7 @@
 import { ImapOperations } from './imap-operations';
 import { LLMMetadata } from './llm-client';
 import { FolderPreferences } from '../types/settings';
-import { EmailActions, ActionHelpers } from './email-actions';
+import { EmailActionType } from '../types/email-action-tracking';
 
 export interface ActionRouteResult {
   folder: string;
@@ -10,16 +10,18 @@ export interface ActionRouteResult {
 }
 
 export class EmailActionRouter {
-  // Read defaults from environment variables or use fallback values
-  private static readonly DEFAULT_ROOT_FOLDER = process.env.DEFAULT_ROOT_FOLDER || '';
-  private static readonly DEFAULT_NO_ACTION_FOLDER = process.env.DEFAULT_NO_ACTION_FOLDER || 't2j-no-action';
-  private static readonly DEFAULT_SPAM_FOLDER = process.env.DEFAULT_SPAM_FOLDER || 't2j-spam';
-  private static readonly DEFAULT_TODO_FOLDER = process.env.DEFAULT_TODO_FOLDER || 't2j-todo';
+  // Read defaults from environment variables
+  private static readonly DEFAULT_ROOT_FOLDER = process.env.DEFAULT_ROOT_FOLDER!;
+  private static readonly DEFAULT_DRAFTS_FOLDER = process.env.DEFAULT_DRAFTS_FOLDER!;
+  private static readonly DEFAULT_NO_ACTION_FOLDER = process.env.DEFAULT_NO_ACTION_FOLDER!;
+  private static readonly DEFAULT_SPAM_FOLDER = process.env.DEFAULT_SPAM_FOLDER!;
+  private static readonly DEFAULT_TODO_FOLDER = process.env.DEFAULT_TODO_FOLDER!;
 
   // Public method to get default folder configuration
   static getDefaultFolders(): FolderPreferences {
     return {
       rootFolder: EmailActionRouter.DEFAULT_ROOT_FOLDER,
+      draftsFolderPath: EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
       noActionFolder: EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
       spamFolder: EmailActionRouter.DEFAULT_SPAM_FOLDER,
       todoFolder: EmailActionRouter.DEFAULT_TODO_FOLDER
@@ -31,10 +33,11 @@ export class EmailActionRouter {
 
   constructor(preferences?: Partial<FolderPreferences>, draftsFolderPath?: string) {
     this.folderPrefs = {
-      rootFolder: preferences?.rootFolder !== undefined ? preferences.rootFolder : EmailActionRouter.DEFAULT_ROOT_FOLDER,
-      noActionFolder: preferences?.noActionFolder || EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
-      spamFolder: preferences?.spamFolder || EmailActionRouter.DEFAULT_SPAM_FOLDER,
-      todoFolder: preferences?.todoFolder || EmailActionRouter.DEFAULT_TODO_FOLDER
+      rootFolder: preferences?.rootFolder ?? EmailActionRouter.DEFAULT_ROOT_FOLDER,
+      draftsFolderPath: preferences?.draftsFolderPath ?? EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
+      noActionFolder: preferences?.noActionFolder ?? EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
+      spamFolder: preferences?.spamFolder ?? EmailActionRouter.DEFAULT_SPAM_FOLDER,
+      todoFolder: preferences?.todoFolder ?? EmailActionRouter.DEFAULT_TODO_FOLDER
     };
     this.draftsFolderPath = draftsFolderPath;
   }
@@ -46,12 +49,12 @@ export class EmailActionRouter {
     const rootPath = this.folderPrefs.rootFolder ? `${this.folderPrefs.rootFolder}/` : '';
 
     switch (recommendedAction) {
-      case EmailActions.REPLY:
-      case EmailActions.REPLY_ALL:
-      case EmailActions.FORWARD:
-      case EmailActions.FORWARD_WITH_COMMENT:
+      case EmailActionType.REPLY:
+      case EmailActionType.REPLY_ALL:
+      case EmailActionType.FORWARD:
+      case EmailActionType.FORWARD_WITH_COMMENT:
         if (!this.draftsFolderPath) {
-          throw new Error('Draft folder path not configured');
+          throw new Error('Draft folder path not configured. Please configure folderPreferences.draftsFolderPath in user settings (e.g., "[Gmail]/Drafts" for Gmail)');
         }
         return {
           folder: this.draftsFolderPath,
@@ -59,31 +62,34 @@ export class EmailActionRouter {
           displayName: this.draftsFolderPath
         };
 
-      case EmailActions.SILENT_FYI_ONLY:
-      case EmailActions.SILENT_LARGE_LIST:
-      case EmailActions.SILENT_UNSUBSCRIBE:
+      case EmailActionType.SILENT_FYI_ONLY:
+      case EmailActionType.SILENT_LARGE_LIST:
+      case EmailActionType.SILENT_UNSUBSCRIBE:
         return {
           folder: `${rootPath}${this.folderPrefs.noActionFolder}`,
           flags: [],  // No-action items should not be marked as Seen
           displayName: this.folderPrefs.noActionFolder
         };
 
-      case EmailActions.SILENT_SPAM:
+      case EmailActionType.SILENT_SPAM:
         return {
           folder: `${rootPath}${this.folderPrefs.spamFolder}`,
           flags: ['\\Seen'],  // Spam should be marked as Seen
           displayName: this.folderPrefs.spamFolder
         };
 
-      case EmailActions.SILENT_TODO:
+      case EmailActionType.SILENT_TODO:
         return {
           folder: `${rootPath}${this.folderPrefs.todoFolder}`,
           flags: [],  // Todo items should not be marked as Seen
           displayName: this.folderPrefs.todoFolder
         };
 
-      case EmailActions.SILENT_AMBIGUOUS:
-        // Ambiguous emails stay in INBOX for manual review
+      case EmailActionType.KEEP_IN_INBOX:
+      case EmailActionType.MANUALLY_HANDLED:
+      case EmailActionType.PENDING:
+      case EmailActionType.TRAINING:
+        // These actions keep email in INBOX for manual review
         return {
           folder: 'INBOX',
           flags: [],  // Keep unread for user attention
@@ -91,7 +97,13 @@ export class EmailActionRouter {
         };
 
       default:
-        throw new Error(`Unknown action: ${recommendedAction}`);
+        // Log unexpected action but don't crash - treat as keep-in-inbox
+        console.warn(`[EmailActionRouter] Unexpected action: ${recommendedAction}, treating as keep-in-inbox`);
+        return {
+          folder: 'INBOX',
+          flags: [],
+          displayName: 'INBOX'
+        };
     }
   }
 
@@ -185,6 +197,6 @@ export class EmailActionRouter {
    * Get a human-readable description of the action
    */
   getActionDescription(recommendedAction: LLMMetadata['recommendedAction']): string {
-    return ActionHelpers.getDescription(recommendedAction);
+    return EmailActionType.DESCRIPTIONS[recommendedAction] || 'Unknown action';
   }
 }

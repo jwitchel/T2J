@@ -77,10 +77,10 @@ export class TemplateManager {
 
   constructor(templateDir?: string) {
     this.templateDir = templateDir || path.join(__dirname, 'templates');
-    this.registerHelpers();
+    this._registerHelpers();
   }
 
-  private registerHelpers() {
+  private _registerHelpers() {
     // Increment helper for 1-based indexing
     Handlebars.registerHelper('inc', (value: number) => value + 1);
     
@@ -182,27 +182,27 @@ export class TemplateManager {
 
   async renderSystemPrompt(templateName: string = 'default', data?: any): Promise<string> {
     const template = await this.loadTemplate(templateName, 'system');
-    return template(data || {});
+    return template(data);
   }
 
   formatExamplesForTemplate(examples: SelectedExample[]): FormattedExample[] {
     return examples.map(ex => ({
-      text: this.transformExampleText(ex.text),
+      text: this._transformExampleText(ex.text),
       relationship: ex.metadata.relationship?.type || ex.metadata.relationship || 'unknown',
-      score: ex.scores?.combined || (ex as any).score || 0,  // Backwards compat
-      semanticScore: ex.scores?.semantic || 0,  // NEW: Semantic similarity
-      styleScore: ex.scores?.style || 0,        // NEW: Style similarity
-      combinedScore: ex.scores?.combined || (ex as any).score || 0,  // NEW: Combined score
+      score: ex.scores?.combined || (ex as any).score,  // Backwards compat
+      semanticScore: ex.scores?.semantic,  // NEW: Semantic similarity
+      styleScore: ex.scores?.style,        // NEW: Style similarity
+      combinedScore: ex.scores?.combined || (ex as any).score,  // NEW: Combined score
       subject: ex.metadata.subject,
       formalityScore: ex.metadata.features?.stats?.formalityScore,
       sentiment: ex.metadata.features?.sentiment?.dominant,
       wordCount: ex.metadata.wordCount || ex.text.split(/\s+/).length,
       urgency: ex.metadata.features?.urgency?.level,
-      keyPhrases: this.extractKeyPhrases(ex)
+      keyPhrases: this._extractKeyPhrases(ex)
     }));
   }
-  
-  private transformExampleText(text: string): string {
+
+  private _transformExampleText(text: string): string {
     // Transform special placeholders in example text
     if (text === '[ForwardedWithoutComment]') {
       return '(This email was forwarded without adding any personal message)';
@@ -210,7 +210,7 @@ export class TemplateManager {
     return text;
   }
 
-  private extractKeyPhrases(example: SelectedExample): string[] {
+  private _extractKeyPhrases(example: SelectedExample): string[] {
     // Extract key phrases from the example
     // This is a simplified version - in production, use NLP features
     const phrases: string[] = [];
@@ -254,21 +254,19 @@ export class TemplateManager {
       e.metadata.isDirectCorrespondence === false
     );
     
-    // Debug logging
-    if (params.examples.length > 0) {
-      console.log(`[TemplateManager] First example relationship:`, params.examples[0].metadata.relationship);
-    }
-    
     const avgWordCount = params.examples.length > 0
       ? Math.round(params.examples.reduce((sum, ex) => 
           sum + (ex.metadata.wordCount || ex.text.split(/\s+/).length), 0
         ) / params.examples.length)
       : 50;
     
-    const avgFormality = params.examples.length > 0
-      ? params.examples.reduce((sum, ex) => 
-          sum + (ex.metadata.features?.stats?.formalityScore || 0.5), 0
-        ) / params.examples.length
+    // Some examples may not have features/stats if they weren't analyzed yet
+    // (e.g. any email that recently arrived but hasn't been incorporated into the next learning run)
+    const examplesWithFormality = params.examples.filter(ex => ex.metadata.features?.stats?.formalityScore !== undefined);
+    const avgFormality = examplesWithFormality.length > 0
+      ? examplesWithFormality.reduce((sum, ex) =>
+          sum + ex.metadata.features!.stats!.formalityScore, 0
+        ) / examplesWithFormality.length
       : 0.5;
     
     return {
@@ -284,25 +282,25 @@ export class TemplateManager {
         ? this.formatExamplesForTemplate(categoryExamples)
         : undefined,
       profile: params.relationshipProfile,
-      patterns: params.writingPatterns ? this.transformPatternsForTemplate(params.writingPatterns) : undefined,
+      patterns: params.writingPatterns ? this._transformPatternsForTemplate(params.writingPatterns) : undefined,
       availableActions: params.availableActions,
       meta: {
         exampleCount: params.examples.length,
         relationshipMatchCount: directCorrespondenceExamples.length,
         avgWordCount,
-        formalityLevel: this.describeFormalityLevel(avgFormality)
+        formalityLevel: this._describeFormalityLevel(avgFormality)
       }
     };
   }
 
-  private transformPatternsForTemplate(patterns: WritingPatterns): any {
+  private _transformPatternsForTemplate(patterns: WritingPatterns): any {
     // Transform special placeholders into clear instructions
     return {
       ...patterns,
       openingPatterns: patterns.openingPatterns.map(pattern => ({
         ...pattern,
-        pattern: this.transformPatternText(pattern.pattern),
-        isInstruction: this.isInstructionPattern(pattern.pattern)
+        pattern: this._transformPatternText(pattern.pattern),
+        isInstruction: this._isInstructionPattern(pattern.pattern)
       })),
       valediction: patterns.valediction.map(pattern => ({
         ...pattern,
@@ -314,7 +312,7 @@ export class TemplateManager {
     };
   }
 
-  private transformPatternText(pattern: string): string {
+  private _transformPatternText(pattern: string): string {
     // Transform placeholder patterns into clear instructions
     if (pattern === '[right to the point]') {
       return 'start directly with the main point (no greeting)';
@@ -329,7 +327,7 @@ export class TemplateManager {
     return pattern;
   }
 
-  private isInstructionPattern(pattern: string): boolean {
+  private _isInstructionPattern(pattern: string): boolean {
     // Determine if this is an instruction pattern (not a literal greeting)
     const instructionPatterns = [
       '[right to the point]',
@@ -339,7 +337,7 @@ export class TemplateManager {
     return instructionPatterns.includes(pattern);
   }
 
-  private describeFormalityLevel(score: number): string {
+  private _describeFormalityLevel(score: number): string {
     if (score >= 0.8) return 'very formal';
     if (score >= 0.6) return 'formal';
     if (score >= 0.4) return 'neutral';

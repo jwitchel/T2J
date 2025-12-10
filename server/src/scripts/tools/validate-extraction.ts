@@ -35,7 +35,7 @@ export class ExtractionValidator {
 
     // Process each test email
     for (const testEmail of testEmails) {
-      const result = await this.validateSingleEmail(testEmail);
+      const result = await this._validateSingleEmail(testEmail);
       results.push(result);
       
       // Print progress
@@ -49,7 +49,7 @@ export class ExtractionValidator {
     console.log('\n');
 
     // Calculate summary statistics
-    const summary = this.calculateSummary(results);
+    const summary = this._calculateSummary(results);
     
     return { results, summary };
   }
@@ -57,14 +57,14 @@ export class ExtractionValidator {
   /**
    * Validate a single test email
    */
-  private async validateSingleEmail(testEmail: TestEmail): Promise<ValidationResult> {
+  private async _validateSingleEmail(testEmail: TestEmail): Promise<ValidationResult> {
     try {
       // Extract text using the reply extractor
       const extracted = replyExtractor.extractUserText(testEmail.textContent);
       
       // Compare with expected
       const passed = extracted === testEmail.expectedExtraction;
-      const matchPercentage = this.calculateSimilarity(extracted, testEmail.expectedExtraction);
+      const matchPercentage = this._calculateSimilarity(extracted, testEmail.expectedExtraction);
 
       return {
         testId: testEmail.id,
@@ -92,23 +92,23 @@ export class ExtractionValidator {
   /**
    * Calculate similarity percentage between two strings
    */
-  private calculateSimilarity(str1: string, str2: string): number {
+  private _calculateSimilarity(str1: string, str2: string): number {
     if (str1 === str2) return 100;
     if (!str1 || !str2) return 0;
 
     const longer = str1.length > str2.length ? str1 : str2;
     const shorter = str1.length > str2.length ? str2 : str1;
-    
+
     if (longer.length === 0) return 100;
 
-    const editDistance = this.levenshteinDistance(longer, shorter);
+    const editDistance = this._levenshteinDistance(longer, shorter);
     return ((longer.length - editDistance) / longer.length) * 100;
   }
 
   /**
    * Calculate Levenshtein distance between two strings
    */
-  private levenshteinDistance(str1: string, str2: string): number {
+  private _levenshteinDistance(str1: string, str2: string): number {
     const matrix = [];
 
     for (let i = 0; i <= str2.length; i++) {
@@ -139,7 +139,7 @@ export class ExtractionValidator {
   /**
    * Calculate summary statistics
    */
-  private calculateSummary(results: ValidationResult[]) {
+  private _calculateSummary(results: ValidationResult[]) {
     const total = results.length;
     const passed = results.filter(r => r.passed).length;
     const failed = total - passed;

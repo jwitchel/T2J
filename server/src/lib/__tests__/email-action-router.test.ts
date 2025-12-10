@@ -1,40 +1,38 @@
 import { EmailActionRouter } from '../email-action-router';
-import { EmailActions } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
 
 describe('EmailActionRouter', () => {
   describe('default configuration', () => {
     it('should use getDefaultFolders to retrieve configuration', () => {
-      // The static fields are initialized when the module loads,
-      // so we can't test env var changes at runtime.
-      // Instead, we test that the method returns the expected structure
+      // The static fields are initialized when the module loads from env vars.
+      // Without env vars set, these will be undefined (fail-fast behavior).
       const defaults = EmailActionRouter.getDefaultFolders();
 
       expect(defaults).toHaveProperty('rootFolder');
       expect(defaults).toHaveProperty('noActionFolder');
       expect(defaults).toHaveProperty('spamFolder');
-      
-      // Check that values are strings (either from env or defaults)
-      expect(typeof defaults.rootFolder).toBe('string');
-      expect(typeof defaults.noActionFolder).toBe('string');
-      expect(typeof defaults.spamFolder).toBe('string');
+      expect(defaults).toHaveProperty('todoFolder');
+      expect(defaults).toHaveProperty('draftsFolderPath');
     });
 
-    it('should have sensible default values', () => {
+    it('should return undefined for env vars not set in test environment', () => {
+      // Without env vars set, getDefaultFolders returns undefined values
+      // This is intentional fail-fast behavior - env vars must be set in production
       const defaults = EmailActionRouter.getDefaultFolders();
 
-      // These will be either from env vars or fallback values
-      // We just check they exist and make sense
-      expect(defaults.noActionFolder).toBeTruthy();
-      expect(defaults.spamFolder).toBeTruthy();
-      // Root folder can be empty (meaning root level)
-      expect(defaults.rootFolder).toBeDefined();
+      // In test environment, env vars are not set, so these are undefined
+      // In production, these would be set via .env file
+      expect(defaults.noActionFolder).toBeUndefined();
+      expect(defaults.spamFolder).toBeUndefined();
+      expect(defaults.rootFolder).toBeUndefined();
     });
 
     it('should handle empty root folder correctly', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       const requiredFolders = router.getRequiredFolders();
@@ -51,7 +49,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: 'Prescreen',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       const requiredFolders = router.getRequiredFolders();
@@ -74,12 +73,13 @@ describe('EmailActionRouter', () => {
       router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       }, testDraftsPath);
     });
 
     it('should route reply actions to system drafts folder', () => {
-      const replyRoute = router.getActionRoute(EmailActions.REPLY);
+      const replyRoute = router.getActionRoute(EmailActionType.REPLY);
       expect(replyRoute.folder).toBe(testDraftsPath);
       expect(replyRoute.displayName).toBe(testDraftsPath);
       expect(replyRoute.flags).toContain('\\Draft');
@@ -87,13 +87,13 @@ describe('EmailActionRouter', () => {
     });
 
     it('should route reply-all actions to system drafts folder', () => {
-      const replyAllRoute = router.getActionRoute(EmailActions.REPLY_ALL);
+      const replyAllRoute = router.getActionRoute(EmailActionType.REPLY_ALL);
       expect(replyAllRoute.folder).toBe(testDraftsPath);
       expect(replyAllRoute.displayName).toBe(testDraftsPath);
     });
 
     it('should route forward actions to system drafts folder', () => {
-      const forwardRoute = router.getActionRoute(EmailActions.FORWARD);
+      const forwardRoute = router.getActionRoute(EmailActionType.FORWARD);
       expect(forwardRoute.folder).toBe(testDraftsPath);
       expect(forwardRoute.displayName).toBe(testDraftsPath);
     });
@@ -105,13 +105,13 @@ describe('EmailActionRouter', () => {
         spamFolder: 'AI-Spam'
       }); // No drafts path provided
 
-      expect(() => routerNoDrafts.getActionRoute(EmailActions.REPLY)).toThrow('Draft folder path not configured');
-      expect(() => routerNoDrafts.getActionRoute(EmailActions.REPLY_ALL)).toThrow('Draft folder path not configured');
-      expect(() => routerNoDrafts.getActionRoute(EmailActions.FORWARD)).toThrow('Draft folder path not configured');
+      expect(() => routerNoDrafts.getActionRoute(EmailActionType.REPLY)).toThrow('Draft folder path not configured');
+      expect(() => routerNoDrafts.getActionRoute(EmailActionType.REPLY_ALL)).toThrow('Draft folder path not configured');
+      expect(() => routerNoDrafts.getActionRoute(EmailActionType.FORWARD)).toThrow('Draft folder path not configured');
     });
 
     it('should route silent-fyi-only to no-action folder', () => {
-      const silentRoute = router.getActionRoute(EmailActions.SILENT_FYI_ONLY);
+      const silentRoute = router.getActionRoute(EmailActionType.SILENT_FYI_ONLY);
       expect(silentRoute.folder).toBe('AI-No-Action');
       expect(silentRoute.displayName).toBe('AI-No-Action');
       expect(silentRoute.flags).not.toContain('\\Seen');  // No-action items should not be marked as Seen
@@ -119,14 +119,18 @@ describe('EmailActionRouter', () => {
     });
 
     it('should route silent-spam to spam folder', () => {
-      const spamRoute = router.getActionRoute(EmailActions.SILENT_SPAM);
+      const spamRoute = router.getActionRoute(EmailActionType.SILENT_SPAM);
       expect(spamRoute.folder).toBe('AI-Spam');
       expect(spamRoute.displayName).toBe('AI-Spam');
       expect(spamRoute.flags).toContain('\\Seen');
     });
 
-    it('should throw error for unknown actions', () => {
-      expect(() => router.getActionRoute('unknown-action' as any)).toThrow('Unknown action: unknown-action');
+    it('should handle unknown actions by routing to INBOX', () => {
+      // Unknown actions are treated as keep-in-inbox for resilience
+      const result = router.getActionRoute('unknown-action' as any);
+      expect(result.folder).toBe('INBOX');
+      expect(result.displayName).toBe('INBOX');
+      expect(result.flags).toEqual([]);
     });
   });
 
@@ -135,7 +139,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       // Mock IMAP operations
@@ -147,7 +152,7 @@ describe('EmailActionRouter', () => {
       };
 
       const result = await router.checkFolders(mockImapOps as any);
-      
+
       expect(result.existing).toContain('AI-No-Action');
       expect(result.missing).toContain('AI-Spam');
     });
@@ -156,7 +161,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       // Mock IMAP operations
@@ -168,7 +174,7 @@ describe('EmailActionRouter', () => {
       };
 
       const result = await router.createMissingFolders(mockImapOps as any);
-      
+
       expect(result.created).toContain('AI-Spam');
       expect(mockImapOps.createFolder).toHaveBeenCalledWith('AI-Spam');
     });
@@ -177,7 +183,8 @@ describe('EmailActionRouter', () => {
       const router = new EmailActionRouter({
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
+        spamFolder: 'AI-Spam',
+        todoFolder: 't2j-todo'
       });
 
       // Mock IMAP operations
@@ -189,7 +196,7 @@ describe('EmailActionRouter', () => {
       };
 
       const result = await router.createMissingFolders(mockImapOps as any);
-      
+
       expect(result.created).toContain('AI-No-Action');
       expect(result.failed).toHaveLength(1);
       expect(result.failed[0]).toEqual({

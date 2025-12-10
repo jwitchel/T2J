@@ -1,7 +1,7 @@
 import { SelectedExample } from './example-selector';
 import { TemplateManager, EnhancedRelationshipProfile } from './template-manager';
 import { WritingPatterns } from './writing-pattern-analyzer';
-import { EmailActions } from '../email-actions';
+import { EmailActionType } from '../../types/email-action-tracking';
 import { SpamCheckResult } from './types';
 import { SimplifiedEmailMetadata } from './types';
 
@@ -126,14 +126,17 @@ export class PromptFormatterV2 {
     await this.initialize();
 
     // Generate dynamic enum values to prevent hardcoded template drift
-    const availableActions = Object.values(EmailActions).join('|');
+    // Filter out system-only actions (pending, training, manually_handled)
+    const allActions = Object.values(EmailActionType).filter((v): v is EmailActionType => typeof v === 'string');
+    const llmActions = allActions.filter(action => !EmailActionType.isSystemOnly(action));
+    const availableActions = llmActions.join('|');
     const addressedToOptions = 'you|group|someone-else';
     const urgencyOptions = 'low|medium|high|critical';
 
     // Build minimal template data for action-analysis (no examples/patterns needed)
     const templateData = {
-      incomingEmail: params.incomingEmail || '',
-      recipientEmail: params.recipientEmail || '',
+      incomingEmail: params.incomingEmail!,
+      recipientEmail: params.recipientEmail!,
       relationship: 'unknown', // Not used in action-analysis
       userNames: params.userNames,
       incomingEmailMetadata: params.incomingEmailMetadata ? {

@@ -16,7 +16,7 @@ const router = express.Router();
 // Start monitoring an email account
 router.post('/start/:accountId', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { accountId } = req.params;
 
     // Verify account belongs to user
@@ -60,7 +60,7 @@ router.post('/start/:accountId', requireAuth, async (req, res): Promise<void> =>
 // Stop monitoring an email account
 router.post('/stop/:accountId', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { accountId } = req.params;
 
     // Verify account belongs to user
@@ -93,7 +93,7 @@ router.post('/stop/:accountId', requireAuth, async (req, res): Promise<void> => 
 // Get monitoring status for all user's accounts
 router.get('/status', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     // Get user's email accounts
     const accountsResult = await pool.query(
@@ -126,7 +126,7 @@ router.get('/status', requireAuth, async (req, res): Promise<void> => {
 // Get monitoring status for a specific account
 router.get('/status/:accountId', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { accountId } = req.params;
 
     // Verify account belongs to user
@@ -162,7 +162,7 @@ router.get('/status/:accountId', requireAuth, async (req, res): Promise<void> =>
 // Start monitoring all user's accounts
 router.post('/start-all', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     // Get user's email accounts
     const accountsResult = await pool.query(
@@ -198,7 +198,7 @@ router.post('/start-all', requireAuth, async (req, res): Promise<void> => {
 // Stop monitoring all user's accounts
 router.post('/stop-all', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
 
     // Get user's email accounts
     const accountsResult = await pool.query(

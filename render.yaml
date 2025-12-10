@@ -1,0 +1,84 @@
+services:
+  # Frontend (Next.js)
+  - type: web
+    name: t2j-frontend
+    runtime: node
+    rootDir: ./
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: t2j-api
+          type: web
+          property: hostport
+    healthCheckPath: /
+    autoDeploy: true
+
+  # API (Express)
+  - type: web
+    name: t2j-api
+    runtime: node
+    rootDir: ./server
+    buildCommand: npm ci && npm run server:build
+    startCommand: node dist/server.js
+    preDeployCommand: node ../db/migrate.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: t2j-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: t2j-redis
+          type: redis
+          property: connectionString
+      - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: FRONTEND_URL
+        fromService:
+          name: t2j-frontend
+          type: web
+          property: hostport
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # BullMQ Workers
+  - type: worker
+    name: t2j-workers
+    runtime: node
+    rootDir: ./server
+    buildCommand: npm ci && npm run server:build
+    startCommand: node dist/scripts/start-workers.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: t2j-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: t2j-redis
+          type: redis
+          property: connectionString
+      - key: ENCRYPTION_KEY
+        sync: false
+    autoDeploy: true
+
+  # Redis (for BullMQ)
+  - type: redis
+    name: t2j-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: t2j-db
+    plan: starter
+    postgresMajorVersion: "15"

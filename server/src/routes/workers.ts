@@ -8,7 +8,7 @@ const router = express.Router();
 // Get worker status
 router.get('/status', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const status = await workerManager.getStatus();
 
     // Get scheduler summary for this user

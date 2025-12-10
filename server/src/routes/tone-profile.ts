@@ -8,12 +8,12 @@ const router = express.Router();
 // Get user's tone profile
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     const result = await pool.query(
-      `SELECT preference_type, target_identifier, profile_data, emails_analyzed, last_updated 
-       FROM tone_preferences 
-       WHERE user_id = $1 
+      `SELECT preference_type, target_identifier, profile_data, emails_analyzed, updated_at
+       FROM tone_preferences
+       WHERE user_id = $1
          AND preference_type IN ('aggregate', 'category', 'individual')
          AND profile_data ? 'writingPatterns'`,
       [userId]
@@ -23,21 +23,21 @@ router.get('/', requireAuth, async (req, res) => {
     const profiles: any = {};
     result.rows.forEach(row => {
       // Always return a consistent structure with writingPatterns at the root
-      const writingPatterns = row.profile_data.writingPatterns || {};
-      
+      const writingPatterns = row.profile_data.writingPatterns;
+
       profiles[row.target_identifier] = {
         // Writing pattern fields at root level
-        sentencePatterns: writingPatterns.sentencePatterns || null,
-        paragraphPatterns: writingPatterns.paragraphPatterns || [],
-        openingPatterns: writingPatterns.openingPatterns || [],
-        valediction: writingPatterns.valediction || [],
-        negativePatterns: writingPatterns.negativePatterns || [],
-        responsePatterns: writingPatterns.responsePatterns || null,
-        uniqueExpressions: writingPatterns.uniqueExpressions || [],
-        
+        sentencePatterns: writingPatterns.sentencePatterns,
+        paragraphPatterns: writingPatterns.paragraphPatterns,
+        openingPatterns: writingPatterns.openingPatterns,
+        valediction: writingPatterns.valediction,
+        negativePatterns: writingPatterns.negativePatterns,
+        responsePatterns: writingPatterns.responsePatterns,
+        uniqueExpressions: writingPatterns.uniqueExpressions,
+
         // Metadata fields
         meta: {
-          ...(row.profile_data.meta || {}),
+          ...row.profile_data.meta,
           // Include sentence stats metadata if available
           sentenceStats: row.profile_data.sentenceStats ? {
             lastCalculated: row.profile_data.sentenceStats.lastCalculated,
@@ -46,7 +46,7 @@ router.get('/', requireAuth, async (req, res) => {
           } : null
         },
         emails_analyzed: row.emails_analyzed,
-        last_updated: row.last_updated,
+        updated_at: row.updated_at,
         preference_type: row.preference_type
       };
     });
@@ -61,14 +61,15 @@ router.get('/', requireAuth, async (req, res) => {
       'SELECT COUNT(*) as total FROM email_sent WHERE user_id = $1',
       [userId]
     );
-    const totalEmailsLoaded = parseInt(emailCountResult.rows[0]?.total || '0');
+    // COUNT(*) always returns exactly one row
+    const totalEmailsLoaded = parseInt(emailCountResult.rows[0].total);
 
     res.json({
       profiles,
       totalEmailsAnalyzed,
       totalEmailsLoaded,
       lastUpdated: result.rows.length > 0
-        ? Math.max(...result.rows.map(row => new Date(row.last_updated).getTime()))
+        ? Math.max(...result.rows.map(row => new Date(row.updated_at).getTime()))
         : null,
     });
   } catch (error) {
@@ -80,7 +81,7 @@ router.get('/', requireAuth, async (req, res) => {
 // Trigger tone profile building
 router.post('/build', requireAuth, async (_req, res) => {
   try {
-    // const userId = (req as any).user.id;
+    // const userId = req.user.id;
     
     // TODO: Queue background job for tone profile building
     // For now, just return success

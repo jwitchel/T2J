@@ -68,25 +68,16 @@ export class StyleEmbeddingService {
    */
   private async _initialize(): Promise<void> {
     try {
-      console.log(`[StyleEmbedding] Loading AnnaWegmann/Style-Embedding model...`);
-      console.log(`[StyleEmbedding] Model path: ${this.modelPath}`);
-
       // Initialize BPE tokenizer
-      console.log(`[StyleEmbedding] Loading BPE tokenizer...`);
       const vocabPath = path.join(this.modelPath, 'vocab.json');
       const mergesPath = path.join(this.modelPath, 'merges.txt');
       this.tokenizer = new BPETokenizer(vocabPath, mergesPath);
-      console.log(`[StyleEmbedding] BPE tokenizer loaded: ${this.tokenizer.getVocabSize()} tokens`);
 
       // Load ONNX model directly with onnxruntime-node
-      console.log(`[StyleEmbedding] Loading ONNX model...`);
       this.session = await ort.InferenceSession.create(this.onnxPath);
 
       this.isInitialized = true;
-      console.log(`[StyleEmbedding] Model loaded successfully (${this.dimensions}d)`);
-      console.log(`[StyleEmbedding] Using content-independent style analysis with BPE tokenization`);
-      console.log(`[StyleEmbedding] Model inputs: ${this.session.inputNames.join(', ')}`);
-      console.log(`[StyleEmbedding] Model outputs: ${this.session.outputNames.join(', ')}`);
+      console.log(`[StyleEmbedding] Loaded AnnaWegmann/Style-Embedding (${this.dimensions}d, ${this.tokenizer.getVocabSize()} tokens)`);
     } catch (error: unknown) {
       this.initPromise = null;
       throw new EmbeddingError(`Failed to initialize style embedding model: ${error}`);

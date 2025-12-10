@@ -6,7 +6,9 @@ import useSWR from 'swr';
 import { formatDistanceToNow } from 'date-fns';
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { EmailActions } from '../../../server/src/lib/email-actions';
+import { EmailActionType } from '../../../server/src/types/email-action-tracking';
+import { RelationshipType } from '../../../server/src/lib/relationships/types';
+import { RelationshipSelector } from '@/components/relationship-selector';
 
 interface RecentAction {
   id: string;
@@ -14,10 +16,12 @@ interface RecentAction {
   actionTaken: string;
   subject: string;
   senderEmail?: string;
+  senderName?: string;
   destinationFolder?: string;
   updatedAt: string;
   emailAccountId: string;
   emailAccount: string;
+  relationship: string;
 }
 
 interface RecentActionsData {
@@ -35,119 +39,28 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-// Action categories for display
-type ActionCategory = 'Drafted' | 'Spam' | 'Moved' | 'No Action';
+// Map actions to display info (label and color)
+function getActionInfo(actionTaken: string): { label: string; color: string } {
+  const label = EmailActionType.LABELS[actionTaken] || actionTaken;
 
-// Map actions to categories and labels
-function getActionInfo(actionTaken: string, destinationFolder?: string): {
-  category: ActionCategory;
-  label: string;
-  color: string;
-} {
-  // Draft actions (reply, reply-all, forward, forward-with-comment)
-  if (actionTaken === EmailActions.REPLY || actionTaken === EmailActions.REPLY_ALL) {
-    return {
-      category: 'Drafted',
-      label: 'Drafted',
-      color: 'bg-blue-500 hover:bg-blue-600'
-    };
-  }
-  if (actionTaken === EmailActions.FORWARD || actionTaken === EmailActions.FORWARD_WITH_COMMENT) {
-    return {
-      category: 'Drafted',
-      label: `Drafted (Forward)`,
-      color: 'bg-blue-500 hover:bg-blue-600'
-    };
+  if (EmailActionType.isDraftAction(actionTaken)) {
+    return { label, color: 'bg-blue-500 hover:bg-blue-600' };
   }
 
-  // Spam
-  if (actionTaken === EmailActions.SILENT_SPAM) {
-    return {
-      category: 'Spam',
-      label: 'Moved (Spam)',
-      color: 'bg-red-500 hover:bg-red-600'
-    };
+  if (EmailActionType.isSpamAction(actionTaken)) {
+    return { label, color: 'bg-red-500 hover:bg-red-600' };
   }
 
-  // Moved actions (FYI, Large List, Unsubscribe, Todo)
-  if (actionTaken === EmailActions.SILENT_FYI_ONLY) {
-    return {
-      category: 'Moved',
-      label: 'Moved (FYI Only)',
-      color: 'bg-green-500 hover:bg-green-600'
-    };
-  }
-  if (actionTaken === EmailActions.SILENT_LARGE_LIST) {
-    return {
-      category: 'Moved',
-      label: 'Moved (Large List)',
-      color: 'bg-green-500 hover:bg-green-600'
-    };
-  }
-  if (actionTaken === EmailActions.SILENT_UNSUBSCRIBE) {
-    return {
-      category: 'Moved',
-      label: 'Moved (Unsubscribe)',
-      color: 'bg-green-500 hover:bg-green-600'
-    };
-  }
-  if (actionTaken === EmailActions.SILENT_TODO) {
-    return {
-      category: 'Moved',
-      label: 'Moved (Todo)',
-      color: 'bg-green-500 hover:bg-green-600'
-    };
+  if (EmailActionType.isMovedAction(actionTaken)) {
+    return { label, color: 'bg-green-500 hover:bg-green-600' };
   }
 
-  // Ambiguous action (stays in inbox)
-  if (actionTaken === EmailActions.SILENT_AMBIGUOUS) {
-    return {
-      category: 'No Action',
-      label: 'Unclear (Inbox)',
-      color: 'bg-yellow-500 hover:bg-yellow-600'
-    };
+  if (EmailActionType.isKeepInInbox(actionTaken)) {
+    return { label, color: 'bg-yellow-500 hover:bg-yellow-600' };
   }
 
-  // Fallback for draft_created (legacy) - infer from destination folder if available
-  if (actionTaken === 'draft_created') {
-    // Infer action from destination folder for old records
-    if (destinationFolder === 't2j-spam') {
-      return {
-        category: 'Spam',
-        label: 'Moved (Spam)',
-        color: 'bg-red-500 hover:bg-red-600'
-      };
-    }
-    if (destinationFolder === 't2j-no-action') {
-      return {
-        category: 'Moved',
-        label: 'Moved (No Action)',
-        color: 'bg-green-500 hover:bg-green-600'
-      };
-    }
-    // Otherwise it's a real draft
-    return {
-      category: 'Drafted',
-      label: 'Drafted',
-      color: 'bg-blue-500 hover:bg-blue-600'
-    };
-  }
-
-  // Manual action
-  if (actionTaken === 'manually_handled') {
-    return {
-      category: 'No Action',
-      label: 'Manual',
-      color: 'bg-gray-500 hover:bg-gray-600'
-    };
-  }
-
-  // Unknown/No Action
-  return {
-    category: 'No Action',
-    label: actionTaken,
-    color: 'bg-gray-500 hover:bg-gray-600'
-  };
+  // System actions (MANUALLY_HANDLED, PENDING, TRAINING, etc.)
+  return { label, color: 'bg-gray-500 hover:bg-gray-600' };
 }
 
 // Generate consistent color for email address
@@ -268,6 +181,7 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
               <tr className="border-b">
                 <th className="text-left py-1.5 px-2 font-medium">Time</th>
                 <th className="text-left py-1.5 px-2 font-medium">From</th>
+                <th className="text-left py-1.5 px-2 font-medium">Relationship</th>
                 <th className="text-left py-1.5 px-2 font-medium">Subject</th>
                 <th className="text-left py-1.5 px-2 font-medium">Action</th>
                 <th className="text-center py-1.5 px-2 font-medium">Account</th>
@@ -276,7 +190,7 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
             </thead>
             <tbody>
               {data.actions.map((action) => {
-                const actionInfo = getActionInfo(action.actionTaken, action.destinationFolder);
+                const actionInfo = getActionInfo(action.actionTaken);
                 const emailColor = getEmailColor(action.emailAccount);
 
                 return (
@@ -285,7 +199,19 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
                       {formatDistanceToNow(new Date(action.updatedAt), { addSuffix: true })}
                     </td>
                     <td className="py-1.5 px-2 max-w-[200px] truncate" title={action.senderEmail || 'Unknown'}>
-                      {action.senderEmail || '(Unknown)'}
+                      {action.senderName || action.senderEmail || '(Unknown)'}
+                    </td>
+                    <td className="py-1.5 px-2">
+                      {action.senderEmail ? (
+                        <RelationshipSelector
+                          emailAddress={action.senderEmail}
+                          currentRelationship={action.relationship}
+                        />
+                      ) : (
+                        <Badge className={`${RelationshipType.COLORS.unknown} text-white text-xs px-1.5 py-0`}>
+                          {RelationshipType.LABELS.unknown}
+                        </Badge>
+                      )}
                     </td>
                     <td className="py-1.5 px-2 max-w-xs truncate" title={action.subject}>
                       {action.subject}

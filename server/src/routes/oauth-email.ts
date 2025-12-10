@@ -10,7 +10,7 @@ const router = express.Router();
 // Initiate OAuth flow for email connection
 router.post('/connect', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { provider } = req.body;
 
     if (provider !== 'google') {
@@ -40,7 +40,7 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
   const client = await pool.connect();
   
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { 
       provider,
       email,

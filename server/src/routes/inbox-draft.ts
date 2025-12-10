@@ -7,7 +7,7 @@ const router = express.Router();
 // Generate draft endpoint - thin wrapper around EmailProcessingService
 router.post('/generate-draft', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const { fullMessage, emailAccountId, providerId } = req.body;
 
     if (!fullMessage || !emailAccountId || !providerId) {

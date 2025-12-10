@@ -1,4 +1,4 @@
-import { 
+import {
   PersonService,
   PersonServiceError,
   ValidationError,
@@ -6,6 +6,7 @@ import {
   PersonNotFoundError,
   InvalidRelationshipError
 } from '../person-service';
+import { RelationshipType } from '../types';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -79,7 +80,7 @@ describe('PersonService', () => {
         userId: testUserId,
         name: 'Jane Doe',
         emailAddress: 'jane@example.com',
-        relationshipType: 'colleague',
+        relationshipType: RelationshipType.COLLEAGUE,
         confidence: 0.9
       });
 
@@ -163,7 +164,8 @@ describe('PersonService', () => {
           userId: testUserId,
           name: 'Test Person',
           emailAddress: 'test@example.com',
-          relationshipType: 'non-existent'
+          // Cast to bypass TypeScript check - testing runtime validation
+          relationshipType: 'non-existent' as RelationshipType
         })
       ).rejects.toThrow(InvalidRelationshipError);
     });
@@ -268,7 +270,7 @@ describe('PersonService', () => {
         userId: testUserId,
         name: 'Test Person',
         emailAddress: 'findme@example.com',
-        relationshipType: 'friend'
+        relationshipType: RelationshipType.FRIENDS
       });
     });
 
@@ -323,7 +325,7 @@ describe('PersonService', () => {
         userId: testUserId,
         name: 'Test Person',
         emailAddress: 'primary@example.com',
-        relationshipType: 'colleague',
+        relationshipType: RelationshipType.COLLEAGUE,
         confidence: 0.8
       });
       personId = person.id;
@@ -457,7 +459,7 @@ describe('PersonService', () => {
         userId: testUserId,
         name: 'Person One',
         emailAddress: 'person1@example.com',
-        relationshipType: 'friend',
+        relationshipType: RelationshipType.FRIENDS,
         confidence: 0.7
       });
       person1Id = person1.id;
@@ -466,7 +468,7 @@ describe('PersonService', () => {
         userId: testUserId,
         name: 'Person Two',
         emailAddress: 'person2@example.com',
-        relationshipType: 'colleague',
+        relationshipType: RelationshipType.COLLEAGUE,
         confidence: 0.9
       });
       person2Id = person2.id;

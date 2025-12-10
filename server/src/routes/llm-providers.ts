@@ -101,7 +101,7 @@ router.post('/test', requireAuth, validateLLMProvider, async (req, res): Promise
 // Get user's LLM providers
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     
     const result = await pool.query(
       `SELECT id, provider_name, provider_type, api_endpoint, model_name, 
@@ -137,7 +137,7 @@ router.post('/', requireAuth, validateLLMProvider, async (req, res): Promise<voi
   try {
     await client.query('BEGIN');
     
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const data = req.body as CreateLLMProviderRequest;
     
     // Check if provider name already exists for this user
@@ -257,7 +257,7 @@ router.put('/:id', requireAuth, async (req, res): Promise<void> => {
   try {
     await client.query('BEGIN');
     
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const providerId = req.params.id;
     const updates = req.body as UpdateLLMProviderRequest;
     
@@ -394,7 +394,7 @@ router.put('/:id', requireAuth, async (req, res): Promise<void> => {
 // Delete LLM provider
 router.delete('/:id', requireAuth, async (req, res): Promise<void> => {
   try {
-    const userId = (req as any).user.id;
+    const userId = req.user.id;
     const providerId = req.params.id;
     
     // Validate UUID format
