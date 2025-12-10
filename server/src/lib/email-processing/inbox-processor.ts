@@ -12,6 +12,7 @@ import { emailStorageService } from '../email-storage-service';
 import { DraftEmail } from '../pipeline/types';
 import { pool } from '../db';
 import { EmailActionType, EmailDirection } from '../../types/email-action-tracking';
+import { ActionSubPreferences } from '../../types/settings';
 import { simpleParser } from 'mailparser';
 import { PoolClient } from 'pg';
 import { EmailActionRouter } from '../email-action-router';
@@ -207,6 +208,21 @@ export class InboxProcessor {
   }
 
   /**
+   * Apply action sub-preference overrides based on user preferences
+   * When a sub-preference is disabled, override action to KEEP_IN_INBOX
+   * @private
+   */
+  private _applyActionSubPreferenceOverrides(
+    action: EmailActionType,
+    silentActions: ActionSubPreferences
+  ): EmailActionType {
+    if (EmailActionType.hasActionSubPreference(action) && !silentActions[action]) {
+      return EmailActionType.KEEP_IN_INBOX;
+    }
+    return action;
+  }
+
+  /**
    * Perform IMAP operation (move or upload draft)
    * @private
    */
@@ -239,7 +255,19 @@ export class InboxProcessor {
       };
     }
 
-    // Draft actions: Upload draft to drafts folder
+    // Draft actions: Upload draft to drafts folder (if enabled)
+    const prefs = await preferencesService.getPreferences(context.userId);
+
+    if (!prefs.actionPreferences.draftGeneration) {
+      // Draft generation disabled - skip IMAP upload but report success
+      // Database record still saves original action (REPLY/FORWARD) for history
+      return {
+        moved: false,
+        destination: 'N/A (draft generation disabled)',
+        actionDescription: 'Draft upload skipped by user preference'
+      };
+    }
+
     const result = await emailMover.uploadDraft({
       emailAccountId: context.accountId,
       userId: context.userId,
@@ -399,6 +427,16 @@ export class InboxProcessor {
       const draftResult = await this._generateDraft(context, params.generatedDraft as DraftEmail);
       const draft = draftResult.draft;
       const isSpam = EmailActionType.isSpamAction(draft.meta.recommendedAction);
+
+      // 2b. APPLY ACTION SUB-PREFERENCE OVERRIDES
+      // When a sub-preference is disabled, override action to KEEP_IN_INBOX
+      const prefs = await preferencesService.getPreferences(context.userId);
+      const originalAction = draft.meta.recommendedAction as EmailActionType;
+      const effectiveAction = this._applyActionSubPreferenceOverrides(originalAction, prefs.actionPreferences.silentActions);
+
+      if (effectiveAction !== originalAction) {
+        draft.meta.recommendedAction = effectiveAction;
+      }
 
       // 3. DETERMINE DESTINATION FOLDER (before transaction)
       // This is deterministic based on user preferences and action type

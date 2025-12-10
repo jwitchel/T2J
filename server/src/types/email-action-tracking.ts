@@ -159,6 +159,24 @@ export namespace EmailActionType {
   }
 
   /**
+   * Actions that have user-controllable sub-preferences in ActionSubPreferences.
+   * The enum values are used directly as keys in ActionSubPreferences.
+   */
+  export const ACTION_SUB_PREFERENCE_TYPES: readonly EmailActionType[] = [
+    EmailActionType.SILENT_FYI_ONLY,
+    EmailActionType.SILENT_LARGE_LIST,
+    EmailActionType.SILENT_UNSUBSCRIBE,
+    EmailActionType.SILENT_TODO,
+  ] as const;
+
+  /**
+   * Check if an action has a user-controllable sub-preference toggle.
+   */
+  export function hasActionSubPreference(action: EmailActionType | string): action is EmailActionType.SILENT_FYI_ONLY | EmailActionType.SILENT_LARGE_LIST | EmailActionType.SILENT_UNSUBSCRIBE | EmailActionType.SILENT_TODO {
+    return ACTION_SUB_PREFERENCE_TYPES.includes(action as EmailActionType);
+  }
+
+  /**
    * Check if action moves email to a folder (silent but not spam)
    */
   export function isMovedAction(action: EmailActionType | string): boolean {

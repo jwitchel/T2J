@@ -20,6 +20,7 @@ import { EmailActionType } from '../../types/email-action-tracking';
 import { stripAttachments } from '../email-attachment-stripper';
 import { RelationshipType } from '../relationships/types';
 import { personService } from '../relationships/person-service';
+import { preferencesService } from '../preferences-service';
 
 /**
  * User context needed for email processing
@@ -230,17 +231,31 @@ export class EmailProcessingService {
       const llmSafeMessage = await stripAttachments(fullMessage, parsedData.parsed);
 
       // Step 4: Check for spam (using stripped version for LLM)
+      // Only run spam detection if enabled in user preferences
+      const prefs = await preferencesService.getPreferences(userId);
       const senderEmail = parsedData.processedEmail.from[0]?.address?.toLowerCase();
       const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
-      const spamDetector = await getSpamDetector(providerId);
-      const spamCheckResult = await spamDetector.checkSpam({
-        senderEmail,
-        replyTo,
-        fullMessage: llmSafeMessage, // Use stripped version for LLM
-        subject: parsedData.processedEmail.subject,
-        userNames: userContext.userNames,
-        userId
-      });
+
+      let spamCheckResult: SpamCheckResult;
+
+      if (prefs.actionPreferences.spamDetection) {
+        const spamDetector = await getSpamDetector(providerId);
+        spamCheckResult = await spamDetector.checkSpam({
+          senderEmail,
+          replyTo,
+          fullMessage: llmSafeMessage, // Use stripped version for LLM
+          subject: parsedData.processedEmail.subject,
+          userNames: userContext.userNames,
+          userId
+        });
+      } else {
+        // Spam detection disabled - treat as non-spam
+        spamCheckResult = {
+          isSpam: false,
+          indicators: ['Spam detection disabled by user preference'],
+          senderResponseCount: 0
+        };
+      }
 
       // Step 5: Generate draft (or create spam draft)
       // If spam detected, create a silent-spam draft instead of full generation

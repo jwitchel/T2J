@@ -3,6 +3,7 @@ import {
   UserPreferences,
   FolderPreferences,
   TypedNamePreferences,
+  ActionPreferences,
   ProfileUpdateRequest,
   ProfileUpdateResult,
   ResolvedUserPreferences,
@@ -10,19 +11,53 @@ import {
 import { EmailActionRouter } from './email-action-router';
 
 export class PreferencesService {
+  // ==================== DEFAULT PREFERENCES ====================
+
+  /**
+   * Get the default preferences object for new users.
+   * This is used by the auth hook when creating users.
+   */
+  getDefaultPreferences(): UserPreferences {
+    const folderDefaults = EmailActionRouter.getDefaultFolders();
+    return {
+      folderPreferences: {
+        rootFolder: folderDefaults.rootFolder,
+        draftsFolderPath: folderDefaults.draftsFolderPath,
+        noActionFolder: folderDefaults.noActionFolder,
+        spamFolder: folderDefaults.spamFolder,
+        todoFolder: folderDefaults.todoFolder,
+      },
+      actionPreferences: {
+        spamDetection: true,
+        silentActions: {
+          'silent-fyi-only': true,
+          'silent-large-list': true,
+          'silent-unsubscribe': true,
+          'silent-todo': true,
+        },
+        draftGeneration: true,
+      },
+    };
+  }
+
   // ==================== READ OPERATIONS ====================
 
   /**
-   * Get fully resolved user preferences with defaults merged and CSV fields parsed.
-   * This is the single read method - callers access what they need from the result.
+   * Get fully resolved user preferences with CSV fields parsed.
+   * Assumes preferences were initialized at user creation time.
    */
   async getPreferences(userId: string): Promise<ResolvedUserPreferences> {
     const result = await pool.query(
       `SELECT preferences FROM "user" WHERE id = $1`,
       [userId]
     );
-    const raw: UserPreferences = result.rows[0]?.preferences ?? {};
-    const defaults = EmailActionRouter.getDefaultFolders();
+    const raw: UserPreferences = result.rows[0]?.preferences;
+
+    // Preferences should be initialized at user creation time.
+    // If missing, this indicates a data integrity issue.
+    if (!raw?.folderPreferences || !raw?.actionPreferences) {
+      throw new Error(`User ${userId} has corrupted or missing preferences`);
+    }
 
     return {
       // Profile fields (pass-through)
@@ -30,17 +65,14 @@ export class PreferencesService {
       nicknames: raw.nicknames,
       signatureBlock: raw.signatureBlock,
 
-      // Folder preferences with defaults merged
-      folderPreferences: {
-        rootFolder: raw.folderPreferences?.rootFolder ?? defaults.rootFolder,
-        draftsFolderPath: raw.folderPreferences?.draftsFolderPath ?? defaults.draftsFolderPath,
-        noActionFolder: raw.folderPreferences?.noActionFolder ?? defaults.noActionFolder,
-        spamFolder: raw.folderPreferences?.spamFolder ?? defaults.spamFolder,
-        todoFolder: raw.folderPreferences?.todoFolder ?? defaults.todoFolder,
-      },
+      // Folder preferences (initialized at user creation)
+      folderPreferences: raw.folderPreferences,
 
       // Typed name (pass-through)
       typedName: raw.typedName,
+
+      // Action preferences (initialized at user creation)
+      actionPreferences: raw.actionPreferences,
 
       // Sent folder (pass-through)
       sentFolder: raw.sentFolder,
@@ -84,16 +116,20 @@ export class PreferencesService {
    */
   async updateFolderPreferences(userId: string, folderPrefs: Partial<FolderPreferences>): Promise<FolderPreferences> {
     const current = await this._getRawPreferences(userId);
-    const defaults = EmailActionRouter.getDefaultFolders();
+
+    // folderPreferences should exist from user creation
+    if (!current.folderPreferences) {
+      throw new Error(`User ${userId} has corrupted or missing folderPreferences`);
+    }
 
     const merged: UserPreferences = {
       ...current,
       folderPreferences: {
-        rootFolder: folderPrefs.rootFolder ?? current.folderPreferences?.rootFolder ?? defaults.rootFolder,
-        draftsFolderPath: folderPrefs.draftsFolderPath ?? current.folderPreferences?.draftsFolderPath ?? defaults.draftsFolderPath,
-        noActionFolder: folderPrefs.noActionFolder ?? current.folderPreferences?.noActionFolder ?? defaults.noActionFolder,
-        spamFolder: folderPrefs.spamFolder ?? current.folderPreferences?.spamFolder ?? defaults.spamFolder,
-        todoFolder: folderPrefs.todoFolder ?? current.folderPreferences?.todoFolder ?? defaults.todoFolder,
+        rootFolder: folderPrefs.rootFolder ?? current.folderPreferences.rootFolder,
+        draftsFolderPath: folderPrefs.draftsFolderPath ?? current.folderPreferences.draftsFolderPath,
+        noActionFolder: folderPrefs.noActionFolder ?? current.folderPreferences.noActionFolder,
+        spamFolder: folderPrefs.spamFolder ?? current.folderPreferences.spamFolder,
+        todoFolder: folderPrefs.todoFolder ?? current.folderPreferences.todoFolder,
       },
     };
 
@@ -144,6 +180,20 @@ export class PreferencesService {
         $2::jsonb
       ) WHERE id = $1`,
       [userId, JSON.stringify(sentFolder)]
+    );
+  }
+
+  /**
+   * Update action preferences (spam detection, silent actions, draft generation toggles)
+   */
+  async updateActionPreferences(userId: string, actionPreferences: ActionPreferences): Promise<void> {
+    await pool.query(
+      `UPDATE "user" SET preferences = jsonb_set(
+        COALESCE(preferences, '{}'),
+        '{actionPreferences}',
+        $2::jsonb
+      ) WHERE id = $1`,
+      [userId, JSON.stringify(actionPreferences)]
     );
   }
 

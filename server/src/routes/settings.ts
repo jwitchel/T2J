@@ -94,6 +94,7 @@ router.get('/profile', requireAuth, async (req, res) => {
         nicknames: prefs.nicknames,
         signatureBlock: prefs.signatureBlock,
         folderPreferences: prefs.folderPreferences,
+        actionPreferences: prefs.actionPreferences,
         workDomainsCSV: prefs.workDomainsCSV,
         familyEmailsCSV: prefs.familyEmailsCSV,
         spouseEmailsCSV: prefs.spouseEmailsCSV
@@ -302,6 +303,21 @@ router.post('/folder-preferences', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error updating folder preferences:', error);
     return res.status(500).json({ error: 'Failed to update folder preferences' });
+  }
+});
+
+// Update action preferences (spam detection, silent actions, draft generation toggles)
+router.post('/action-preferences', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { actionPreferences } = req.body;
+
+    await preferencesService.updateActionPreferences(userId, actionPreferences);
+
+    return res.json({ success: true, actionPreferences });
+  } catch (error) {
+    console.error('Error updating action preferences:', error);
+    return res.status(500).json({ error: 'Failed to update action preferences' });
   }
 });
 

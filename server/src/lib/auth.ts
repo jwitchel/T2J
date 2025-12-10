@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { pool } from './db';
 import crypto from 'crypto';
+import { preferencesService } from './preferences-service';
 
 const auth = betterAuth({
   database: pool,
@@ -26,6 +27,21 @@ const auth = betterAuth({
   advanced: {
     database: {
       generateId: () => crypto.randomUUID(),
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          // Initialize default preferences for new users
+          return {
+            data: {
+              ...user,
+              preferences: preferencesService.getDefaultPreferences(),
+            },
+          };
+        },
+      },
     },
   },
   redirects: {

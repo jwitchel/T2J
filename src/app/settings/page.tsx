@@ -13,6 +13,7 @@ import { useState, useEffect } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet, apiPost } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,16 @@ export default function SettingsPage() {
     noActionFolder: '',
     spamFolder: '',
     todoFolder: ''
+  })
+  const [actionPreferences, setActionPreferences] = useState({
+    spamDetection: true,
+    silentActions: {
+      'silent-fyi-only': true,
+      'silent-large-list': true,
+      'silent-unsubscribe': true,
+      'silent-todo': true
+    },
+    draftGeneration: true
   })
   const [workDomainsCSV, setWorkDomainsCSV] = useState('')
   const [familyEmailsCSV, setFamilyEmailsCSV] = useState('')
@@ -77,6 +88,16 @@ export default function SettingsPage() {
             spamFolder?: string;
             todoFolder?: string;
           };
+          actionPreferences?: {
+            spamDetection?: boolean;
+            silentActions?: {
+              'silent-fyi-only'?: boolean;
+              'silent-large-list'?: boolean;
+              'silent-unsubscribe'?: boolean;
+              'silent-todo'?: boolean;
+            };
+            draftGeneration?: boolean;
+          };
           workDomainsCSV?: string;
           familyEmailsCSV?: string;
           spouseEmailsCSV?: string;
@@ -98,6 +119,19 @@ export default function SettingsPage() {
             setFolderPreferences(prev => ({
               ...prev,
               ...data.preferences.folderPreferences
+            }))
+          }
+          if (data.preferences.actionPreferences) {
+            setActionPreferences(prev => ({
+              ...prev,
+              spamDetection: data.preferences.actionPreferences?.spamDetection ?? prev.spamDetection,
+              silentActions: {
+                'silent-fyi-only': data.preferences.actionPreferences?.silentActions?.['silent-fyi-only'] ?? prev.silentActions['silent-fyi-only'],
+                'silent-large-list': data.preferences.actionPreferences?.silentActions?.['silent-large-list'] ?? prev.silentActions['silent-large-list'],
+                'silent-unsubscribe': data.preferences.actionPreferences?.silentActions?.['silent-unsubscribe'] ?? prev.silentActions['silent-unsubscribe'],
+                'silent-todo': data.preferences.actionPreferences?.silentActions?.['silent-todo'] ?? prev.silentActions['silent-todo'],
+              },
+              draftGeneration: data.preferences.actionPreferences?.draftGeneration ?? prev.draftGeneration,
             }))
           }
         } else {
@@ -325,6 +359,21 @@ export default function SettingsPage() {
     setFolderTestResult(null)
   }
 
+  const [isSavingActionPreferences, setIsSavingActionPreferences] = useState(false)
+
+  const handleSaveActionPreferences = async () => {
+    setIsSavingActionPreferences(true)
+    try {
+      await apiPost('/api/settings/action-preferences', { actionPreferences })
+      success('Action preferences saved')
+    } catch (err) {
+      error('Failed to save action preferences')
+      console.error(err)
+    } finally {
+      setIsSavingActionPreferences(false)
+    }
+  }
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background p-8">
@@ -335,7 +384,7 @@ export default function SettingsPage() {
             <TabsList className="w-full mb-6">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="relationships">Relationships</TabsTrigger>
-              <TabsTrigger value="email">Email</TabsTrigger>
+              <TabsTrigger value="services">Services</TabsTrigger>
               <TabsTrigger value="signatures">Signatures</TabsTrigger>
               <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
@@ -397,6 +446,35 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <TypedNameSettings />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Email Signature Block</CardTitle>
+                <CardDescription>
+                  Add a signature that will be included in your generated email replies
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signatureBlock">Signature Block</Label>
+                  <Textarea
+                    id="signatureBlock"
+                    value={signatureBlock}
+                    onChange={(e) => setSignatureBlock(e.target.value)}
+                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
+                    className="min-h-[120px] font-mono text-sm"
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    This signature will be added to your email replies before the quoted original message.
+                    You can use multiple lines.
+                  </p>
+                </div>
+                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                  {isSaving ? 'Saving...' : 'Save Signature'}
+                </Button>
               </CardContent>
             </Card>
             </TabsContent>
@@ -476,32 +554,123 @@ export default function SettingsPage() {
             </Card>
             </TabsContent>
 
-            <TabsContent value="email" className="space-y-6">
+            <TabsContent value="services" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Email Signature Block</CardTitle>
+                <CardTitle>Email Processing</CardTitle>
                 <CardDescription>
-                  Add a signature that will be included in your generated email replies
+                  Configure which processing stages are enabled. Unprocessed emails will remain in your inbox.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signatureBlock">Signature Block</Label>
-                  <Textarea
-                    id="signatureBlock"
-                    value={signatureBlock}
-                    onChange={(e) => setSignatureBlock(e.target.value)}
-                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
-                    className="min-h-[120px] font-mono text-sm"
+              <CardContent className="space-y-6">
+                {/* Spam Detection Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="spamDetection">Spam Detection</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Detect and move spam emails to spam folder
+                    </p>
+                  </div>
+                  <Switch
+                    id="spamDetection"
+                    checked={actionPreferences.spamDetection}
+                    onCheckedChange={(checked) =>
+                      setActionPreferences(prev => ({ ...prev, spamDetection: checked }))
+                    }
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    This signature will be added to your email replies before the quoted original message.
-                    You can use multiple lines.
-                  </p>
                 </div>
-                <Button onClick={handleSave} disabled={isSaving || isLoading}>
-                  {isSaving ? 'Saving...' : 'Save Signature'}
+
+                {/* Silent Actions Toggle with Sub-toggles */}
+                <div className="space-y-4">
+                  <div className="space-y-0.5">
+                    <Label>Silent Actions</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically organize emails into folders based on their type
+                    </p>
+                  </div>
+
+                  {/* Sub-toggles - indented */}
+                  <div className="ml-6 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-fyi-only" className="font-normal">FYI Only</Label>
+                      <Switch
+                        id="silent-fyi-only"
+                        checked={actionPreferences.silentActions['silent-fyi-only']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-fyi-only': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-large-list" className="font-normal">Large Distribution Lists</Label>
+                      <Switch
+                        id="silent-large-list"
+                        checked={actionPreferences.silentActions['silent-large-list']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-large-list': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-unsubscribe" className="font-normal">Unsubscribe Candidates</Label>
+                      <Switch
+                        id="silent-unsubscribe"
+                        checked={actionPreferences.silentActions['silent-unsubscribe']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-unsubscribe': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="silent-todo" className="font-normal">Todo Items</Label>
+                      <Switch
+                        id="silent-todo"
+                        checked={actionPreferences.silentActions['silent-todo']}
+                        onCheckedChange={(checked) =>
+                          setActionPreferences(prev => ({
+                            ...prev,
+                            silentActions: { ...prev.silentActions, 'silent-todo': checked }
+                          }))
+                        }
+                        disabled={isLoading}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Draft Generation Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="draftGeneration">Draft Generation</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Upload AI-generated reply drafts to your Drafts folder
+                    </p>
+                  </div>
+                  <Switch
+                    id="draftGeneration"
+                    checked={actionPreferences.draftGeneration}
+                    onCheckedChange={(checked) =>
+                      setActionPreferences(prev => ({ ...prev, draftGeneration: checked }))
+                    }
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <Button onClick={handleSaveActionPreferences} disabled={isSavingActionPreferences || isLoading}>
+                  {isSavingActionPreferences ? 'Saving...' : 'Save Action Preferences'}
                 </Button>
               </CardContent>
             </Card>

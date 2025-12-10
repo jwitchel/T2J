@@ -14,12 +14,29 @@ export interface TypedNamePreferences {
   removalRegex?: string;
 }
 
+// Sub-preferences for individual action types
+// Keys match EmailActionType enum values (e.g., 'silent-fyi-only')
+export interface ActionSubPreferences {
+  'silent-fyi-only': boolean;
+  'silent-large-list': boolean;
+  'silent-unsubscribe': boolean;
+  'silent-todo': boolean;
+}
+
+// Top-level action preferences for email processing
+export interface ActionPreferences {
+  spamDetection: boolean;
+  silentActions: ActionSubPreferences;
+  draftGeneration: boolean;
+}
+
 export interface UserPreferences {
   name?: string;
   nicknames?: string;
   signatureBlock?: string;
   folderPreferences?: FolderPreferences;
   typedName?: TypedNamePreferences;
+  actionPreferences?: ActionPreferences;
   sentFolder?: string;
   workDomainsCSV?: string;
   familyEmailsCSV?: string;
@@ -61,6 +78,9 @@ export interface ResolvedUserPreferences {
 
   // Typed name (pass-through from raw)
   typedName?: TypedNamePreferences;
+
+  // Action preferences - ALWAYS present with defaults merged
+  actionPreferences: ActionPreferences;
 
   // Sent folder (pass-through from raw)
   sentFolder?: string;
