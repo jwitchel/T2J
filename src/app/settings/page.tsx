@@ -584,16 +584,16 @@ export default function SettingsPage() {
                 {/* Silent Actions Toggle with Sub-toggles */}
                 <div className="space-y-4">
                   <div className="space-y-0.5">
-                    <Label>Silent Actions</Label>
+                    <Label>Organize Your Email</Label>
                     <p className="text-sm text-muted-foreground">
-                      Automatically organize emails into folders based on their type
+                      Automatically move emails that do <b>not</b> require a response to a specific folder. 
                     </p>
                   </div>
 
                   {/* Sub-toggles - indented */}
-                  <div className="ml-6 space-y-3">
+                  <div style={{ marginLeft: '1.5rem' }} className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-fyi-only" className="font-normal">FYI Only</Label>
+                      <Label htmlFor="silent-fyi-only" className="font-normal">FYI Only. <span className="text-muted-foreground">Emails that do not require a response from you.</span></Label>
                       <Switch
                         id="silent-fyi-only"
                         checked={actionPreferences.silentActions['silent-fyi-only']}
@@ -607,7 +607,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-large-list" className="font-normal">Large Distribution Lists</Label>
+                      <Label htmlFor="silent-large-list" className="font-normal">Large Distribution Lists. <span className="text-muted-foreground">Emails that are sent to a large number of people.</span></Label>
                       <Switch
                         id="silent-large-list"
                         checked={actionPreferences.silentActions['silent-large-list']}
@@ -621,7 +621,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-unsubscribe" className="font-normal">Unsubscribe Candidates</Label>
+                      <Label htmlFor="silent-unsubscribe" className="font-normal">Unsubscribe Candidates. <span className="text-muted-foreground">Emails that are asking you to unsubscribe from a mailing list.</span></Label>
                       <Switch
                         id="silent-unsubscribe"
                         checked={actionPreferences.silentActions['silent-unsubscribe']}
@@ -635,7 +635,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-todo" className="font-normal">Todo Items</Label>
+                      <Label htmlFor="silent-todo" className="font-normal">Todo Items. <span className="text-muted-foreground">Emails that are asking you to complete a task.</span></Label>
                       <Switch
                         id="silent-todo"
                         checked={actionPreferences.silentActions['silent-todo']}
