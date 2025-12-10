@@ -195,8 +195,9 @@ export class InboxProcessor {
     context: ProcessingContext,
     draft: DraftEmail
   ): Promise<string> {
-    // Fetch user folder preferences
-    const folderPrefs = await preferencesService.getFolderPreferences(context.userId);
+    // Fetch user preferences (single call returns all preferences)
+    const prefs = await preferencesService.getPreferences(context.userId);
+    const folderPrefs = prefs.folderPreferences;
 
     // Create router and get destination
     const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);

@@ -148,8 +148,9 @@ export class EmailMover {
 
       const fromEmail = accountResult.rows[0].email_address;
 
-      // Get user's folder preferences
-      const folderPrefs = await preferencesService.getFolderPreferences(userId);
+      // Get user's folder preferences (single call returns all preferences)
+      const prefs = await preferencesService.getPreferences(userId);
+      const folderPrefs = prefs.folderPreferences;
       const draftsFolderPath = folderPrefs.draftsFolderPath;
 
       await withImapContext(emailAccountId, userId, async () => {
@@ -205,8 +206,9 @@ export class EmailMover {
     } = params;
 
     try {
-      // Get user's folder preferences
-      const folderPrefs = await preferencesService.getFolderPreferences(userId);
+      // Get user's folder preferences (single call returns all preferences)
+      const prefs = await preferencesService.getPreferences(userId);
+      const folderPrefs = prefs.folderPreferences;
 
       // Resolve destination folder and flags
       const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);

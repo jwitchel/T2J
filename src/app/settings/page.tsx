@@ -13,6 +13,14 @@ import { useState, useEffect } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet, apiPost } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -36,6 +44,8 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTestingFolders, setIsTestingFolders] = useState(false)
+  const [isCreatingFolders, setIsCreatingFolders] = useState(false)
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const [folderTestResult, setFolderTestResult] = useState<{
     requiredFolders?: string[];
     existing?: string[];
@@ -167,11 +177,24 @@ export default function SettingsPage() {
     }
   }
 
-  const handleTestFolders = async () => {
+  /**
+   * Unified folder settings flow:
+   * 1. User clicks "Save Folder Settings"
+   * 2. We test folders on IMAP (using current UI values, not saved values)
+   * 3. Show modal with results
+   * 4. If all exist → auto-save and close
+   * 5. If missing → show "Create Folders" button
+   * 6. On create success → save preferences and close
+   */
+  const handleSaveFolderSettings = async () => {
     setIsTestingFolders(true)
     setFolderTestResult(null)
-    
+
     try {
+      // First, temporarily save the preferences so test-folders uses them
+      await apiPost('/api/settings/folder-preferences', folderPreferences)
+
+      // Then test folders
       const result = await apiPost<{
         success: boolean;
         requiredFolders: string[];
@@ -184,26 +207,35 @@ export default function SettingsPage() {
           error?: string;
         }>;
       }>('/api/settings/test-folders', {})
-      
+
       // Combine results from all accounts
       const allExisting = new Set<string>()
       const allMissing = new Set<string>()
-      
+      let hasConnectionErrors = false
+
       result.accounts?.forEach(account => {
         if (account.success) {
           account.existing?.forEach(f => allExisting.add(f))
           account.missing?.forEach(f => allMissing.add(f))
+        } else {
+          hasConnectionErrors = true
         }
       })
-      
-      setFolderTestResult({
+
+      const testResult = {
         ...result,
         existing: Array.from(allExisting),
         missing: Array.from(allMissing)
-      })
-      
-      if (allMissing.size === 0) {
-        success('All required folders exist across all accounts!')
+      }
+
+      setFolderTestResult(testResult)
+
+      // If all folders exist and no connection errors, save is complete
+      if (allMissing.size === 0 && !hasConnectionErrors) {
+        success('Folder settings saved! All folders verified.')
+      } else {
+        // Show modal for user to create missing folders or acknowledge errors
+        setFolderDialogOpen(true)
       }
     } catch (err) {
       error('Failed to test folders')
@@ -213,9 +245,9 @@ export default function SettingsPage() {
     }
   }
 
-  const handleCreateFolders = async () => {
-    setIsTestingFolders(true)
-    
+  const handleCreateFoldersInModal = async () => {
+    setIsCreatingFolders(true)
+
     try {
       const result = await apiPost<{
         success: boolean;
@@ -228,12 +260,12 @@ export default function SettingsPage() {
           error?: string;
         }>;
       }>('/api/settings/create-folders', {})
-      
+
       // Count total created and failed across all accounts
       let totalCreated = 0
       let totalFailed = 0
       let accountsWithErrors = 0
-      
+
       result.accounts?.forEach(account => {
         if (account.success) {
           totalCreated += account.created?.length || 0
@@ -242,26 +274,55 @@ export default function SettingsPage() {
           accountsWithErrors++
         }
       })
-      
-      if (totalCreated > 0) {
-        success(`Created ${totalCreated} folders across ${result.accounts.length} accounts!`)
-        // Re-test to update the display
-        await handleTestFolders()
-      }
-      
-      if (totalFailed > 0) {
-        error(`Failed to create ${totalFailed} folders`)
-      }
-      
-      if (accountsWithErrors > 0) {
-        error(`${accountsWithErrors} accounts had connection errors`)
+
+      if (totalFailed > 0 || accountsWithErrors > 0) {
+        // Some folders failed to create
+        error(`Failed to create some folders. Please check your email account connections.`)
+        // Re-test to show updated status
+        const retestResult = await apiPost<{
+          success: boolean;
+          requiredFolders: string[];
+          accounts: Array<{
+            accountId: string;
+            email: string;
+            success: boolean;
+            existing?: string[];
+            missing?: string[];
+            error?: string;
+          }>;
+        }>('/api/settings/test-folders', {})
+
+        const allExisting = new Set<string>()
+        const allMissing = new Set<string>()
+        retestResult.accounts?.forEach(account => {
+          if (account.success) {
+            account.existing?.forEach(f => allExisting.add(f))
+            account.missing?.forEach(f => allMissing.add(f))
+          }
+        })
+
+        setFolderTestResult({
+          ...retestResult,
+          existing: Array.from(allExisting),
+          missing: Array.from(allMissing)
+        })
+      } else {
+        // All folders created successfully - preferences already saved, close modal
+        success(`Created ${totalCreated} folders. Settings saved!`)
+        setFolderDialogOpen(false)
+        setFolderTestResult(null)
       }
     } catch (err) {
       error('Failed to create folders')
       console.error(err)
     } finally {
-      setIsTestingFolders(false)
+      setIsCreatingFolders(false)
     }
+  }
+
+  const handleCancelFolderDialog = () => {
+    setFolderDialogOpen(false)
+    setFolderTestResult(null)
   }
 
   return (
@@ -458,40 +519,40 @@ export default function SettingsPage() {
                   <Input
                     id="rootFolder"
                     value={folderPreferences.rootFolder}
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, rootFolder: e.target.value }))}
                     placeholder="Leave empty for root level"
-                    disabled={true}
-                    readOnly
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
                     Leave empty to create folders at the root level
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="noActionFolder">No Action Folder</Label>
                   <Input
                     id="noActionFolder"
                     value={folderPreferences.noActionFolder}
-                    placeholder="e.g., AI-No-Action"
-                    disabled={true}
-                    readOnly
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, noActionFolder: e.target.value }))}
+                    placeholder="e.g., *No Action"
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
-                    For: FYI only, large lists, unsubscribe candidates
+                    For: FYI only, large lists, unsubscribe candidates. Names starting with * appear at top.
                   </p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="spamFolder">Spam Folder</Label>
                   <Input
                     id="spamFolder"
                     value={folderPreferences.spamFolder}
-                    placeholder="e.g., AI-Spam"
-                    disabled={true}
-                    readOnly
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, spamFolder: e.target.value }))}
+                    placeholder="e.g., *Spam"
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
-                    For: emails identified as spam
+                    For: emails identified as spam. Names starting with * appear at top.
                   </p>
                 </div>
 
@@ -500,92 +561,21 @@ export default function SettingsPage() {
                   <Input
                     id="todoFolder"
                     value={folderPreferences.todoFolder}
-                    placeholder="t2j-todo"
-                    disabled={true}
-                    readOnly
+                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, todoFolder: e.target.value }))}
+                    placeholder="e.g., *Todo"
+                    disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
-                    For: action items requiring external action (no email response needed)
+                    For: action items requiring external action (no email response needed). Names starting with * appear at top.
                   </p>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={handleTestFolders}
-                    disabled={isTestingFolders || isLoading}
-                  >
-                    {isTestingFolders ? 'Testing...' : 'Test Folders'}
-                  </Button>
-                </div>
-                
-                {folderTestResult && (
-                  <div className="mt-4 p-4 bg-muted rounded-md">
-                    <h4 className="font-medium mb-3">Folder Test Results</h4>
-                    
-                    {/* Required Folders */}
-                    <div className="mb-4">
-                      <span className="font-medium text-sm">Required Folders:</span>
-                      <ul className="list-disc list-inside mt-1 text-sm text-muted-foreground">
-                        {folderTestResult.requiredFolders?.map((folder: string) => (
-                          <li key={folder}>{folder || 'Root Level'}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    {/* Per-Account Results */}
-                    <div className="space-y-3">
-                      <span className="font-medium text-sm">Account Status:</span>
-                      {folderTestResult.accounts?.map((account) => (
-                        <div key={account.accountId} className="border-l-2 border-muted-foreground/20 pl-3 ml-2">
-                          <div className="font-medium text-sm mb-1">{account.email}</div>
-                          
-                          {account.success ? (
-                            <div className="space-y-1 text-xs">
-                              {account.existing && account.existing.length > 0 && (
-                                <div className="text-green-600">
-                                  ✓ Existing: {account.existing.join(', ')}
-                                </div>
-                              )}
-                              {account.missing && account.missing.length > 0 && (
-                                <div className="text-orange-600">
-                                  ⚠ Missing: {account.missing.join(', ')}
-                                </div>
-                              )}
-                              {account.existing && folderTestResult.requiredFolders && 
-                               account.existing.length === folderTestResult.requiredFolders.length && (
-                                <div className="text-green-600">
-                                  ✓ All folders exist
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-red-600">
-                              ✗ Error: {account.error || 'Connection failed'}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {/* Create Missing Folders Button */}
-                    {folderTestResult.missing && folderTestResult.missing.length > 0 && (
-                      <div className="mt-4 pt-3 border-t border-muted-foreground/20">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={handleCreateFolders}
-                          disabled={isTestingFolders}
-                          className="w-full"
-                        >
-                          Create All Missing Folders
-                        </Button>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          This will create missing folders on all connected accounts
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <Button
+                  onClick={handleSaveFolderSettings}
+                  disabled={isTestingFolders || isLoading}
+                >
+                  {isTestingFolders ? 'Verifying...' : 'Save Folder Settings'}
+                </Button>
               </CardContent>
             </Card>
             </TabsContent>
@@ -628,6 +618,80 @@ export default function SettingsPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Folder Verification Dialog */}
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Folder Verification</DialogTitle>
+            <DialogDescription>
+              {folderTestResult?.missing && folderTestResult.missing.length > 0
+                ? 'Some folders need to be created on your email accounts.'
+                : 'There were issues connecting to some accounts.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {folderTestResult && (
+            <div className="space-y-4">
+              {/* Required Folders */}
+              <div>
+                <span className="font-medium text-sm">Required Folders:</span>
+                <ul className="list-disc list-inside mt-1 text-sm text-muted-foreground">
+                  {folderTestResult.requiredFolders?.map((folder: string) => (
+                    <li key={folder}>{folder || 'Root Level'}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Per-Account Results */}
+              <div className="space-y-3">
+                <span className="font-medium text-sm">Account Status:</span>
+                {folderTestResult.accounts?.map((account) => (
+                  <div key={account.accountId} className="border-l-2 border-muted-foreground/20 pl-3 ml-2">
+                    <div className="font-medium text-sm mb-1">{account.email}</div>
+
+                    {account.success ? (
+                      <div className="space-y-1 text-xs">
+                        {account.existing && account.existing.length > 0 && (
+                          <div className="text-green-600">
+                            ✓ Existing: {account.existing.join(', ')}
+                          </div>
+                        )}
+                        {account.missing && account.missing.length > 0 && (
+                          <div className="text-orange-600">
+                            ⚠ Missing: {account.missing.join(', ')}
+                          </div>
+                        )}
+                        {account.existing && folderTestResult.requiredFolders &&
+                         account.existing.length === folderTestResult.requiredFolders.length && (
+                          <div className="text-green-600">
+                            ✓ All folders exist
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-red-600">
+                        ✗ Error: {account.error || 'Connection failed'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleCancelFolderDialog}>
+              Cancel
+            </Button>
+            {folderTestResult?.missing && folderTestResult.missing.length > 0 && (
+              <Button onClick={handleCreateFoldersInModal} disabled={isCreatingFolders}>
+                {isCreatingFolders ? 'Creating...' : 'Create Missing Folders'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   )
 }

@@ -14,10 +14,11 @@ export class TypedNameRemover {
    */
   async removeTypedName(text: string, userId: string): Promise<TypedNameRemovalResult> {
     try {
-      // Get user's typed name preferences
-      const preferences = await preferencesService.getTypedNamePreferences(userId);
+      // Get user's preferences (single call returns all preferences)
+      const prefs = await preferencesService.getPreferences(userId);
+      const typedNamePrefs = prefs.typedName;
 
-      if (!preferences) {
+      if (!typedNamePrefs) {
         // No preferences set, return text as-is
         return {
           cleanedText: text,
@@ -26,7 +27,7 @@ export class TypedNameRemover {
         };
       }
 
-      const removalRegex = preferences.removalRegex;
+      const removalRegex = typedNamePrefs.removalRegex;
 
       if (!removalRegex) {
         // No removal regex configured
@@ -94,13 +95,13 @@ export class TypedNameRemover {
    */
   async getTypedNameAppend(userId: string): Promise<string | null> {
     try {
-      const preferences = await preferencesService.getTypedNamePreferences(userId);
+      const prefs = await preferencesService.getPreferences(userId);
 
-      if (!preferences?.appendString) {
+      if (!prefs.typedName?.appendString) {
         return null;
       }
 
-      return preferences.appendString;
+      return prefs.typedName.appendString;
     } catch (error: unknown) {
       console.error('Error getting typed name append:', error);
       return null;

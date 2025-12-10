@@ -65,8 +65,9 @@ export class RelationshipDetector {
       return this.configCache.get(userId)!;
     }
 
-    // Fetch from preferences service
-    const config = await preferencesService.getRelationshipConfig(userId);
+    // Fetch from preferences service (single call returns all preferences)
+    const prefs = await preferencesService.getPreferences(userId);
+    const config = prefs.relationshipConfig;
 
     // Cache it
     this.configCache.set(userId, config);
