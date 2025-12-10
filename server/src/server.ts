@@ -91,13 +91,22 @@ app.all('/api/auth/*', toNodeHandler(auth));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
-app.get('/health', (_req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
+// Health check endpoint (used by Render for deployment validation)
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  } catch {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: 'database connection failed',
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // Import and re-export auth middleware
