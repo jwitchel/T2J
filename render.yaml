@@ -75,11 +75,11 @@ services:
   # Redis (for BullMQ)
   - type: redis
     name: t2j-redis
-    plan: starter
+    plan: free
     maxmemoryPolicy: noeviction
     ipAllowList: []  # Allow connections from all Render services
 
 databases:
   - name: t2j-db
-    plan: starter
-    postgresMajorVersion: "15"
+    plan: basic-256mb
+    postgresMajorVersion: "16"
