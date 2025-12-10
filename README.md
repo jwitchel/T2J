@@ -279,6 +279,20 @@ View all components at http://localhost:3001/components-test
 
 See [docs/FEATURES.md](docs/FEATURES.md) for complete reference.
 
+## 🚀 Production Deployment (Render)
+
+The project is configured for deployment on [Render](https://render.com) via `render.yaml`.
+
+**Required secrets (check password manager for values):**
+- `BETTER_AUTH_SECRET`
+- `ENCRYPTION_KEY`
+
+To deploy:
+1. Connect repo to Render
+2. Import as Blueprint
+3. Set secret values from password manager
+4. Deploy
+
 ## 🔌 Real-time Features
 
 ### WebSocket Integration

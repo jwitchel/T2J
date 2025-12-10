@@ -21,10 +21,10 @@ services:
   - type: web
     name: t2j-api
     runtime: node
-    rootDir: ./server
+    rootDir: ./
     buildCommand: npm ci && npm run server:build
-    startCommand: node dist/server.js
-    preDeployCommand: node ../db/migrate.js
+    startCommand: node server/dist/server.js
+    preDeployCommand: node db/migrate.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -53,9 +53,9 @@ services:
   - type: worker
     name: t2j-workers
     runtime: node
-    rootDir: ./server
+    rootDir: ./
     buildCommand: npm ci && npm run server:build
-    startCommand: node dist/scripts/start-workers.js
+    startCommand: node server/dist/scripts/start-workers.js
     envVars:
       - key: NODE_ENV
         value: production
