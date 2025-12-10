@@ -16,6 +16,7 @@ import { simpleParser } from 'mailparser';
 import { PoolClient } from 'pg';
 import { EmailActionRouter } from '../email-action-router';
 import { EmailRepository } from '../repositories/email-repository';
+import { preferencesService } from '../preferences-service';
 
 // Constants
 const DEFAULT_SOURCE_FOLDER = 'INBOX';
@@ -194,17 +195,11 @@ export class InboxProcessor {
     context: ProcessingContext,
     draft: DraftEmail
   ): Promise<string> {
-    // Fetch user preferences to determine folder routing
-    const userResult = await pool.query(
-      'SELECT preferences FROM "user" WHERE id = $1',
-      [context.userId]
-    );
-    const preferences = userResult.rows[0]?.preferences;
-    const folderPrefs = preferences.folderPreferences;
-    const draftsFolderPath = folderPrefs?.draftsFolderPath;
+    // Fetch user folder preferences
+    const folderPrefs = await preferencesService.getFolderPreferences(context.userId);
 
     // Create router and get destination
-    const actionRouter = new EmailActionRouter(folderPrefs, draftsFolderPath);
+    const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);
     const routeResult = actionRouter.getActionRoute(draft.meta.recommendedAction as any);
 
     return routeResult.folder;

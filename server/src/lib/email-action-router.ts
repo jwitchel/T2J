@@ -33,11 +33,11 @@ export class EmailActionRouter {
 
   constructor(preferences?: Partial<FolderPreferences>, draftsFolderPath?: string) {
     this.folderPrefs = {
-      rootFolder: preferences?.rootFolder !== undefined ? preferences.rootFolder : EmailActionRouter.DEFAULT_ROOT_FOLDER,
-      draftsFolderPath: preferences?.draftsFolderPath || EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
-      noActionFolder: preferences?.noActionFolder || EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
-      spamFolder: preferences?.spamFolder || EmailActionRouter.DEFAULT_SPAM_FOLDER,
-      todoFolder: preferences?.todoFolder || EmailActionRouter.DEFAULT_TODO_FOLDER
+      rootFolder: preferences?.rootFolder ?? EmailActionRouter.DEFAULT_ROOT_FOLDER,
+      draftsFolderPath: preferences?.draftsFolderPath ?? EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
+      noActionFolder: preferences?.noActionFolder ?? EmailActionRouter.DEFAULT_NO_ACTION_FOLDER,
+      spamFolder: preferences?.spamFolder ?? EmailActionRouter.DEFAULT_SPAM_FOLDER,
+      todoFolder: preferences?.todoFolder ?? EmailActionRouter.DEFAULT_TODO_FOLDER
     };
     this.draftsFolderPath = draftsFolderPath;
   }

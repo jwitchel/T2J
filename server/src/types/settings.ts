@@ -9,8 +9,9 @@ export interface FolderPreferences {
 }
 
 export interface TypedNamePreferences {
-  appendToName: boolean;
-  appendString: string;
+  appendToName?: boolean;
+  appendString?: string;
+  removalRegex?: string;
 }
 
 export interface UserPreferences {
@@ -19,5 +20,30 @@ export interface UserPreferences {
   signatureBlock?: string;
   folderPreferences?: FolderPreferences;
   typedName?: TypedNamePreferences;
-  // Add other preference types as needed
+  sentFolder?: string;
+  workDomainsCSV?: string;
+  familyEmailsCSV?: string;
+  spouseEmailsCSV?: string;
+}
+
+// Request/response types for profile updates
+export interface ProfileUpdateRequest {
+  name?: string;
+  nicknames?: string;
+  signatureBlock?: string;
+  workDomainsCSV?: string;
+  familyEmailsCSV?: string;
+  spouseEmailsCSV?: string;
+}
+
+export interface ProfileUpdateResult {
+  preferences: UserPreferences;
+  domainSettingsChanged: boolean;
+}
+
+// Parsed relationship configuration (from CSV fields)
+export interface RelationshipConfig {
+  workDomains: string[];
+  familyEmails: string[];
+  spouseEmails: string[];
 }

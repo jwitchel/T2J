@@ -13,6 +13,7 @@ import { EmailActionRouter } from '../email-action-router';
 import { LLMMetadata } from '../llm-client';
 import { EmailActionType } from '../../types/email-action-tracking';
 import { EmailRepository } from '../repositories/email-repository';
+import { preferencesService } from '../preferences-service';
 
 // Helper function to create RFC2822 formatted email using nodemailer
 async function createEmailMessage(
@@ -148,14 +149,8 @@ export class EmailMover {
       const fromEmail = accountResult.rows[0].email_address;
 
       // Get user's folder preferences
-      const userResult = await pool.query(
-        'SELECT preferences FROM "user" WHERE id = $1',
-        [userId]
-      );
-      const preferences = userResult.rows[0]?.preferences;
-      const folderPrefs = preferences.folderPreferences;
-
-      const draftsFolderPath = folderPrefs.draftsFolderPath as string;
+      const folderPrefs = await preferencesService.getFolderPreferences(userId);
+      const draftsFolderPath = folderPrefs.draftsFolderPath;
 
       await withImapContext(emailAccountId, userId, async () => {
         // Create IMAP operations instance (connection managed by context)
@@ -210,17 +205,11 @@ export class EmailMover {
     } = params;
 
     try {
-      // Get user's folder preferences (trust caller validated inputs)
-      const userResult = await pool.query(
-        'SELECT preferences FROM "user" WHERE id = $1',
-        [userId]
-      );
-      const preferences = userResult.rows[0]?.preferences;
-      const folderPrefs = preferences.folderPreferences;
-      const draftsFolderPath = folderPrefs?.draftsFolderPath;
+      // Get user's folder preferences
+      const folderPrefs = await preferencesService.getFolderPreferences(userId);
 
       // Resolve destination folder and flags
-      const actionRouter = new EmailActionRouter(folderPrefs, draftsFolderPath);
+      const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);
       const routeResult = actionRouter.getActionRoute(recommendedAction as any);
 
       await withImapContext(emailAccountId, userId, async () => {

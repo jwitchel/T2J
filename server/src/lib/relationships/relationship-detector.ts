@@ -5,6 +5,8 @@ import { pool } from '../db';
 import { NameExtractor } from '../utils/name-extractor';
 import { PersonCache } from './person-cache';
 import { RelationshipType } from './types';
+import { RelationshipConfig } from '../../types/settings';
+import { preferencesService } from '../preferences-service';
 
 // Re-export for backwards compatibility
 export { RelationshipType }
@@ -21,12 +23,6 @@ export interface DetectRelationshipParams {
     hasProfessionalMarkers: boolean;
     formalityScore: number;
   };
-}
-
-interface RelationshipConfig {
-  workDomains: string[];
-  familyEmails: string[];
-  spouseEmails: string[];
 }
 
 export class RelationshipDetector {
@@ -69,33 +65,12 @@ export class RelationshipDetector {
       return this.configCache.get(userId)!;
     }
 
-    // Fetch from database
-    const result = await pool.query(
-      `SELECT preferences FROM "user" WHERE id = $1`,
-      [userId]
-    );
-
-    const preferences = result.rows[0]?.preferences;
-    const config: RelationshipConfig = {
-      workDomains: this._parseCSV(preferences.workDomainsCSV),
-      familyEmails: this._parseCSV(preferences.familyEmailsCSV),
-      spouseEmails: this._parseCSV(preferences.spouseEmailsCSV)
-    };
+    // Fetch from preferences service
+    const config = await preferencesService.getRelationshipConfig(userId);
 
     // Cache it
     this.configCache.set(userId, config);
     return config;
-  }
-
-  /**
-   * Parse CSV string into array of normalized values
-   */
-  private _parseCSV(csv: string): string[] {
-    if (!csv || csv.trim().length === 0) return [];
-    return csv
-      .split(',')
-      .map(item => item.trim().toLowerCase())
-      .filter(item => item.length > 0);
   }
 
   /**

@@ -25,7 +25,7 @@ export class EmailProcessor {
 
   constructor(pool: Pool) {
     this.signatureDetector = new RegexSignatureDetector(pool);
-    this.typedNameRemover = new TypedNameRemover(pool);
+    this.typedNameRemover = new TypedNameRemover();
   }
 
   /**

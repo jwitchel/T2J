@@ -308,7 +308,7 @@ export class DraftGenerator {
    * @private
    */
   private async _removeTypedName(body: string, userId: string): Promise<string> {
-    const typedNameRemover = new TypedNameRemover(pool);
+    const typedNameRemover = new TypedNameRemover();
     const cleaned = await typedNameRemover.removeTypedName(body, userId);
     return cleaned.cleanedText;
   }

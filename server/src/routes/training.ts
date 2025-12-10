@@ -9,6 +9,7 @@ import { pool } from '../lib/db';
 import { emailStorageService } from '../lib/email-storage-service';
 import { vectorSearchService } from '../lib/vector';
 import { EmailDirection } from '../types/email-action-tracking';
+import { preferencesService } from '../lib/preferences-service';
 
 const router = express.Router();
 
@@ -43,8 +44,11 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       });
 
     // Get user's configured sent folder from preferences
-      const userResult = await pool.query('SELECT preferences FROM "user" WHERE id = $1', [userId]);
-      const sentFolder = userResult.rows[0]!.preferences.sentFolder;
+      const sentFolder = await preferencesService.getSentFolder(userId);
+      if (!sentFolder) {
+        res.status(400).json({ error: 'Sent folder not configured. Please configure it in settings.' });
+        return;
+      }
 
 
       // Search in the configured sent folder

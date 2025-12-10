@@ -17,7 +17,7 @@ async function diagnoseDuplicateSignature() {
     connectionString: process.env.DATABASE_URL,
   });
 
-  const typedNameRemover = new TypedNameRemover(pool);
+  const typedNameRemover = new TypedNameRemover();
 
   // Get user with typed name configured
   const userResult = await pool.query(
