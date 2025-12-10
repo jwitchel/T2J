@@ -10,10 +10,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          name: t2j-api
-          type: web
-          property: hostport
+        value: https://t2j-api.onrender.com
     healthCheckPath: /
     autoDeploy: true
 
@@ -42,12 +39,9 @@ services:
       - key: ENCRYPTION_KEY
         sync: false
       - key: FRONTEND_URL
-        fromService:
-          name: t2j-frontend
-          type: web
-          property: hostport
+        value: https://t2j-frontend.onrender.com
       - key: TRUSTED_ORIGINS
-        sync: false  # Set to frontend URL in dashboard
+        value: https://t2j-frontend.onrender.com
     healthCheckPath: /health
     autoDeploy: true
 
