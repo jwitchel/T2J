@@ -23,10 +23,22 @@ const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day
+    cookieCache: {
+      enabled: true,
+      maxAge: 60 * 5, // 5 minutes
+    },
   },
   advanced: {
     database: {
       generateId: () => crypto.randomUUID(),
+    },
+    crossSubDomainCookies: {
+      enabled: process.env.NODE_ENV === 'production',
+    },
+    defaultCookieAttributes: {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      httpOnly: true,
     },
   },
   databaseHooks: {

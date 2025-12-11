@@ -40,6 +40,8 @@ services:
         sync: false
       - key: FRONTEND_URL
         value: https://t2j-frontend.onrender.com
+      - key: BACKEND_URL
+        value: https://t2j-api.onrender.com
       - key: TRUSTED_ORIGINS
         value: https://t2j-frontend.onrender.com
     healthCheckPath: /health

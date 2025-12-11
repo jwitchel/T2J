@@ -2,8 +2,8 @@
 -- This index speeds up filtered queries that search by user_id and sort by sent_date
 -- with the additional WHERE clause for non-null semantic_vector
 
--- Create index concurrently to avoid locking the table during creation
-CREATE INDEX IF NOT EXISTS CONCURRENTLY IF NOT EXISTS idx_email_sent_user_vectors_date
+-- Create index for optimized vector search queries
+CREATE INDEX IF NOT EXISTS idx_email_sent_user_vectors_date
 ON email_sent (user_id, sent_date DESC)
 WHERE semantic_vector IS NOT NULL;
 
