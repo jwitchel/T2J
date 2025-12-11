@@ -3,10 +3,11 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PublicNavbar } from '@/components/public-navbar'
+import { Footer } from '@/components/footer'
 
 export default function Home() {
   const { user, loading } = useAuth()
@@ -27,32 +28,10 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <Image 
-              src="/logo.png" 
-              alt="AI Email Assistant Logo" 
-              width={40} 
-              height={40}
-              className="object-contain logo-rotate"
-              style={{ width: '40px', height: '40px' }}
-            />
-            <h1 className="text-2xl font-bold">AI Email Assistant</h1>
-          </div>
-          <div className="flex gap-4">
-            <Button asChild variant="ghost">
-              <Link href="/signin">Sign In</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/signup">Sign Up</Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background flex flex-col">
+      <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16">
+      <main className="container mx-auto px-4 py-16 flex-1">
         <div className="max-w-4xl mx-auto text-center mb-16">
           <h2 className="text-5xl font-bold mb-6">
             AI-Powered Email Reply Drafts
@@ -103,6 +82,8 @@ export default function Home() {
           </Card>
         </div>
       </main>
+
+      <Footer />
     </div>
   )
 }

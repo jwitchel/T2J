@@ -38,6 +38,10 @@ services:
         sync: false
       - key: ENCRYPTION_KEY
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       - key: FRONTEND_URL
         value: https://t2j-frontend.onrender.com
       - key: BACKEND_URL

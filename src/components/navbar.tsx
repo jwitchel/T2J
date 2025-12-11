@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
@@ -27,17 +26,12 @@ import {
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { apiGet } from '@/lib/api'
+import { BrandLogo } from '@/components/brand-logo'
 
 export function Navbar() {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const [displayName, setDisplayName] = useState<string>('')
-
-  // Rotating words and colors for "Time to Just ___"
-  const words = ['Think', 'Breathe', 'Work', 'Plan', 'Ride', 'Run', 'Smile', 'Relax', 'Center', 'Spin', 'Walk', 'Sleep', 'Stretch', 'Move', 'Laugh', 'Make', 'Build', 'Design', 'Paint', 'Sketch']
-  const colors = ['#93c5fd', '#a5b4fc', '#c4b5fd', '#f9a8d4', '#fdba74', '#fcd34d', '#86efac', '#67e8f9', '#94a3b8']
-  const [wordIndex, setWordIndex] = useState(0)
-  const [isVisible, setIsVisible] = useState(true)
 
   useEffect(() => {
     const loadUserPreferences = async () => {
@@ -61,22 +55,6 @@ export function Navbar() {
     loadUserPreferences()
   }, [user])
 
-  // Rotate words with fade effect
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Fade out
-      setIsVisible(false)
-
-      // After fade out, change word and fade in
-      setTimeout(() => {
-        setWordIndex((prev) => (prev + 1) % words.length)
-        setIsVisible(true)
-      }, 5000) // Match this with CSS transition duration
-    }, 15000) // Change word every 15 seconds
-
-    return () => clearInterval(interval)
-  }, [words.length])
-
   if (!user) return null
 
   const isActive = (path: string) => pathname === path
@@ -93,39 +71,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo/Brand and Main Navigation */}
           <div className="flex items-center space-x-12">
-            <Link href="/dashboard" className="flex items-center space-x-3">
-              <Image
-                src="/logo.png"
-                alt="Time to Just Logo"
-                width={32}
-                height={32}
-                className="object-contain logo-rotate"
-                style={{ width: '32px', height: '32px' }}
-              />
-              <span className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
-                Time to Just{' '}
-                <span
-                  style={{
-                    display: 'inline-block',
-                    minWidth: '80px',
-                    borderBottom: '2px solid #000',
-                    paddingBottom: '0',
-                    marginBottom: '-2px',
-                    verticalAlign: 'baseline',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: colors[wordIndex % colors.length],
-                      opacity: isVisible ? 1 : 0,
-                      transition: 'opacity 5s linear',
-                    }}
-                  >
-                    {words[wordIndex]}
-                  </span>
-                </span>
-              </span>
-            </Link>
+            <BrandLogo href="/dashboard" size="md" />
 
             {/* Main Navigation */}
             <div className="hidden md:flex items-center space-x-1 ml-4">

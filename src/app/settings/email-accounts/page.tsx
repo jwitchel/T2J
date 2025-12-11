@@ -13,9 +13,10 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Mail, Server, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Mail, Server, Eye, EyeOff, Info } from 'lucide-react'
 import { EmailAccountResponse } from '@/types/email-account'
 import { FcGoogle } from 'react-icons/fc'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -550,29 +551,44 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
           </div>
         </div>
 
-        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-          <h4 className="text-sm font-semibold mb-2">Manual Connection Settings</h4>
-          <div className="space-y-2 text-sm">
-            <div>
-              <span className="font-medium">Gmail:</span>
-              <span className="text-muted-foreground"> Server: imap.gmail.com, Port: 993, Secure: Yes</span>
-              <span className="text-blue-600 dark:text-blue-400 block text-xs mt-1">
-                Requires app-specific password. <a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener noreferrer" className="underline">Learn how</a>
-              </span>
-            </div>
-            <div>
-              <span className="font-medium">Outlook/Hotmail:</span>
-              <span className="text-muted-foreground"> Server: outlook.office365.com, Port: 993, Secure: Yes</span>
-            </div>
-            <div>
-              <span className="font-medium">Yahoo:</span>
-              <span className="text-muted-foreground"> Server: imap.mail.yahoo.com, Port: 993, Secure: Yes</span>
-            </div>
-            <div>
-              <span className="font-medium">iCloud:</span>
-              <span className="text-muted-foreground"> Server: imap.mail.me.com, Port: 993, Secure: Yes</span>
-            </div>
-          </div>
+        <div className="mb-6 flex justify-center">
+          <Dialog>
+            <DialogTrigger asChild>
+              <button className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                <Info className="h-4 w-4" />
+                Manual connection settings
+              </button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Manual Connection Settings</DialogTitle>
+                <DialogDescription>
+                  IMAP server settings for common email providers
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <span className="font-medium">Gmail:</span>
+                  <span className="text-muted-foreground"> Server: imap.gmail.com, Port: 993, Secure: Yes</span>
+                  <span className="text-blue-600 dark:text-blue-400 block text-xs mt-1">
+                    Requires app-specific password. <a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener noreferrer" className="underline">Learn how</a>
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium">Outlook/Hotmail:</span>
+                  <span className="text-muted-foreground"> Server: outlook.office365.com, Port: 993, Secure: Yes</span>
+                </div>
+                <div>
+                  <span className="font-medium">Yahoo:</span>
+                  <span className="text-muted-foreground"> Server: imap.mail.yahoo.com, Port: 993, Secure: Yes</span>
+                </div>
+                <div>
+                  <span className="font-medium">iCloud:</span>
+                  <span className="text-muted-foreground"> Server: imap.mail.me.com, Port: 993, Secure: Yes</span>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
         
         <Form {...form}>

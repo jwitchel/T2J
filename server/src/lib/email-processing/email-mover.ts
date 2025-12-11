@@ -32,7 +32,7 @@ async function createEmailMessage(
     buffer: true
   });
 
-  const messageId = `<${uuidv4()}@ai-email-assistant>`;
+  const messageId = `<${uuidv4()}@t2j.com>`;
 
   const mailOptions: nodemailer.SendMailOptions = {
     from,

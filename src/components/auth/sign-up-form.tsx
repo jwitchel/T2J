@@ -60,12 +60,12 @@ export function SignUpForm() {
         <div className="flex flex-col items-center space-y-3">
           <Image
             src="/logo.png"
-            alt="AI Email Assistant Logo"
+            alt="Time to Just Logo"
             width={48}
             height={48}
             className="object-contain logo-rotate"
           />
-          <h1 className="text-2xl font-bold">AI Email Assistant</h1>
+          <h1 className="text-2xl font-bold">Time to Just</h1>
         </div>
         <CardTitle>Create Account</CardTitle>
         <CardDescription>
