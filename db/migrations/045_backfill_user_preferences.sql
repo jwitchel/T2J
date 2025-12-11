@@ -6,7 +6,7 @@ SET preferences = jsonb_set(
   jsonb_set(
     COALESCE(preferences, '{}'),
     '{folderPreferences}',
-    '{"rootFolder": "AIMailbox", "draftsFolderPath": "Drafts", "noActionFolder": "NoAction", "spamFolder": "Spam", "todoFolder": "Todo"}'::jsonb
+    '{"rootFolder": "", "draftsFolderPath": "Drafts", "noActionFolder": "NoAction", "spamFolder": "Spam", "todoFolder": "Todo"}'::jsonb
   ),
   '{actionPreferences}',
   '{"spamDetection": true, "silentActions": {"silent-fyi-only": true, "silent-large-list": true, "silent-unsubscribe": true, "silent-todo": true}, "draftGeneration": true}'::jsonb
