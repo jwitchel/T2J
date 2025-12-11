@@ -48,6 +48,14 @@ services:
         value: https://t2j-api.onrender.com
       - key: TRUSTED_ORIGINS
         value: https://t2j-frontend.onrender.com
+      - key: OAUTH_REDIRECT_URI
+        value: https://t2j-api.onrender.com/api/oauth-direct/callback
+      - key: OAUTH_COMPLETE_REDIRECT_URI
+        value: https://t2j-frontend.onrender.com/settings/email-accounts/oauth-complete
+      - key: OAUTH_ERROR_REDIRECT_URI
+        value: https://t2j-frontend.onrender.com/settings/email-accounts
+      - key: OAUTH_CALLBACK_URI
+        value: https://t2j-frontend.onrender.com/settings/email-accounts/oauth-callback
     healthCheckPath: /health
     autoDeploy: true
 
