@@ -4,6 +4,7 @@ import { pool } from '../lib/db';
 import { encrypt } from '../lib/crypto';
 import { ImapOperations } from '../lib/imap-operations';
 import { withImapContext } from '../lib/imap-context';
+import { IMAP_HOSTS, detectSentFolder } from './email-accounts';
 
 const router = express.Router();
 
@@ -87,15 +88,15 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
       );
     } else {
       // Create new email account with OAuth
-      const imapHost = provider === 'google' ? 'imap.gmail.com' : '';
+      const imapHost = provider === 'google' ? IMAP_HOSTS.GMAIL : '';
       const imapPort = 993;
 
       await client.query(
         `INSERT INTO email_accounts
          (user_id, email_address, imap_host, imap_port, imap_username,
           oauth_provider, oauth_refresh_token, oauth_access_token,
-          oauth_token_expires_at, oauth_user_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          oauth_token_expires_at, oauth_user_id, sent_folder)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           userId,
           email,
@@ -106,7 +107,8 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
           refreshToken ? encrypt(refreshToken) : null,
           encrypt(accessToken),
           expiresAt,
-          oauthUserId
+          oauthUserId,
+          detectSentFolder(imapHost)
         ]
       );
     }

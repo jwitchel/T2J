@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import { pool } from '../lib/db';
 import { encrypt } from '../lib/crypto';
 import crypto from 'crypto';
+import { detectSentFolder, IMAP_HOSTS } from './email-accounts';
 
 const router = express.Router();
 
@@ -235,19 +236,20 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
         `INSERT INTO email_accounts
          (user_id, email_address, imap_host, imap_port, imap_username,
           oauth_provider, oauth_refresh_token, oauth_access_token,
-          oauth_token_expires_at, oauth_user_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          oauth_token_expires_at, oauth_user_id, sent_folder)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           userId,
           session.email,
-          'imap.gmail.com',
+          IMAP_HOSTS.GMAIL,
           993,
           session.email,
           'google',
           session.refresh_token,
           session.access_token,
           expiresAt,
-          session.email
+          session.email,
+          detectSentFolder(IMAP_HOSTS.GMAIL)
         ]
       );
     }

@@ -18,6 +18,7 @@ export interface EmailAccountConfig {
   imapUsername: string;
   imapPasswordEncrypted?: string;
   imapSecure?: boolean;
+  sentFolder: string;
   oauthProvider?: string;
   oauthRefreshToken?: string;
   oauthAccessToken?: string;
@@ -66,20 +67,24 @@ export interface SearchCriteria {
 }
 
 export class ImapOperations {
-  private account: EmailAccountConfig;
+  private _account: EmailAccountConfig;
   private connection: ImapConnection | null = null;
 
   constructor(account: EmailAccountConfig) {
-    this.account = account;
+    this._account = account;
+  }
+
+  get account(): EmailAccountConfig {
+    return this._account;
   }
 
   static async fromAccountId(accountId: string, userId: string): Promise<ImapOperations> {
     const result = await pool.query(
-      `SELECT id, user_id, email_address, imap_host, imap_port, 
-              imap_username, imap_password_encrypted,
+      `SELECT id, user_id, email_address, imap_host, imap_port,
+              imap_username, imap_password_encrypted, sent_folder,
               oauth_provider, oauth_refresh_token, oauth_access_token,
               oauth_token_expires_at
-       FROM email_accounts 
+       FROM email_accounts
        WHERE id = $1 AND user_id = $2`,
       [accountId, userId]
     );
@@ -98,6 +103,7 @@ export class ImapOperations {
       imapUsername: row.imap_username,
       imapPasswordEncrypted: row.imap_password_encrypted,
       imapSecure: row.imap_port === 993 || row.imap_port === 995,
+      sentFolder: row.sent_folder,
       oauthProvider: row.oauth_provider,
       oauthRefreshToken: row.oauth_refresh_token,
       oauthAccessToken: row.oauth_access_token,
@@ -111,7 +117,7 @@ export class ImapOperations {
    * Get Redis key for storing last processed UID
    */
   private _getLastUidKey(folderName: string): string {
-    return `imap:last_uid:${this.account.id}:${folderName}`;
+    return `imap:last_uid:${this._account.id}:${folderName}`;
   }
 
   /**
@@ -134,44 +140,44 @@ export class ImapOperations {
   private async _getConnection(): Promise<ImapConnection> {
     // Prefer context-managed connection if present
     const ctx = getActiveContext();
-    if (ctx && ctx.userId === this.account.userId && ctx.accountId === this.account.id && ctx.connection && ctx.connection.isConnected()) {
+    if (ctx && ctx.userId === this._account.userId && ctx.accountId === this._account.id && ctx.connection && ctx.connection.isConnected()) {
       return ctx.connection;
     }
 
     if (!this.connection) {
       let config: any = {
-        user: this.account.imapUsername,
-        host: this.account.imapHost,
-        port: this.account.imapPort,
-        tls: this.account.imapSecure
+        user: this._account.imapUsername,
+        host: this._account.imapHost,
+        port: this._account.imapPort,
+        tls: this._account.imapSecure
       };
 
       // Use OAuth2 if available
-      if (this.account.oauthProvider && this.account.oauthAccessToken) {
-        let accessToken = decrypt(this.account.oauthAccessToken);
+      if (this._account.oauthProvider && this._account.oauthAccessToken) {
+        let accessToken = decrypt(this._account.oauthAccessToken);
         
         // Check if token needs refresh
-        if (this.account.oauthTokenExpiresAt && 
-            OAuthTokenService.needsRefresh(this.account.oauthTokenExpiresAt)) {
-          if (!this.account.oauthRefreshToken) {
+        if (this._account.oauthTokenExpiresAt && 
+            OAuthTokenService.needsRefresh(this._account.oauthTokenExpiresAt)) {
+          if (!this._account.oauthRefreshToken) {
             throw new ImapConnectionError('OAuth refresh token not available', 'AUTH_REFRESH_TOKEN_MISSING');
           }
           
           try {
-            const refreshToken = decrypt(this.account.oauthRefreshToken);
+            const refreshToken = decrypt(this._account.oauthRefreshToken);
             // Use LLMClient's auto-refresh method which handles retries and errors gracefully
             const newTokens = await LLMClient.autoRefreshOAuthToken(
               refreshToken,
-              this.account.oauthProvider,
-              this.account.id
+              this._account.oauthProvider,
+              this._account.id
             );
             
             // Update the access token for this connection
             accessToken = newTokens.accessToken;
             
             // Update the account object with new token info
-            this.account.oauthAccessToken = encrypt(newTokens.accessToken);
-            this.account.oauthTokenExpiresAt = newTokens.expiresAt;
+            this._account.oauthAccessToken = encrypt(newTokens.accessToken);
+            this._account.oauthTokenExpiresAt = newTokens.expiresAt;
           } catch (error: unknown) {
             console.error('Failed to refresh OAuth token:', error);
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -184,16 +190,16 @@ export class ImapOperations {
 
         // Generate XOAUTH2 string with the (possibly refreshed) access token
         const xoauth2 = OAuthTokenService.generateXOAuth2Token(
-          this.account.email,
+          this._account.email,
           accessToken
         );
         
         config.xoauth2 = xoauth2;
         // Remove password field to ensure OAuth is used
         delete config.password;
-      } else if (this.account.imapPasswordEncrypted) {
+      } else if (this._account.imapPasswordEncrypted) {
         // Fall back to password authentication
-        const password = decryptPassword(this.account.imapPasswordEncrypted);
+        const password = decryptPassword(this._account.imapPasswordEncrypted);
         config.password = password;
       } else {
         throw new ImapConnectionError('No authentication method available', 'AUTH_MISSING');
@@ -201,13 +207,13 @@ export class ImapOperations {
 
       this.connection = await imapPool.getConnection(
         config,
-        this.account.userId,
-        this.account.id
+        this._account.userId,
+        this._account.id
       );
 
       // If within context for this account, register the connection so all ops reuse it
       const active = getActiveContext();
-      if (active && active.userId === this.account.userId && active.accountId === this.account.id) {
+      if (active && active.userId === this._account.userId && active.accountId === this._account.id) {
         setContextConnection(this.connection);
       }
     }
@@ -343,7 +349,7 @@ export class ImapOperations {
         }
 
         uids = await conn.search(searchCriteria);
-        console.log(`[ImapOperations] SINCE search returned ${uids.length} UIDs from ${this.account.email} ${folderName}`);
+        console.log(`[ImapOperations] SINCE search returned ${uids.length} UIDs from ${this._account.email} ${folderName}`);
       } else {
         // Standard mode: Use UID tracking for efficiency
         const lastUid = await this._getLastProcessedUid(folderName);
@@ -356,7 +362,7 @@ export class ImapOperations {
 
           // Only log if we found new emails
           if (uids.length > 0) {
-            console.log(`[ImapOperations] First run with ${lookbackMinutes}min lookback returned ${uids.length} UIDs from ${this.account.email}`);
+            console.log(`[ImapOperations] First run with ${lookbackMinutes}min lookback returned ${uids.length} UIDs from ${this._account.email}`);
           } else {
             // No emails in lookback period - get highest UID to mark first run complete
             const allUids = await conn.search([['ALL']]);
@@ -389,7 +395,7 @@ export class ImapOperations {
       // Apply pagination
       const paginatedUids = sortedUids.slice(offset, offset + limit);
 
-      console.log(`[ImapOperations] Fetching ${paginatedUids.length} messages from ${this.account.email} ${folderName} (total new: ${uids.length}, offset: ${offset})`);
+      console.log(`[ImapOperations] Fetching ${paginatedUids.length} messages from ${this._account.email} ${folderName} (total new: ${uids.length}, offset: ${offset})`);
 
       if (paginatedUids.length === 0) {
         return [];
@@ -943,11 +949,11 @@ export class ImapOperations {
 
   release(): void {
     // If running inside a managed context for this account, do not release here
-    if (hasActiveContextFor(this.account.userId, this.account.id)) {
+    if (hasActiveContextFor(this._account.userId, this._account.id)) {
       return;
     }
     if (this.connection) {
-      imapPool.releaseConnection(this.connection, this.account.userId, this.account.id);
+      imapPool.releaseConnection(this.connection, this._account.userId, this._account.id);
       this.connection = null;
     }
   }
@@ -955,7 +961,7 @@ export class ImapOperations {
   async updateLastSync(): Promise<void> {
     await pool.query(
       'UPDATE email_accounts SET last_sync = CURRENT_TIMESTAMP WHERE id = $1',
-      [this.account.id]
+      [this._account.id]
     );
   }
 

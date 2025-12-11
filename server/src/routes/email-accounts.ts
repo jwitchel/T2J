@@ -16,6 +16,30 @@ import { jobSchedulerManager, SchedulerId } from '../lib/job-scheduler-manager';
 
 const router = express.Router();
 
+// IMAP provider configuration
+export const IMAP_HOSTS = {
+  GMAIL: 'imap.gmail.com',
+  OUTLOOK: 'outlook.office365.com',
+  OUTLOOK_LEGACY: 'imap-mail.outlook.com'
+} as const;
+
+export const SENT_FOLDERS = {
+  GMAIL: '[Gmail]/Sent Mail',
+  OUTLOOK: 'Sent Items',
+  DEFAULT: 'Sent'
+} as const;
+
+// Detect sent folder based on IMAP host
+export function detectSentFolder(imapHost: string): string {
+  if (imapHost === IMAP_HOSTS.GMAIL) {
+    return SENT_FOLDERS.GMAIL;
+  }
+  if (imapHost.includes('outlook') || imapHost.includes('office365')) {
+    return SENT_FOLDERS.OUTLOOK;
+  }
+  return SENT_FOLDERS.DEFAULT;
+}
+
 // Real IMAP connection test
 async function testImapConnection(
   config: CreateEmailAccountRequest,
@@ -30,7 +54,8 @@ async function testImapConnection(
     imapPort: config.imap_port,
     imapUsername: config.imap_username,
     imapPasswordEncrypted: encryptPassword(config.imap_password),
-    imapSecure: config.imap_secure
+    imapSecure: config.imap_secure,
+    sentFolder: detectSentFolder(config.imap_host)
   };
 
   const imapOps = new ImapOperations(tempAccount);
@@ -101,7 +126,7 @@ router.get('/', requireAuth, async (req, res) => {
     
     const result = await pool.query(
       `SELECT id, email_address, imap_host, imap_port, imap_username,
-              last_sync, created_at, oauth_provider, monitoring_enabled
+              last_sync, created_at, oauth_provider, monitoring_enabled, sent_folder
        FROM email_accounts
        WHERE user_id = $1
        ORDER BY created_at DESC`,
@@ -116,6 +141,7 @@ router.get('/', requireAuth, async (req, res) => {
       imap_secure: row.imap_port === 993 || row.imap_port === 1993, // Infer from port
       imap_username: row.imap_username,
       monitoring_enabled: row.monitoring_enabled || false,
+      sent_folder: row.sent_folder,
       last_sync: row.last_sync ? row.last_sync.toISOString() : null,
       created_at: row.created_at.toISOString(),
       updated_at: row.created_at.toISOString(), // Use created_at as fallback
@@ -179,12 +205,15 @@ router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<vo
     // Encrypt password
     const encryptedPassword = encryptPassword(accountData.imap_password);
 
+    // Auto-detect sent folder based on IMAP host
+    const sentFolder = detectSentFolder(accountData.imap_host);
+
     // Insert into database
     const result = await pool.query(
       `INSERT INTO email_accounts
-       (user_id, email_address, imap_host, imap_port, imap_username, imap_password_encrypted, monitoring_enabled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, email_address, imap_host, imap_port, imap_username, monitoring_enabled, last_sync, created_at`,
+       (user_id, email_address, imap_host, imap_port, imap_username, imap_password_encrypted, monitoring_enabled, sent_folder)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, email_address, imap_host, imap_port, imap_username, monitoring_enabled, sent_folder, last_sync, created_at`,
       [
         userId,
         accountData.email_address,
@@ -192,7 +221,8 @@ router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<vo
         accountData.imap_port,
         accountData.imap_username,
         encryptedPassword,
-        accountData.monitoring_enabled || false // Default to false if not specified
+        accountData.monitoring_enabled || false, // Default to false if not specified
+        sentFolder
       ]
     );
 
@@ -213,6 +243,7 @@ router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<vo
       imap_secure: accountData.imap_secure, // Not stored in DB, return from request
       imap_username: result.rows[0].imap_username,
       monitoring_enabled: monitoringEnabled,
+      sent_folder: result.rows[0].sent_folder,
       last_sync: result.rows[0].last_sync ? result.rows[0].last_sync.toISOString() : null,
       created_at: result.rows[0].created_at.toISOString(),
       updated_at: new Date().toISOString() // Not in DB, use current time

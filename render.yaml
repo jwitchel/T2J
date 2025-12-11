@@ -42,6 +42,8 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      - key: SERVICE_TOKEN
+        sync: false
       - key: FRONTEND_URL
         value: https://t2j-frontend.onrender.com
       - key: BACKEND_URL
@@ -80,6 +82,10 @@ services:
           property: connectionString
       - key: ENCRYPTION_KEY
         sync: false
+      - key: SERVICE_TOKEN
+        sync: false
+      - key: BACKEND_URL
+        value: https://t2j-api.onrender.com
     autoDeploy: true
 
   # Redis (for BullMQ)

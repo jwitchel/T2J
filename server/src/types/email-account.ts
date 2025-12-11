@@ -16,6 +16,7 @@ export interface EmailAccountResponse {
   imap_secure: boolean;
   imap_username: string;
   monitoring_enabled?: boolean;
+  sent_folder: string;
   last_sync: string | null;
   created_at: string;
   updated_at: string;

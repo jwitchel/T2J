@@ -9,7 +9,6 @@ import { pool } from '../lib/db';
 import { emailStorageService } from '../lib/email-storage-service';
 import { vectorSearchService } from '../lib/vector';
 import { EmailDirection } from '../types/email-action-tracking';
-import { preferencesService } from '../lib/preferences-service';
 
 const router = express.Router();
 
@@ -43,13 +42,8 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       }
       });
 
-    // Get user's configured sent folder from preferences (single call returns all preferences)
-      const prefs = await preferencesService.getPreferences(userId);
-      const sentFolder = prefs.sentFolder;
-      if (!sentFolder) {
-        res.status(400).json({ error: 'Sent folder not configured. Please configure it in settings.' });
-        return;
-      }
+    // Get sent folder from email account (loaded with ImapOperations)
+      const sentFolder = imapOps!.account.sentFolder;
 
 
       // Search in the configured sent folder
