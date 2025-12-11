@@ -32,6 +32,11 @@ export function Navbar() {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const [displayName, setDisplayName] = useState<string>('')
+  const [isLocalhost, setIsLocalhost] = useState(false)
+
+  useEffect(() => {
+    setIsLocalhost(window.location.hostname === 'localhost')
+  }, [])
 
   useEffect(() => {
     const loadUserPreferences = async () => {
@@ -66,7 +71,9 @@ export function Navbar() {
   }
 
   return (
-    <nav className="bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+    <>
+      {isLocalhost && <div className="bg-red-500" style={{ height: '3px' }} />}
+      <nav className="bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo/Brand and Main Navigation */}
@@ -188,5 +195,6 @@ export function Navbar() {
         </div>
       </div>
     </nav>
+    </>
   )
 }
