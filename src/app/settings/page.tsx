@@ -173,34 +173,14 @@ export default function SettingsPage() {
         spouseEmailsCSV
       })
 
-      if (response.recategorization && response.recategorization.updated > 0) {
-        const messages: string[] = []
-        const { breakdown } = response.recategorization
+      // Update original values after successful save
+      setOriginalWorkDomainsCSV(workDomainsCSV)
+      setOriginalFamilyEmailsCSV(familyEmailsCSV)
+      setOriginalSpouseEmailsCSV(spouseEmailsCSV)
 
-        if (spouseChanged && breakdown.spouse > 0) {
-          messages.push(`${breakdown.spouse} spouse ${breakdown.spouse === 1 ? 'email' : 'emails'} updated`)
-        }
-        if (familyChanged && breakdown.family > 0) {
-          messages.push(`${breakdown.family} family ${breakdown.family === 1 ? 'email' : 'emails'} updated`)
-        }
-        if (workChanged && breakdown.colleague > 0) {
-          messages.push(`${breakdown.colleague} work ${breakdown.colleague === 1 ? 'email' : 'emails'} updated`)
-        }
-
-        setRecategorization(messages)
-
-        // Update original values after successful save
-        setOriginalWorkDomainsCSV(workDomainsCSV)
-        setOriginalFamilyEmailsCSV(familyEmailsCSV)
-        setOriginalSpouseEmailsCSV(spouseEmailsCSV)
-
-        success(`Profile updated! Re-categorized ${response.recategorization.updated} contacts.`)
+      if (spouseChanged || familyChanged || workChanged) {
+        success('Relationships updated.')
       } else {
-        // Update original values after successful save
-        setOriginalWorkDomainsCSV(workDomainsCSV)
-        setOriginalFamilyEmailsCSV(familyEmailsCSV)
-        setOriginalSpouseEmailsCSV(spouseEmailsCSV)
-
         success('Profile updated successfully')
       }
     } catch (err) {

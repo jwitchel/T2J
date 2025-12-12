@@ -245,7 +245,6 @@ export class UnifiedWebSocketServer extends EventEmitter {
           this.clients.delete(ws.userId);
         }
       }
-      console.log(`WebSocket client disconnected for user ${ws.userId}`);
     }
   }
 
@@ -308,7 +307,6 @@ export class UnifiedWebSocketServer extends EventEmitter {
       });
 
       this.wss.close(() => {
-        console.log('Unified WebSocket server closed');
         resolve();
       });
     });
