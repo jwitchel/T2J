@@ -46,6 +46,53 @@
 :root {
   --radius: 0.625rem;
 
+  /* ========================================
+     DESIGN TOKENS - Single source of truth
+     Change these values to restyle the entire app
+     ======================================== */
+
+  /* Layout */
+  --navbar-height: 64px;
+  --page-height: calc(100vh - var(--navbar-height));
+  --container-max-width: 80rem; /* max-w-7xl equivalent */
+  --container-padding: 2rem;
+
+  /* Spacing Scale */
+  --space-xs: 0.25rem;   /* 4px */
+  --space-sm: 0.5rem;    /* 8px */
+  --space-md: 1rem;      /* 16px */
+  --space-lg: 1.5rem;    /* 24px */
+  --space-xl: 2rem;      /* 32px */
+  --space-2xl: 3rem;     /* 48px */
+  --space-section: var(--space-xl);  /* Between major sections */
+  --space-group: var(--space-lg);    /* Between related items */
+  --space-item: var(--space-md);     /* Between individual items */
+
+  /* Border Radii */
+  --radius-card: var(--radius);
+  --radius-button: calc(var(--radius) - 2px);
+  --radius-input: calc(var(--radius) - 2px);
+  --radius-badge: 9999px;
+
+  /* Typography Scale */
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.875rem;   /* 30px */
+  --font-size-page-title: var(--font-size-3xl);
+  --font-size-section-title: var(--font-size-xl);
+  --font-size-card-title: var(--font-size-base);
+  --font-size-body: var(--font-size-sm);
+  --font-size-caption: var(--font-size-xs);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
   /* Custom theme additions */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -125,6 +172,7 @@
     @apply bg-background text-foreground;
   }
 }
+
 
 /* Sonner toast styles */
 [data-sonner-toast][data-type='success'] {

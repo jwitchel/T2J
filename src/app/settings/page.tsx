@@ -611,7 +611,7 @@ export default function SettingsPage() {
                     </div>
 
                     {/* Sub-toggles - indented */}
-                    <div style={{ marginLeft: '1.5rem' }} className="space-y-3">
+                    <div className="space-y-3 pl-6">
                       <div className="flex items-center justify-between">
                         <Label htmlFor="silent-fyi-only" className="font-normal">
                           FYI Only.{' '}

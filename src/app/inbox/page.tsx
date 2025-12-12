@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -53,6 +53,53 @@ interface EmailData {
   flags: string[]
   size: number
   actionTaken?: EmailActionType
+}
+
+// Shadow DOM component to isolate email HTML styles from the rest of the page
+function IsolatedEmailContent({ html }: { html: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    // Clear any existing shadow root content
+    const existing = containerRef.current.shadowRoot
+    if (existing) {
+      existing.innerHTML = ''
+    }
+
+    // Create shadow root if it doesn't exist
+    const shadowRoot = existing || containerRef.current.attachShadow({ mode: 'open' })
+
+    // Add base styles for the shadow DOM content
+    const styles = `
+      <style>
+        :host {
+          display: block;
+          text-align: left;
+        }
+        * {
+          font-family: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+        }
+        img {
+          max-width: 100%;
+          height: auto;
+        }
+        a {
+          color: #6366f1;
+          text-decoration: underline;
+        }
+        table {
+          border-collapse: collapse;
+          max-width: 100%;
+        }
+      </style>
+    `
+
+    shadowRoot.innerHTML = styles + html
+  }, [html])
+
+  return <div ref={containerRef} className="email-shadow-container" />
 }
 
 function InboxContent() {
@@ -379,15 +426,10 @@ function InboxContent() {
                   </>
                 )}
 
-                {/* Email body */}
+                {/* Email body - Shadow DOM isolates email styles from page */}
                 <div className="prose prose-sm max-w-none">
                   {parsedMessage.html ? (
-                    <div className="email-content-wrapper" style={{ textAlign: 'left' }}>
-                      <div
-                        className="email-content"
-                        dangerouslySetInnerHTML={{ __html: parsedMessage.html }}
-                      />
-                    </div>
+                    <IsolatedEmailContent html={parsedMessage.html} />
                   ) : parsedMessage.text ? (
                     <pre className="font-sans whitespace-pre-wrap">{parsedMessage.text}</pre>
                   ) : (
@@ -598,63 +640,6 @@ function InboxContent() {
         </TabsContent>
       </Tabs>
 
-      {/* Add some basic email content styling */}
-      <style jsx global>{`
-        /* Force stable layout - prevent scrollbar shifts */
-        html {
-          overflow-y: scroll;
-        }
-
-        /* Lock down the entire page font */
-        body,
-        .container {
-          font-family:
-            ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-            'Segoe UI Symbol', 'Noto Color Emoji' !important;
-        }
-
-        /* Isolate email content from parent styles */
-        .email-content-wrapper {
-          text-align: left !important;
-          display: block !important;
-          isolation: isolate;
-          contain: layout style paint;
-          overflow: hidden;
-        }
-
-        /* Force email content to use system font, not email's font */
-        .email-content,
-        .email-content *,
-        .email-content table,
-        .email-content p,
-        .email-content div,
-        .email-content span {
-          font-family:
-            ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-            'Segoe UI Symbol', 'Noto Color Emoji' !important;
-        }
-
-        .email-content img {
-          max-width: 100%;
-          height: auto;
-          display: block;
-        }
-
-        .email-content a {
-          color: #6366f1;
-          text-decoration: underline;
-        }
-
-        .email-content table {
-          border-collapse: collapse;
-          max-width: 100%;
-        }
-
-        .email-content center,
-        .email-content [align='center'] {
-          text-align: center;
-        }
-      `}</style>
     </div>
   )
 }
