@@ -5,17 +5,17 @@ import { Mail, MessageSquare, Clock } from 'lucide-react'
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="bg-background flex min-h-screen flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-4">Contact Us</h1>
-          <p className="text-xl text-muted-foreground text-center mb-12">
+      <main className="container mx-auto flex-1 px-4 py-16">
+        <div className="mx-auto max-w-3xl">
+          <h1 className="mb-4 text-center text-4xl font-bold">Contact Us</h1>
+          <p className="text-muted-foreground mb-12 text-center text-xl">
             We&apos;d love to hear from you
           </p>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-12">
+          <div className="mb-12 grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-3">
@@ -29,7 +29,7 @@ export default function ContactPage() {
                 </CardDescription>
                 <a
                   href="mailto:support@timetojust.com"
-                  className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                  className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
                 >
                   support@timetojust.com
                 </a>
@@ -45,8 +45,8 @@ export default function ContactPage() {
               </CardHeader>
               <CardContent>
                 <CardDescription>
-                  We typically respond within 24-48 hours during business days.
-                  For urgent issues, please include &quot;URGENT&quot; in your subject line.
+                  We typically respond within 24-48 hours during business days. For urgent issues,
+                  please include &quot;URGENT&quot; in your subject line.
                 </CardDescription>
               </CardContent>
             </Card>
@@ -61,13 +61,12 @@ export default function ContactPage() {
             </CardHeader>
             <CardContent>
               <CardDescription className="mb-4">
-                Have ideas to improve Time to Just? We value your feedback and
-                suggestions. Let us know what features you&apos;d like to see or how
-                we can make your experience better.
+                Have ideas to improve Time to Just? We value your feedback and suggestions. Let us
+                know what features you&apos;d like to see or how we can make your experience better.
               </CardDescription>
               <a
                 href="mailto:feedback@timetojust.com"
-                className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
               >
                 feedback@timetojust.com
               </a>
@@ -75,13 +74,13 @@ export default function ContactPage() {
           </Card>
 
           <div className="text-center">
-            <h2 className="text-xl font-semibold mb-2">Before You Reach Out</h2>
+            <h2 className="mb-2 text-xl font-semibold">Before You Reach Out</h2>
             <p className="text-muted-foreground">
               Check our{' '}
-              <a href="/faq" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+              <a href="/faq" className="text-indigo-600 hover:underline dark:text-indigo-400">
                 FAQ page
-              </a>
-              {' '}for answers to common questions.
+              </a>{' '}
+              for answers to common questions.
             </p>
           </div>
         </div>

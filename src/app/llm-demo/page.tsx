@@ -35,12 +35,12 @@ export default function LLMDemoPage() {
         body: JSON.stringify({
           prompt: prompt.trim(),
           temperature: 0.7,
-          max_tokens: 500
-        })
+          max_tokens: 500,
+        }),
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
         setGeneratedText(data.reply)
       } else {
@@ -57,12 +57,10 @@ export default function LLMDemoPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-4xl">
+    <div className="container mx-auto max-w-4xl px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">LLM Demo</h1>
-        <p className="text-muted-foreground">
-          Test your configured LLM providers
-        </p>
+        <h1 className="mb-2 text-3xl font-bold">LLM Demo</h1>
+        <p className="text-muted-foreground">Test your configured LLM providers</p>
       </div>
 
       <Card className="mb-6">
@@ -85,8 +83,8 @@ export default function LLMDemoPage() {
             />
           </div>
 
-          <Button 
-            onClick={handleGenerate} 
+          <Button
+            onClick={handleGenerate}
             disabled={isGenerating || !prompt.trim()}
             className="w-full"
           >
@@ -119,9 +117,7 @@ export default function LLMDemoPage() {
           {generatedText && (
             <div className="space-y-2">
               <Label>Generated Text:</Label>
-              <div className="p-4 rounded-lg bg-muted whitespace-pre-wrap">
-                {generatedText}
-              </div>
+              <div className="bg-muted rounded-lg p-4 whitespace-pre-wrap">{generatedText}</div>
             </div>
           )}
         </CardContent>
@@ -130,19 +126,15 @@ export default function LLMDemoPage() {
       <Card>
         <CardHeader>
           <CardTitle>LLM Provider Status</CardTitle>
-          <CardDescription>
-            Check which providers are configured
-          </CardDescription>
+          <CardDescription>Check which providers are configured</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               To use this demo, you need to configure at least one LLM provider.
             </p>
             <Link href="/settings/llm-providers">
-              <Button variant="outline">
-                Manage LLM Providers
-              </Button>
+              <Button variant="outline">Manage LLM Providers</Button>
             </Link>
           </div>
         </CardContent>

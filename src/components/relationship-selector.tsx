@@ -1,21 +1,21 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { RelationshipType } from '../../server/src/lib/relationships/types';
-import { useToast } from '@/hooks/use-toast';
+} from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
+import { RelationshipType } from '../../server/src/lib/relationships/types'
+import { useToast } from '@/hooks/use-toast'
 
 interface RelationshipSelectorProps {
-  emailAddress: string;
-  currentRelationship: string;
-  onRelationshipChange?: (newRelationship: string) => void;
+  emailAddress: string
+  currentRelationship: string
+  onRelationshipChange?: (newRelationship: string) => void
 }
 
 const RELATIONSHIP_OPTIONS = [
@@ -25,21 +25,21 @@ const RELATIONSHIP_OPTIONS = [
   { value: RelationshipType.FRIENDS, label: 'Friends' },
   { value: RelationshipType.EXTERNAL, label: 'External' },
   { value: RelationshipType.SPAM, label: 'Spam' },
-];
+]
 
 export function RelationshipSelector({
   emailAddress,
   currentRelationship,
   onRelationshipChange,
 }: RelationshipSelectorProps) {
-  const { success, error } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [relationship, setRelationship] = useState(currentRelationship);
+  const { success, error } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+  const [relationship, setRelationship] = useState(currentRelationship)
 
   const handleRelationshipChange = async (newValue: string) => {
-    if (newValue === relationship) return;
+    if (newValue === relationship) return
 
-    setIsLoading(true);
+    setIsLoading(true)
     try {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/relationships/by-email`,
@@ -52,31 +52,31 @@ export function RelationshipSelector({
             relationshipType: newValue,
           }),
         }
-      );
+      )
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to update relationship');
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update relationship')
       }
 
-      setRelationship(newValue);
-      onRelationshipChange?.(newValue);
-      success(`Relationship updated to ${RelationshipType.LABELS[newValue]}`);
+      setRelationship(newValue)
+      onRelationshipChange?.(newValue)
+      success(`Relationship updated to ${RelationshipType.LABELS[newValue]}`)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update relationship';
-      error(message);
+      const message = err instanceof Error ? err.message : 'Failed to update relationship'
+      error(message)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
-  const relationshipColor = RelationshipType.COLORS[relationship] || RelationshipType.COLORS.unknown;
-  const relationshipLabel = RelationshipType.LABELS[relationship] || RelationshipType.LABELS.unknown;
+  const relationshipColor = RelationshipType.COLORS[relationship] || RelationshipType.COLORS.unknown
+  const relationshipLabel = RelationshipType.LABELS[relationship] || RelationshipType.LABELS.unknown
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={isLoading}>
-        <Badge className={`${relationshipColor} text-white text-xs px-1.5 py-0 cursor-pointer`}>
+        <Badge className={`${relationshipColor} cursor-pointer px-1.5 py-0 text-xs text-white`}>
           {isLoading ? '...' : relationshipLabel}
         </Badge>
       </DropdownMenuTrigger>
@@ -85,7 +85,7 @@ export function RelationshipSelector({
           {RELATIONSHIP_OPTIONS.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value}>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${RelationshipType.COLORS[option.value]}`} />
+                <div className={`h-2 w-2 rounded-full ${RelationshipType.COLORS[option.value]}`} />
                 {option.label}
               </div>
             </DropdownMenuRadioItem>
@@ -93,5 +93,5 @@ export function RelationshipSelector({
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }

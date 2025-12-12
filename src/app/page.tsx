@@ -21,22 +21,20 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="bg-background flex min-h-screen flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
-        <div className="max-w-4xl mx-auto text-center mb-16">
-          <h2 className="text-5xl font-bold mb-6">
-            AI-Powered Email Reply Drafts
-          </h2>
-          <p className="text-xl text-muted-foreground mb-8">
+      <main className="container mx-auto flex-1 px-4 py-16">
+        <div className="mx-auto mb-16 max-w-4xl text-center">
+          <h2 className="mb-6 text-5xl font-bold">AI-Powered Email Reply Drafts</h2>
+          <p className="text-muted-foreground mb-8 text-xl">
             Generate email responses that match your unique writing tone and style
           </p>
           <Button asChild size="lg">
@@ -44,15 +42,15 @@ export default function Home() {
           </Button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle>Tone Analysis</CardTitle>
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Our AI analyzes your email history to learn your unique writing style,
-                ensuring replies sound authentically like you.
+                Our AI analyzes your email history to learn your unique writing style, ensuring
+                replies sound authentically like you.
               </CardDescription>
             </CardContent>
           </Card>
@@ -63,8 +61,8 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Generate contextually appropriate email replies in seconds,
-                maintaining professionalism while saving time.
+                Generate contextually appropriate email replies in seconds, maintaining
+                professionalism while saving time.
               </CardDescription>
             </CardContent>
           </Card>
@@ -75,8 +73,8 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Connect your email accounts securely and manage all your
-                correspondence from one unified interface.
+                Connect your email accounts securely and manage all your correspondence from one
+                unified interface.
               </CardDescription>
             </CardContent>
           </Card>

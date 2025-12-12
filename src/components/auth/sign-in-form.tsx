@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -10,7 +10,14 @@ import { useAuth } from '@/lib/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/hooks/use-toast'
 
@@ -51,21 +58,19 @@ export function SignInForm() {
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader className="text-center space-y-4">
+      <CardHeader className="space-y-4 text-center">
         <div className="flex flex-col items-center space-y-3">
           <Image
             src="/logo.png"
             alt="Time to Just Logo"
             width={48}
             height={48}
-            className="object-contain logo-rotate"
+            className="logo-rotate object-contain"
           />
           <h1 className="text-2xl font-bold">Time to Just</h1>
         </div>
         <CardTitle>Sign In</CardTitle>
-        <CardDescription>
-          Enter your email and password to access your account
-        </CardDescription>
+        <CardDescription>Enter your email and password to access your account</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -74,7 +79,7 @@ export function SignInForm() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          
+
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -84,21 +89,14 @@ export function SignInForm() {
               {...register('email')}
               disabled={isLoading}
             />
-            {errors.email && (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
-            )}
+            {errors.email && <p className="text-destructive text-sm">{errors.email.message}</p>}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              {...register('password')}
-              disabled={isLoading}
-            />
+            <Input id="password" type="password" {...register('password')} disabled={isLoading} />
             {errors.password && (
-              <p className="text-sm text-destructive">{errors.password.message}</p>
+              <p className="text-destructive text-sm">{errors.password.message}</p>
             )}
           </div>
 
@@ -108,7 +106,7 @@ export function SignInForm() {
         </form>
       </CardContent>
       <CardFooter>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Don&apos;t have an account?{' '}
           <a href="/signup" className="text-primary hover:underline">
             Sign up

@@ -65,12 +65,15 @@ function OAuthCompleteContent() {
 
       try {
         // Complete the OAuth flow
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/complete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ sessionToken })
-        })
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/complete`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ sessionToken }),
+          }
+        )
 
         if (!response.ok) {
           const errorData = await response.json()
@@ -92,17 +95,19 @@ function OAuthCompleteContent() {
   }, [user, router, searchParams, success, showError])
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center">
       <div className="text-center">
         {status === 'processing' ? (
           <>
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin" />
             <p className="text-lg">Completing OAuth connection...</p>
           </>
         ) : (
           <>
             <p className="text-lg text-red-600">OAuth connection failed</p>
-            <p className="text-sm text-muted-foreground mt-2">Redirecting back to email accounts...</p>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Redirecting back to email accounts...
+            </p>
           </>
         )}
       </div>
@@ -114,9 +119,9 @@ export default function OAuthCompletePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin" />
             <p className="text-lg">Loading...</p>
           </div>
         </div>

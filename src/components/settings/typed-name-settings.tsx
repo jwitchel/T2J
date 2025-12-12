@@ -16,7 +16,7 @@ export function TypedNameSettings() {
   const { success, error } = useToast()
   const [preferences, setPreferences] = useState<TypedNamePreferences>({
     removalRegex: '',
-    appendString: ''
+    appendString: '',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -29,7 +29,7 @@ export function TypedNameSettings() {
     try {
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/settings/typed-name`, {
-        credentials: 'include'
+        credentials: 'include',
       })
 
       if (!response.ok) {
@@ -43,7 +43,7 @@ export function TypedNameSettings() {
       const data = await response.json()
       setPreferences({
         removalRegex: data.preferences?.removalRegex || '',
-        appendString: data.preferences?.appendString || ''
+        appendString: data.preferences?.appendString || '',
       })
     } catch (err) {
       console.error('Error fetching preferences:', err)
@@ -56,7 +56,7 @@ export function TypedNameSettings() {
   const handleSave = async () => {
     try {
       setSaving(true)
-      
+
       // Validate regex if provided
       if (preferences.removalRegex) {
         try {
@@ -71,9 +71,9 @@ export function TypedNameSettings() {
         method: 'POST',
         credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ preferences })
+        body: JSON.stringify({ preferences }),
       })
 
       if (!response.ok) {
@@ -94,7 +94,7 @@ export function TypedNameSettings() {
 
     try {
       const regex = new RegExp(preferences.removalRegex, 'gmi')
-      const testText = "Thanks for your help!\n\n-John"
+      const testText = 'Thanks for your help!\n\n-John'
       const result = testText.replace(regex, '').trim()
       success(`Test result: "${result}"`)
     } catch {
@@ -120,10 +120,10 @@ export function TypedNameSettings() {
           value={preferences.removalRegex}
           onChange={(e) => setPreferences({ ...preferences, removalRegex: e.target.value })}
         />
-        <p className="text-xs text-muted-foreground">
-          Regular expression to match and remove your typed name from emails during training. 
-          Searches from bottom to top and removes only the first match found.
-          Leave empty to disable removal.
+        <p className="text-muted-foreground text-xs">
+          Regular expression to match and remove your typed name from emails during training.
+          Searches from bottom to top and removes only the first match found. Leave empty to disable
+          removal.
         </p>
         <Button
           variant="outline"
@@ -143,25 +143,35 @@ export function TypedNameSettings() {
           value={preferences.appendString}
           onChange={(e) => setPreferences({ ...preferences, appendString: e.target.value })}
         />
-        <p className="text-xs text-muted-foreground">
-          Text to append at the end of generated email responses. 
-          Leave empty to not append any name.
+        <p className="text-muted-foreground text-xs">
+          Text to append at the end of generated email responses. Leave empty to not append any
+          name.
         </p>
       </div>
 
       <div className="bg-muted rounded-lg p-4">
-        <h4 className="text-sm font-medium mb-2">Example Usage:</h4>
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p><strong>Removal Pattern:</strong> <code>^[-\s]*(?:John|J)\s*$</code></p>
-          <p className="ml-4">Removes &quot;-John&quot;, &quot;-J&quot;, &quot;John&quot;, &quot; J&quot; etc. from emails</p>
-          <p className="ml-4 text-xs">Works bottom-up: only removes the last occurrence (e.g., signature) while preserving names in the email body</p>
-          <p><strong>Append String:</strong> <code>-John</code></p>
+        <h4 className="mb-2 text-sm font-medium">Example Usage:</h4>
+        <div className="text-muted-foreground space-y-2 text-sm">
+          <p>
+            <strong>Removal Pattern:</strong> <code>^[-\s]*(?:John|J)\s*$</code>
+          </p>
+          <p className="ml-4">
+            Removes &quot;-John&quot;, &quot;-J&quot;, &quot;John&quot;, &quot; J&quot; etc. from
+            emails
+          </p>
+          <p className="ml-4 text-xs">
+            Works bottom-up: only removes the last occurrence (e.g., signature) while preserving
+            names in the email body
+          </p>
+          <p>
+            <strong>Append String:</strong> <code>-John</code>
+          </p>
           <p className="ml-4">Adds &quot;-John&quot; to the end of generated responses</p>
         </div>
       </div>
 
       <Button onClick={handleSave} disabled={saving}>
-        {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save Typed Name Settings
       </Button>
     </div>
