@@ -16,7 +16,7 @@
     "server:inspect": "TS_NODE_PROJECT=server/tsconfig.json node --inspect=9229 -r ts-node/register -r tsconfig-paths/register server/src/server.ts",
     "workers:inspect": "TS_NODE_PROJECT=server/tsconfig.json node --inspect=9230 -r ts-node/register -r tsconfig-paths/register server/src/scripts/start-workers.ts",
     "dev:all:debug": "npm run redis:reset && npm run dev:kill-ports && concurrently -n \"NEXT,SERVER,WORKERS\" -c \"blue,green,yellow\" \"npm run dev\" \"npm run server:inspect\" \"npm run workers:inspect\"",
-    "server:build": "tsc -p server/tsconfig.json",
+    "server:build": "tsc -p server/tsconfig.json && cp -r server/src/lib/pipeline/templates server/dist/lib/pipeline/",
     "server:prod": "node server/dist/server.js",
     "test": "jest",
     "test:unit": "jest --config jest.config.unit.js",
