@@ -51,7 +51,6 @@ export default function SettingsPage() {
   const [originalWorkDomainsCSV, setOriginalWorkDomainsCSV] = useState('')
   const [originalFamilyEmailsCSV, setOriginalFamilyEmailsCSV] = useState('')
   const [originalSpouseEmailsCSV, setOriginalSpouseEmailsCSV] = useState('')
-  const [recategorization, setRecategorization] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTestingFolders, setIsTestingFolders] = useState(false)
@@ -149,7 +148,6 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     setIsSaving(true)
-    setRecategorization([])
 
     // Track which relationship fields changed
     const spouseChanged = spouseEmailsCSV !== originalSpouseEmailsCSV
@@ -157,13 +155,9 @@ export default function SettingsPage() {
     const workChanged = workDomainsCSV !== originalWorkDomainsCSV
 
     try {
-      const response = await apiPost<{
+      await apiPost<{
         success: boolean;
         preferences: Record<string, unknown>;
-        recategorization?: {
-          updated: number;
-          breakdown: { spouse: number; family: number; colleague: number };
-        };
       }>('/api/settings/profile', {
         name,
         nicknames,
@@ -513,19 +507,6 @@ export default function SettingsPage() {
                     Enter work domains separated by commas. Anyone from these domains will be categorized as &quot;colleague&quot;.
                   </p>
                 </div>
-
-                {recategorization.length > 0 && (
-                  <div className="rounded-md bg-green-50 dark:bg-green-900/20 p-4 border border-green-200 dark:border-green-800">
-                    <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">
-                      Relationship Update Complete
-                    </h4>
-                    <ul className="text-sm text-green-800 dark:text-green-200 mt-1 space-y-1">
-                      {recategorization.map((message, index) => (
-                        <li key={index}>{message}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
 
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Changes'}
