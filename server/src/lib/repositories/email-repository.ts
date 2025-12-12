@@ -84,6 +84,7 @@ export class EmailRepository {
         vector_generated_at, created_at
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+      ON CONFLICT (email_id) DO UPDATE SET email_id = EXCLUDED.email_id
       RETURNING id
     `, [
       normalizedEmailId,
