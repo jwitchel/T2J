@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/patterns'
 import {
   Table,
@@ -205,11 +205,10 @@ export default function DashboardPage() {
             <ActionsSummaryChart />
 
             {/* Account Summary - 50% width */}
-            <Card className="gap-3 py-4">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Account Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold">Account Summary</h2>
+              <Card>
+                <CardContent className="space-y-3 pt-6">
                 {/* Email Accounts */}
                 <div className="space-y-2">
                   <div className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
@@ -279,8 +278,9 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           {/* Recent Actions Table - Full Width */}

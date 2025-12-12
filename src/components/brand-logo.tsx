@@ -103,7 +103,11 @@ export function BrandLogo({ href = '/', size = 'md' }: BrandLogoProps) {
   )
 
   if (href) {
-    return <Link href={href}>{content}</Link>
+    return (
+      <Link href={href} className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+        {content}
+      </Link>
+    )
   }
 
   return content

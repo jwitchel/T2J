@@ -160,7 +160,7 @@ function EmailAccountsContent() {
   if (error) {
     return (
       <ProtectedRoute>
-        <div className="container mx-auto px-4 py-6 md:px-6">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="text-center text-red-600">Failed to load email accounts</div>
         </div>
       </ProtectedRoute>
@@ -169,7 +169,7 @@ function EmailAccountsContent() {
 
   return (
     <ProtectedRoute>
-      <div className="container mx-auto px-4 py-6 md:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {reauthAccount && (
           <div className="mb-4">
             <Alert className="border-amber-300 bg-amber-50 py-2 dark:bg-amber-950">

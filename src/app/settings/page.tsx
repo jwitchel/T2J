@@ -2,7 +2,6 @@
 
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth-context'
@@ -22,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { PageHeader } from '@/components/patterns'
+import { PageHeader, SectionCard } from '@/components/patterns'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -395,8 +394,7 @@ export default function SettingsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="bg-background min-h-screen p-8">
-        <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <PageHeader title="Settings" className="mb-8" />
 
           <Tabs defaultValue="profile" className="w-full">
@@ -409,180 +407,160 @@ export default function SettingsPage() {
             </TabsList>
 
             <TabsContent value="profile" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Profile Information</CardTitle>
-                  <CardDescription>Update your personal information</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                      id="name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Your full name"
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="nicknames">Nicknames</Label>
-                    <Input
-                      id="nicknames"
-                      type="text"
-                      value={nicknames}
-                      onChange={(e) => setNicknames(e.target.value)}
-                      placeholder="e.g. Jessica, Jess, JW"
-                      disabled={isLoading}
-                    />
-                    <p className="text-muted-foreground text-sm">
-                      Enter common nicknames or variations of your name, separated by commas
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
-                    <p className="text-muted-foreground text-sm">Email cannot be changed</p>
-                  </div>
-                  <Button onClick={handleSave} disabled={isSaving || isLoading}>
-                    {isSaving ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </CardContent>
-              </Card>
+              <SectionCard
+                title="Profile Information"
+                description="Update your personal information"
+                contentClassName="space-y-4"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your full name"
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nicknames">Nicknames</Label>
+                  <Input
+                    id="nicknames"
+                    type="text"
+                    value={nicknames}
+                    onChange={(e) => setNicknames(e.target.value)}
+                    placeholder="e.g. Jessica, Jess, JW"
+                    disabled={isLoading}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    Enter common nicknames or variations of your name, separated by commas
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
+                  <p className="text-muted-foreground text-sm">Email cannot be changed</p>
+                </div>
+                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </SectionCard>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Typed Name Settings</CardTitle>
-                  <CardDescription>
-                    Configure how your name appears in generated email responses
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <TypedNameSettings />
-                </CardContent>
-              </Card>
+              <SectionCard
+                title="Typed Name Settings"
+                description="Configure how your name appears in generated email responses"
+              >
+                <TypedNameSettings />
+              </SectionCard>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Email Signature Block</CardTitle>
-                  <CardDescription>
-                    Add a signature that will be included in your generated email replies
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signatureBlock">Signature Block</Label>
-                    <Textarea
-                      id="signatureBlock"
-                      value={signatureBlock}
-                      onChange={(e) => setSignatureBlock(e.target.value)}
-                      placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
-                      className="min-h-[120px] font-mono text-sm"
-                      disabled={isLoading}
-                    />
-                    <p className="text-muted-foreground text-sm">
-                      This signature will be added to your email replies before the quoted original
-                      message. You can use multiple lines.
-                    </p>
-                  </div>
-                  <Button onClick={handleSave} disabled={isSaving || isLoading}>
-                    {isSaving ? 'Saving...' : 'Save Signature'}
-                  </Button>
-                </CardContent>
-              </Card>
+              <SectionCard
+                title="Email Signature Block"
+                description="Add a signature that will be included in your generated email replies"
+                contentClassName="space-y-4"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="signatureBlock">Signature Block</Label>
+                  <Textarea
+                    id="signatureBlock"
+                    value={signatureBlock}
+                    onChange={(e) => setSignatureBlock(e.target.value)}
+                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
+                    className="min-h-[120px] font-mono text-sm"
+                    disabled={isLoading}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    This signature will be added to your email replies before the quoted original
+                    message. You can use multiple lines.
+                  </p>
+                </div>
+                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                  {isSaving ? 'Saving...' : 'Save Signature'}
+                </Button>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="relationships" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Relationship Categorization</CardTitle>
-                  <CardDescription>
-                    Configure domains and emails to automatically categorize contacts for more
-                    precise tone when drafting emails.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="spouseEmailsCSV">Spouse/Partner Email Addresses (CSV)</Label>
-                    <Input
-                      id="spouseEmailsCSV"
-                      type="text"
-                      value={spouseEmailsCSV}
-                      onChange={(e) => setSpouseEmailsCSV(e.target.value)}
-                      placeholder="partner@example.com"
-                      disabled={isLoading}
-                    />
-                    <p className="text-muted-foreground text-sm">
-                      Enter spouse/partner email addresses separated by commas.
-                      <br />
-                      This person is treated as a special case when drafting emails to only use the
-                      tone you use specifically for them.
-                    </p>
+              <SectionCard
+                title="Relationship Categorization"
+                description="Configure domains and emails to automatically categorize contacts for more precise tone when drafting emails."
+                contentClassName="space-y-6"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="spouseEmailsCSV">Spouse/Partner Email Addresses (CSV)</Label>
+                  <Input
+                    id="spouseEmailsCSV"
+                    type="text"
+                    value={spouseEmailsCSV}
+                    onChange={(e) => setSpouseEmailsCSV(e.target.value)}
+                    placeholder="partner@example.com"
+                    disabled={isLoading}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    Enter spouse/partner email addresses separated by commas.
+                    <br />
+                    This person is treated as a special case when drafting emails to only use the
+                    tone you use specifically for them.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="familyEmailsCSV">Family Email Addresses (CSV)</Label>
+                  <Input
+                    id="familyEmailsCSV"
+                    type="text"
+                    value={familyEmailsCSV}
+                    onChange={(e) => setFamilyEmailsCSV(e.target.value)}
+                    placeholder="dad@example.com, mom@gmail.com"
+                    disabled={isLoading}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    Enter family email addresses separated by commas. These contacts will be
+                    categorized as &quot;family&quot;.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="workDomainsCSV">Work Domains (CSV)</Label>
+                  <Input
+                    id="workDomainsCSV"
+                    type="text"
+                    value={workDomainsCSV}
+                    onChange={(e) => setWorkDomainsCSV(e.target.value)}
+                    placeholder="company.com, subsidiary.co.uk"
+                    disabled={isLoading}
+                  />
+                  <p className="text-muted-foreground text-sm">
+                    Enter work domains separated by commas. Anyone from these domains will be
+                    categorized as &quot;colleague&quot;.
+                  </p>
+                </div>
+
+                {recategorization.length > 0 && (
+                  <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                    <h4 className="mb-2 text-sm font-semibold text-green-900 dark:text-green-100">
+                      Relationship Update Complete
+                    </h4>
+                    <ul className="mt-1 space-y-1 text-sm text-green-800 dark:text-green-200">
+                      {recategorization.map((message, index) => (
+                        <li key={index}>{message}</li>
+                      ))}
+                    </ul>
                   </div>
+                )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="familyEmailsCSV">Family Email Addresses (CSV)</Label>
-                    <Input
-                      id="familyEmailsCSV"
-                      type="text"
-                      value={familyEmailsCSV}
-                      onChange={(e) => setFamilyEmailsCSV(e.target.value)}
-                      placeholder="dad@example.com, mom@gmail.com"
-                      disabled={isLoading}
-                    />
-                    <p className="text-muted-foreground text-sm">
-                      Enter family email addresses separated by commas. These contacts will be
-                      categorized as &quot;family&quot;.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="workDomainsCSV">Work Domains (CSV)</Label>
-                    <Input
-                      id="workDomainsCSV"
-                      type="text"
-                      value={workDomainsCSV}
-                      onChange={(e) => setWorkDomainsCSV(e.target.value)}
-                      placeholder="company.com, subsidiary.co.uk"
-                      disabled={isLoading}
-                    />
-                    <p className="text-muted-foreground text-sm">
-                      Enter work domains separated by commas. Anyone from these domains will be
-                      categorized as &quot;colleague&quot;.
-                    </p>
-                  </div>
-
-                  {recategorization.length > 0 && (
-                    <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                      <h4 className="mb-2 text-sm font-semibold text-green-900 dark:text-green-100">
-                        Relationship Update Complete
-                      </h4>
-                      <ul className="mt-1 space-y-1 text-sm text-green-800 dark:text-green-200">
-                        {recategorization.map((message, index) => (
-                          <li key={index}>{message}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <Button onClick={handleSave} disabled={isSaving || isLoading}>
-                    {isSaving ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </CardContent>
-              </Card>
+                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="services" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Email Processing</CardTitle>
-                  <CardDescription>
-                    Configure which processing stages are enabled. Unprocessed emails will remain in
-                    your inbox.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
+              <SectionCard
+                title="Email Processing"
+                description="Configure which processing stages are enabled. Unprocessed emails will remain in your inbox."
+                contentClassName="space-y-6"
+              >
                   {/* Spam Detection Toggle */}
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
@@ -722,17 +700,13 @@ export default function SettingsPage() {
                   >
                     {isSavingActionPreferences ? 'Saving...' : 'Save Action Preferences'}
                   </Button>
-                </CardContent>
-              </Card>
+              </SectionCard>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Email Folder Preferences</CardTitle>
-                  <CardDescription>
-                    Configure folders for organizing emails based on AI recommendations
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <SectionCard
+                title="Email Folder Preferences"
+                description="Configure folders for organizing emails based on AI recommendations"
+                contentClassName="space-y-4"
+              >
                   <div className="space-y-2">
                     <Label htmlFor="rootFolder">Root Folder</Label>
                     <Input
@@ -808,48 +782,32 @@ export default function SettingsPage() {
                   >
                     {isTestingFolders ? 'Verifying...' : 'Save Folder Settings'}
                   </Button>
-                </CardContent>
-              </Card>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="signatures" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Email Signature Detection</CardTitle>
-                  <CardDescription>
-                    Configure patterns to automatically detect and remove your email signature when
-                    analyzing your writing style
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <SignaturePatterns />
-                </CardContent>
-              </Card>
+              <SectionCard
+                title="Email Signature Detection"
+                description="Configure patterns to automatically detect and remove your email signature when analyzing your writing style"
+              >
+                <SignaturePatterns />
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="security" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Security</CardTitle>
-                  <CardDescription>Manage your password and security settings</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button variant="outline">Change Password</Button>
-                </CardContent>
-              </Card>
+              <SectionCard
+                title="Security"
+                description="Manage your password and security settings"
+                contentClassName="space-y-4"
+              >
+                <Button variant="outline">Change Password</Button>
+              </SectionCard>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Danger Zone</CardTitle>
-                  <CardDescription>Irreversible actions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="destructive">Delete Account</Button>
-                </CardContent>
-              </Card>
+              <SectionCard title="Danger Zone" description="Irreversible actions">
+                <Button variant="destructive">Delete Account</Button>
+              </SectionCard>
             </TabsContent>
           </Tabs>
-        </div>
       </div>
 
       {/* Folder Verification Dialog */}

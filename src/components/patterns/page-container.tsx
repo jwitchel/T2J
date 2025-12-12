@@ -11,7 +11,10 @@ export interface PageContainerProps {
 export function PageContainer({ children, fullHeight = false, className }: PageContainerProps) {
   return (
     <div
-      className={cn('container mx-auto flex flex-col px-4 py-6 md:px-6', className)}
+      className={cn(
+        'mx-auto flex max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8',
+        className
+      )}
       style={fullHeight ? { height: 'calc(100vh - 64px)' } : undefined}
     >
       {children}

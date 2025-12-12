@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import useSWR from 'swr'
 import ReactECharts from 'echarts-for-react'
 import { EmailActionType } from '../../../server/src/types/email-action-tracking'
@@ -73,29 +73,29 @@ export function ActionsSummaryChart() {
 
   if (error) {
     return (
-      <Card className="gap-3 py-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-red-500">Failed to load actions summary</div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Recent Activity</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-red-500">Failed to load actions summary</div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   if (isLoading || !data) {
     return (
-      <Card className="gap-3 py-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-[280px] items-center justify-center">
-            <div className="text-muted-foreground">Loading chart...</div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Recent Activity</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex h-[280px] items-center justify-center">
+              <div className="text-muted-foreground">Loading chart...</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -297,13 +297,13 @@ export function ActionsSummaryChart() {
   }
 
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Recent Activity</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ReactECharts option={option} style={{ height: '280px', width: '100%' }} />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold">Recent Activity</h2>
+      <Card>
+        <CardContent className="pt-6">
+          <ReactECharts option={option} style={{ height: '280px', width: '100%' }} />
+        </CardContent>
+      </Card>
+    </div>
   )
 }

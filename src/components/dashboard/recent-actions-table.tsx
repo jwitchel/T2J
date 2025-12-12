@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import useSWR from 'swr'
 import { formatDistanceToNow } from 'date-fns'
@@ -111,66 +111,65 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
 
   if (error) {
     return (
-      <Card className="gap-3 py-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Emails</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-red-500">Failed to load recent emails</div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Recent Emails</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-red-500">Failed to load recent emails</div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   if (isLoading || !data) {
     return (
-      <Card className="gap-3 py-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Emails</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-muted-foreground">Loading recent emails...</div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Recent Emails</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-muted-foreground">Loading recent emails...</div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   if (data.actions.length === 0) {
     return (
-      <Card className="gap-3 py-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recent Emails</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-muted-foreground py-8 text-center">
-            No emails processed yet. Start processing emails to see activity here.
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Recent Emails</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-muted-foreground py-8 text-center">
+              No emails processed yet. Start processing emails to see activity here.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-4">
-          <CardTitle className="text-base">Recent Emails</CardTitle>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold">Recent Emails</h2>
 
-          {/* Look Back Controls */}
-          {lookBackControls && <div className="flex items-center gap-2">{lookBackControls}</div>}
+        {/* Look Back Controls */}
+        {lookBackControls && <div className="flex items-center gap-2">{lookBackControls}</div>}
 
-          {/* Email Account Legend - Right Aligned */}
-          <div className="ml-auto flex flex-wrap justify-end gap-3">
-            {uniqueEmails.map(({ email, color }) => (
-              <div key={email} className="flex items-center gap-2 text-xs">
-                <div className={`h-3 w-3 rounded-full ${color}`} />
-                <span className="text-muted-foreground">{email}</span>
-              </div>
-            ))}
-          </div>
+        {/* Email Account Legend - Right Aligned */}
+        <div className="ml-auto flex flex-wrap justify-end gap-3">
+          {uniqueEmails.map(({ email, color }) => (
+            <div key={email} className="flex items-center gap-2 text-xs">
+              <div className={`h-3 w-3 rounded-full ${color}`} />
+              <span className="text-muted-foreground">{email}</span>
+            </div>
+          ))}
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -249,7 +248,8 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
             Showing 20 of {data.total} total actions
           </div>
         )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

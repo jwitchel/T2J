@@ -322,7 +322,7 @@ export default function LLMProvidersPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <Alert className="mx-auto max-w-md">
           <AlertDescription>Failed to load LLM providers. Please try again later.</AlertDescription>
         </Alert>
@@ -331,7 +331,7 @@ export default function LLMProvidersPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 md:px-6">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="LLM Providers"
         description="Configure AI providers for generating email replies"
