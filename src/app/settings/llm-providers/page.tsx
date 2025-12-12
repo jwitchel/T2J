@@ -44,6 +44,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Check } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
+import { PageHeader } from '@/components/patterns'
 
 interface LLMProvider {
   id: string
@@ -331,10 +332,10 @@ export default function LLMProvidersPage() {
 
   return (
     <div className="container mx-auto px-4 py-6 md:px-6">
-      <div className="mb-6">
-        <h1 className="mb-2 text-3xl font-bold">LLM Providers</h1>
-        <p className="text-muted-foreground">Configure AI providers for generating email replies</p>
-      </div>
+      <PageHeader
+        title="LLM Providers"
+        description="Configure AI providers for generating email replies"
+      />
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">

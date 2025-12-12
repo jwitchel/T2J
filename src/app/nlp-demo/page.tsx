@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/patterns'
 
 const SAMPLE_TEXTS = [
   {
@@ -115,7 +116,7 @@ export default function NLPDemoPage() {
 
   return (
     <div className="container mx-auto max-w-6xl p-4">
-      <h1 className="mb-6 text-3xl font-bold">NLP Feature Extractor Demo</h1>
+      <PageHeader title="NLP Feature Extractor Demo" />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Input Section */}

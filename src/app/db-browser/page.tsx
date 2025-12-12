@@ -3,17 +3,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Database, Terminal, ExternalLink } from 'lucide-react'
+import { PageHeader } from '@/components/patterns'
 
 export default function DbBrowserPage() {
   return (
     <div className="min-h-screen bg-zinc-50 py-8 dark:bg-zinc-900">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">Database Browser</h1>
-          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-            Explore and manage the PostgreSQL database
-          </p>
-        </div>
+        <PageHeader
+          title="Database Browser"
+          description="Explore and manage the PostgreSQL database"
+          className="mb-8"
+        />
 
         <div className="grid gap-6">
           <Card>

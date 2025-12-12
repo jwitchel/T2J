@@ -52,6 +52,7 @@ import { Loader2, Mail, Server, Eye, EyeOff, Info } from 'lucide-react'
 import { EmailAccountResponse } from '@/types/email-account'
 import { FcGoogle } from 'react-icons/fc'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { PageHeader } from '@/components/patterns'
 
 const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
 
@@ -211,12 +212,11 @@ function EmailAccountsContent() {
             </Alert>
           </div>
         )}
-        <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold">Email Accounts</h1>
-          <p className="text-muted-foreground">
-            Connect your email accounts to enable AI-powered email assistance
-          </p>
-        </div>
+        <PageHeader
+          title="Email Accounts"
+          description="Connect your email accounts to enable AI-powered email assistance"
+          className="mb-8"
+        />
 
         {!isAddingAccount && !editingAccount ? (
           <AccountList

@@ -2,6 +2,7 @@ import { PublicNavbar } from '@/components/public-navbar'
 import { Footer } from '@/components/footer'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail, MessageSquare, Clock } from 'lucide-react'
+import { PageHeader } from '@/components/patterns'
 
 export default function ContactPage() {
   return (
@@ -10,10 +11,12 @@ export default function ContactPage() {
 
       <main className="container mx-auto flex-1 px-4 py-16">
         <div className="mx-auto max-w-3xl">
-          <h1 className="mb-4 text-center text-4xl font-bold">Contact Us</h1>
-          <p className="text-muted-foreground mb-12 text-center text-xl">
-            We&apos;d love to hear from you
-          </p>
+          <PageHeader
+            title="Contact Us"
+            description="We'd love to hear from you"
+            centered
+            className="mb-12"
+          />
 
           <div className="mb-12 grid gap-6 md:grid-cols-2">
             <Card>

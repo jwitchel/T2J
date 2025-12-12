@@ -6,6 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { PageHeader } from '@/components/patterns'
 
 const faqs = [
   {
@@ -67,10 +68,12 @@ export default function FAQPage() {
 
       <main className="container mx-auto flex-1 px-4 py-16">
         <div className="mx-auto max-w-3xl">
-          <h1 className="mb-4 text-center text-4xl font-bold">Frequently Asked Questions</h1>
-          <p className="text-muted-foreground mb-12 text-center text-xl">
-            Everything you need to know about Time to Just
-          </p>
+          <PageHeader
+            title="Frequently Asked Questions"
+            description="Everything you need to know about Time to Just"
+            centered
+            className="mb-12"
+          />
 
           <Accordion type="single" collapsible className="w-full">
             {faqs.map((faq, index) => (

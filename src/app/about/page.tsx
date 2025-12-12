@@ -2,6 +2,7 @@ import { PublicNavbar } from '@/components/public-navbar'
 import { Footer } from '@/components/footer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail, Brain, Shield, Zap } from 'lucide-react'
+import { PageHeader } from '@/components/patterns'
 
 export default function AboutPage() {
   return (
@@ -10,10 +11,12 @@ export default function AboutPage() {
 
       <main className="container mx-auto flex-1 px-4 py-16">
         <div className="mx-auto max-w-4xl">
-          <h1 className="mb-4 text-center text-4xl font-bold">About Time to Just</h1>
-          <p className="text-muted-foreground mb-12 text-center text-xl">
-            Reclaim your time with AI-powered email assistance
-          </p>
+          <PageHeader
+            title="About Time to Just"
+            description="Reclaim your time with AI-powered email assistance"
+            centered
+            className="mb-12"
+          />
 
           <div className="prose dark:prose-invert mb-12 max-w-none">
             <p className="text-lg">

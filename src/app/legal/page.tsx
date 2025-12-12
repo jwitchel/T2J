@@ -1,5 +1,6 @@
 import { PublicNavbar } from '@/components/public-navbar'
 import { Footer } from '@/components/footer'
+import { PageHeader } from '@/components/patterns'
 
 export default function LegalPage() {
   return (
@@ -8,7 +9,7 @@ export default function LegalPage() {
 
       <main className="container mx-auto flex-1 px-4 py-16">
         <div className="mx-auto max-w-3xl">
-          <h1 className="mb-8 text-4xl font-bold">Legal</h1>
+          <PageHeader title="Legal" className="mb-8" />
 
           <section className="mb-12">
             <h2 className="mb-4 text-2xl font-semibold">Terms of Service</h2>

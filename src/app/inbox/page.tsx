@@ -17,6 +17,7 @@ import { useSearchParams } from 'next/navigation'
 import { EmailActionType } from '../../../server/src/types/email-action-tracking'
 import type { SpamCheckResult } from '../../../server/src/lib/pipeline/types'
 import { RelationshipSelector } from '@/components/relationship-selector'
+import { PageHeader } from '@/components/patterns'
 
 interface ParsedEmail {
   headers: Array<{ key: string; value: string }>
@@ -300,9 +301,7 @@ function InboxContent() {
 
   return (
     <div className="container mx-auto max-w-6xl p-6">
-      <div className="mb-6">
-        <h1 className="mb-2 text-2xl font-bold">Message Analysis</h1>
-      </div>
+      <PageHeader title="Message Analysis" />
 
       {/* Email display with tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

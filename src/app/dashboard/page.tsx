@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/patterns'
 import {
   Table,
   TableBody,
@@ -194,9 +195,7 @@ export default function DashboardPage() {
   return (
     <div className="bg-background min-h-screen py-8">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-        </div>
+        <PageHeader title="Dashboard" className="mb-8" />
 
         {/* Analytics Section - 2 Column Layout */}
         <div className="mb-8 space-y-6">

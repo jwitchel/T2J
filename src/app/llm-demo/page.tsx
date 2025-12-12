@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Send } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import Link from 'next/link'
+import { PageHeader } from '@/components/patterns'
 
 export default function LLMDemoPage() {
   const { error: showError } = useToast()
@@ -58,10 +59,7 @@ export default function LLMDemoPage() {
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-6">
-      <div className="mb-6">
-        <h1 className="mb-2 text-3xl font-bold">LLM Demo</h1>
-        <p className="text-muted-foreground">Test your configured LLM providers</p>
-      </div>
+      <PageHeader title="LLM Demo" description="Test your configured LLM providers" />
 
       <Card className="mb-6">
         <CardHeader>

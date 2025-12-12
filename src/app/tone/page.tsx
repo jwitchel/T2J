@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Loader2, Download, Trash2, BarChart3 } from 'lucide-react'
 import { ImapLogViewer } from '@/components/imap-log-viewer'
+import { PageHeader, PageContainer } from '@/components/patterns'
 import { useToast } from '@/hooks/use-toast'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
@@ -361,21 +362,17 @@ export default function TonePage() {
     : []
 
   return (
-    <div
-      className="container mx-auto flex flex-col px-4 py-6 md:px-6"
-      style={{ height: 'calc(100vh - 64px)' }}
-    >
+    <PageContainer fullHeight>
       {/* Header */}
-      <div className="mb-6 flex-shrink-0">
-        <div className="mb-4">
-          <h1 className="text-3xl font-bold text-zinc-900">Tone Analysis</h1>
-          <p className="mt-1 text-zinc-600">
-            {toneData && toneData.totalEmailsLoaded > 0
-              ? `Analyze your writing style from ${toneData.totalEmailsLoaded} emails`
-              : 'Build your tone profile by loading and analyzing emails'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Tone Analysis"
+        description={
+          toneData && toneData.totalEmailsLoaded > 0
+            ? `Analyze your writing style from ${toneData.totalEmailsLoaded} emails`
+            : 'Build your tone profile by loading and analyzing emails'
+        }
+        className="flex-shrink-0"
+      />
 
       {/* Main Tabs */}
       <div className="flex min-h-0 flex-1 flex-col">
@@ -990,6 +987,6 @@ export default function TonePage() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </PageContainer>
   )
 }

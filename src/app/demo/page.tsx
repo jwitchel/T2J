@@ -2,6 +2,7 @@ import { PublicNavbar } from '@/components/public-navbar'
 import { Footer } from '@/components/footer'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/patterns'
 
 export default function DemoPage() {
   return (
@@ -10,10 +11,12 @@ export default function DemoPage() {
 
       <main className="container mx-auto flex-1 px-4 py-16">
         <div className="mx-auto max-w-4xl">
-          <h1 className="mb-4 text-center text-4xl font-bold">How It Works</h1>
-          <p className="text-muted-foreground mb-12 text-center text-xl">
-            See Time to Just in action
-          </p>
+          <PageHeader
+            title="How It Works"
+            description="See Time to Just in action"
+            centered
+            className="mb-12"
+          />
 
           {/* Step 1 */}
           <div className="mb-12">

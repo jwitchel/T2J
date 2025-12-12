@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { PageHeader } from '@/components/patterns'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -396,7 +397,7 @@ export default function SettingsPage() {
     <ProtectedRoute>
       <div className="bg-background min-h-screen p-8">
         <div className="mx-auto max-w-4xl">
-          <h1 className="mb-8 text-3xl font-bold">Settings</h1>
+          <PageHeader title="Settings" className="mb-8" />
 
           <Tabs defaultValue="profile" className="w-full">
             <TabsList className="mb-6 w-full">

@@ -18,6 +18,7 @@ import {
 import { RefreshCw, Trash2, Pause, Play } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { useToast } from '@/hooks/use-toast'
+import { PageHeader, PageContainer } from '@/components/patterns'
 
 export default function JobsPage() {
   const [refreshKey, setRefreshKey] = useState(0)
@@ -467,15 +468,13 @@ export default function JobsPage() {
   }, [forceRefresh])
 
   return (
-    <div
-      className="container mx-auto flex flex-col px-4 py-6 md:px-6"
-      style={{ height: 'calc(100vh - 64px)' }}
-    >
+    <PageContainer fullHeight>
       <div className="mb-4 flex-shrink-0">
-        <div className="mb-3">
-          <h1 className="text-3xl font-bold text-zinc-900">Background Jobs</h1>
-          <p className="mt-1 text-zinc-600">Monitor and manage background processing tasks</p>
-        </div>
+        <PageHeader
+          title="Background Jobs"
+          description="Monitor and manage background processing tasks"
+          className="mb-3"
+        />
 
         {/* Single row with queue stats and controls */}
         <div className="flex items-start gap-2">
@@ -744,6 +743,6 @@ export default function JobsPage() {
       <div className="min-h-0 flex-1">
         <ImapLogViewer emailAccountId="monitoring" className="h-full" hideHeader={false} />
       </div>
-    </div>
+    </PageContainer>
   )
 }
