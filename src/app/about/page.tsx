@@ -8,10 +8,10 @@ export default function AboutPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 flex-1">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-4">About Time to Just</h1>
-          <p className="text-xl text-muted-foreground text-center mb-12">
+          <h1 className="text-3xl sm:text-4xl font-bold text-center mb-4">About Time to Just</h1>
+          <p className="text-lg sm:text-xl text-muted-foreground text-center mb-8 sm:mb-12">
             Reclaim your time with AI-powered email assistance
           </p>
 
@@ -28,9 +28,9 @@ export default function AboutPage() {
             </p>
           </div>
 
-          <h2 className="text-2xl font-semibold mb-6 text-center">Why Choose Time to Just?</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold mb-6 text-center">Why Choose Time to Just?</h2>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-12">
+          <div className="grid sm:grid-cols-2 gap-6 mb-8 sm:mb-12">
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-3">

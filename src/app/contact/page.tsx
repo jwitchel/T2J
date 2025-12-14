@@ -8,14 +8,14 @@ export default function ContactPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 flex-1">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-4">Contact Us</h1>
-          <p className="text-xl text-muted-foreground text-center mb-12">
+          <h1 className="text-3xl sm:text-4xl font-bold text-center mb-4">Contact Us</h1>
+          <p className="text-lg sm:text-xl text-muted-foreground text-center mb-8 sm:mb-12">
             We&apos;d love to hear from you
           </p>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-12">
+          <div className="grid sm:grid-cols-2 gap-6 mb-8 sm:mb-12">
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-3">
@@ -52,7 +52,7 @@ export default function ContactPage() {
             </Card>
           </div>
 
-          <Card className="mb-12">
+          <Card className="mb-8 sm:mb-12">
             <CardHeader>
               <div className="flex items-center gap-3">
                 <MessageSquare className="h-6 w-6 text-green-500" />

@@ -55,10 +55,10 @@ export default function FAQPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 flex-1">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-bold text-center mb-4">Frequently Asked Questions</h1>
-          <p className="text-xl text-muted-foreground text-center mb-12">
+          <h1 className="text-3xl sm:text-4xl font-bold text-center mb-4">Frequently Asked Questions</h1>
+          <p className="text-lg sm:text-xl text-muted-foreground text-center mb-8 sm:mb-12">
             Everything you need to know about Time to Just
           </p>
 
@@ -75,8 +75,8 @@ export default function FAQPage() {
             ))}
           </Accordion>
 
-          <div className="mt-12 text-center">
-            <h2 className="text-xl font-semibold mb-2">Still have questions?</h2>
+          <div className="mt-8 sm:mt-12 text-center">
+            <h2 className="text-lg sm:text-xl font-semibold mb-2">Still have questions?</h2>
             <p className="text-muted-foreground">
               Contact us at support@timetojust.com and we&apos;ll be happy to help.
             </p>

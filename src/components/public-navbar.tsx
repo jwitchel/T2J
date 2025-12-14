@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { BrandLogo } from '@/components/brand-logo'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
 
 const navLinks = [
@@ -39,7 +40,8 @@ export function PublicNavbar() {
           </nav>
         </div>
 
-        <div className="flex gap-4">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Button asChild variant="ghost">
             <Link href="/signin">Sign In</Link>
           </Button>

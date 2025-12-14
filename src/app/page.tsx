@@ -31,12 +31,12 @@ export default function Home() {
     <div className="min-h-screen bg-background flex flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
-        <div className="max-w-4xl mx-auto text-center mb-16">
-          <h2 className="text-5xl font-bold mb-6">
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 flex-1">
+        <div className="max-w-4xl mx-auto text-center mb-12 sm:mb-16">
+          <h2 className="text-4xl sm:text-5xl font-bold mb-4 sm:mb-6">
             AI-Powered Email Reply Drafts
           </h2>
-          <p className="text-xl text-muted-foreground mb-8">
+          <p className="text-lg sm:text-xl text-muted-foreground mb-6 sm:mb-8">
             Generate email responses that match your unique writing tone and style
           </p>
           <Button asChild size="lg">
@@ -44,7 +44,7 @@ export default function Home() {
           </Button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto">
           <Card>
             <CardHeader>
               <CardTitle>Tone Analysis</CardTitle>

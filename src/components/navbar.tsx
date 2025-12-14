@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { apiGet } from '@/lib/api'
 import { BrandLogo } from '@/components/brand-logo'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export function Navbar() {
   const pathname = usePathname()
@@ -104,7 +105,8 @@ export function Navbar() {
           </div>
 
           {/* Right side - User menu */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 

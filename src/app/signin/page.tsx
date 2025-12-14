@@ -6,7 +6,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <PublicNavbar />
-      <div className="flex items-center justify-center py-16 flex-1">
+      <div className="flex items-center justify-center py-12 sm:py-16 px-4 flex-1">
         <SignInForm />
       </div>
       <Footer />

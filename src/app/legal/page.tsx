@@ -6,12 +6,12 @@ export default function LegalPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 py-16 flex-1">
+      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 flex-1">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl font-bold mb-8">Legal</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8">Legal</h1>
 
-          <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-4">Terms of Service</h2>
+          <section className="mb-8 sm:mb-12">
+            <h2 className="text-xl sm:text-2xl font-semibold mb-4">Terms of Service</h2>
             <div className="prose dark:prose-invert max-w-none text-muted-foreground space-y-4">
               <p>
                 By using Time to Just, you agree to these terms. Please read them carefully.
@@ -42,8 +42,8 @@ export default function LegalPage() {
             </div>
           </section>
 
-          <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-4">Privacy Policy</h2>
+          <section className="mb-8 sm:mb-12">
+            <h2 className="text-xl sm:text-2xl font-semibold mb-4">Privacy Policy</h2>
             <div className="prose dark:prose-invert max-w-none text-muted-foreground space-y-4">
               <h3 className="text-lg font-medium text-foreground">Data We Collect</h3>
               <p>
@@ -83,7 +83,7 @@ export default function LegalPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">Cookie Policy</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold mb-4">Cookie Policy</h2>
             <div className="prose dark:prose-invert max-w-none text-muted-foreground space-y-4">
               <p>
                 We use essential cookies to maintain your session and remember your
@@ -93,7 +93,7 @@ export default function LegalPage() {
             </div>
           </section>
 
-          <div className="mt-12 pt-8 border-t text-sm text-muted-foreground">
+          <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t text-sm text-muted-foreground">
             Last updated: December 2024
           </div>
         </div>
