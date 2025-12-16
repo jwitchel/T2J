@@ -72,7 +72,7 @@ npm run tone:demo
 
 #### `test-data-loader.ts`
 Manages test data in the vector store:
-- Load John's test emails
+- Load user's test emails
 - Clear test data
 - Reset database
 
@@ -118,7 +118,7 @@ npm run tone:e2e
 
 ### "No test data found"
 ```bash
-# Load John's test emails
+# Load user's test emails
 npm run tone:load
 ```
 

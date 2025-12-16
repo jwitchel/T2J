@@ -6,8 +6,8 @@ export class NameExtractor {
    * Extract person name from email address and recipient name
    * Priority: recipientName (if valid) > formatted email prefix as fallback
    *
-   * @param emailAddress - The email address (e.g., "john.doe@example.com")
-   * @param recipientName - Optional recipient name from email headers (e.g., "John Doe" or '"John Doe"')
+   * @param emailAddress - The email address (e.g., "joe.doe@example.com")
+   * @param recipientName - Optional recipient name from email headers (e.g., "Joe Doe" or '"Joe Doe"')
    * @returns Cleaned and normalized name
    *
    * @example
@@ -78,7 +78,7 @@ export class NameExtractor {
 
   /**
    * Format email prefix to be more readable as a name
-   * Converts: john.doe -> John Doe, j.w.smith -> J W Smith
+   * Converts: joe.doe -> Joe Doe, j.w.smith -> J W Smith
    *
    * @param emailAddress - Full email address
    * @returns Formatted name from email prefix

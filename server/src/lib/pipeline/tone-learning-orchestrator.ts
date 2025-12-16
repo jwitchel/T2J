@@ -167,7 +167,7 @@ Email Details:
   }
   
   /**
-   * Load test data (John's emails)
+   * Load test data (user's emails)
    * @deprecated Use seed-demo.ts instead
    */
   async loadTestData(_userId: string = 'john-test-user'): Promise<void> {

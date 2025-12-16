@@ -16,7 +16,7 @@ Received: from mail-pf1-x12a.google.com (mail-pf1-x12a.google.com. [2001:4860:48
         (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
         Thu, 3 Oct 2024 12:34:56 -0700 (PDT)
 Received-SPF: pass (google.com: domain of sender@example.com designates 2001:4860:4864:5f::12a as permitted sender) client-ip=2001:4860:4864:5f::12a;
-From: "John Doe" <sender@example.com>
+From: "Joe Doe" <sender@example.com>
 To: user@example.com
 Subject: Test Email Subject
 Date: Thu, 3 Oct 2024 12:34:56 -0700
@@ -29,7 +29,7 @@ This is the email body.
 It contains multiple lines.
 
 Best regards,
-John
+Joe
 `;
 
 // Extract headers from raw RFC 5322 format
@@ -60,7 +60,7 @@ console.log('\n' + '='.repeat(80));
 
 // Validation
 const expectedMessageId = '<CABc123XYZ456abc789DEF@mail.gmail.com>';
-const expectedFrom = '"John Doe" <sender@example.com>';
+const expectedFrom = '"Joe Doe" <sender@example.com>';
 const expectedTo = 'user@example.com';
 const expectedSubject = 'Test Email Subject';
 

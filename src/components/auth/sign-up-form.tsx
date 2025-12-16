@@ -85,7 +85,7 @@ export function SignUpForm() {
             <Input
               id="name"
               type="text"
-              placeholder="John Doe"
+              placeholder="Joe Doe"
               {...register('name')}
               disabled={isLoading}
             />

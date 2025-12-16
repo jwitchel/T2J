@@ -78,7 +78,7 @@ router.get('/api/nlp/samples', (_req, res) => {
       },
       {
         category: "Professional",
-        text: "Hi John, I hope you're well. Could you please review the attached proposal and let me know your thoughts? Best regards",
+        text: "Hi Joe, I hope you're well. Could you please review the attached proposal and let me know your thoughts? Best regards",
         expectedFamiliarity: "professional"
       },
       {

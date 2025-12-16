@@ -101,7 +101,7 @@ describe('NLP Feature Extractor', () => {
     });
 
     it('should analyze formality levels', () => {
-      const formal = extractEmailFeatures("Dear Mr. Smith, I am writing to inquire about your services. Please find attached the requested documents. Sincerely, John");
+      const formal = extractEmailFeatures("Dear Mr. Smith, I am writing to inquire about your services. Please find attached the requested documents. Sincerely, Joe");
       const informal = extractEmailFeatures("Hey! What's up? Wanna grab lunch tomorrow? Let me know!");
       
       expect(formal.tonalQualities.formality).toBeGreaterThan(0.7);
@@ -245,7 +245,7 @@ describe('NLP Feature Extractor', () => {
     });
     
     it('should analyze greeting and closing styles', () => {
-      const formal = extractEmailFeatures("Dear Mr. Johnson, I hope this email finds you well. ... Sincerely, John Smith");
+      const formal = extractEmailFeatures("Dear Mr. Johnson, I hope this email finds you well. ... Sincerely, Joe Smith");
       const casual = extractEmailFeatures("Hey Sarah! ... Talk to you later!");
       
       expect(formal.relationshipHints.linguisticMarkers.greetingStyle).toBe('formal');
@@ -256,7 +256,7 @@ describe('NLP Feature Extractor', () => {
     
     it('should calculate formality indicators comprehensively', () => {
       const formalFeatures = extractEmailFeatures(
-        "Dear Ms. Smith, pursuant to our discussion at Acme Corporation, I am writing to follow up on the deliverables. Please find attached the comprehensive analysis you requested. Respectfully yours, John",
+        "Dear Ms. Smith, pursuant to our discussion at Acme Corporation, I am writing to follow up on the deliverables. Please find attached the comprehensive analysis you requested. Respectfully yours, Joe",
         { name: 'Ms. Smith' }
       );
       
@@ -270,7 +270,7 @@ describe('NLP Feature Extractor', () => {
       const intimate = extractEmailFeatures("Hey honey! Missing you so much. Can't wait to see you tonight. Love you! xoxo");
       const veryFamiliar = extractEmailFeatures("Dude! That was insane lol. We gotta do that again soon haha! Hit me up!");
       const familiar = extractEmailFeatures("Hey, btw can you send me that file when you get a chance? Thanks!");
-      const professional = extractEmailFeatures("Hi John, I hope you're well. Could you please review the attached proposal and let me know your thoughts? Best regards");
+      const professional = extractEmailFeatures("Hi Joe, I hope you're well. Could you please review the attached proposal and let me know your thoughts? Best regards");
       const formal = extractEmailFeatures("Dear Mr. Smith, Further to our meeting yesterday, I am pleased to submit the requested documentation for your consideration. Yours sincerely");
       
       expect(intimate.relationshipHints.familiarityLevel).toBe('intimate');
@@ -301,7 +301,7 @@ describe('NLP Feature Extractor', () => {
     });
 
     it('should calculate formality score', () => {
-      const formal = extractEmailFeatures("Dear Mr. Smith, I hope this email finds you well. Sincerely, John");
+      const formal = extractEmailFeatures("Dear Mr. Smith, I hope this email finds you well. Sincerely, Joe");
       const casual = extractEmailFeatures("Hey! What's up? LOL that was funny!");
       
       expect(formal.stats.formalityScore).toBeGreaterThan(0.6);

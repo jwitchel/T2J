@@ -63,12 +63,12 @@ describe('PersonService', () => {
     it('should create a person with email successfully', async () => {
       const person = await personService.createPerson({
         userId: testUserId,
-        name: 'John Doe',
-        emailAddress: 'john@example.com'
+        name: 'Joe Doe',
+        emailAddress: 'joe@example.com'
       });
 
       expect(person).toBeDefined();
-      expect(person.name).toBe('John Doe');
+      expect(person.name).toBe('Joe Doe');
       expect(person.user_id).toBe(testUserId);
       expect(person.emails).toHaveLength(1);
       expect(person.emails[0].email_address).toBe('john@example.com');
@@ -104,11 +104,11 @@ describe('PersonService', () => {
     it('should trim person name', async () => {
       const person = await personService.createPerson({
         userId: testUserId,
-        name: '  John Doe  ',
-        emailAddress: 'john2@example.com'
+        name: '  Joe Doe  ',
+        emailAddress: 'joe2@example.com'
       });
 
-      expect(person.name).toBe('John Doe');
+      expect(person.name).toBe('Joe Doe');
     });
 
     it('should throw ValidationError for invalid email', async () => {

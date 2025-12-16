@@ -15,7 +15,7 @@ export const sampleEmails = {
     "Yo! Wanna grab beers tonight? Been too long man. Hit me up!"
   ],
   colleagues: [
-    "Hi John, per our discussion, I've attached the quarterly report for your review. Please let me know if you need any clarification.",
+    "Hi Joe, per our discussion, I've attached the quarterly report for your review. Please let me know if you need any clarification.",
     "Good morning team, just a quick update on the project status. We're on track to meet the deadline.",
     "Hi Sarah, could you please send me the latest mockups when you get a chance? Thanks!"
   ],

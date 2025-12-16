@@ -96,7 +96,7 @@ export default function DemoPage() {
                   <div className="p-4 bg-blue-50/50 dark:bg-blue-950/50">
                     <p className="text-sm">&quot;Hi Sarah,</p>
                     <p className="text-sm mt-2">Thursday at 2pm works great for me. I&apos;ll update the calendar invite.</p>
-                    <p className="text-sm mt-2">Best,<br/>John&quot;</p>
+                    <p className="text-sm mt-2">Best,<br/>Joe&quot;</p>
                   </div>
                 </div>
               </CardContent>

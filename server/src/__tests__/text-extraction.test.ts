@@ -67,7 +67,7 @@ Can we meet tomorrow?`;
       const emailBody = `I agree with your proposal.
 
 Best regards,
-John Smith
+Joe Smith
 CEO, Acme Corp
 
 > Please review the attached proposal`;

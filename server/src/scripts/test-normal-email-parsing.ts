@@ -25,7 +25,7 @@ It has multiple paragraphs and should be used directly
 without needing HTML conversion.
 
 Best regards,
-John
+Joe
 ------boundary456
 Content-Type: text/html; charset=UTF-8
 
@@ -34,7 +34,7 @@ Content-Type: text/html; charset=UTF-8
 <p>This is a normal email with proper text/plain content.</p>
 <p>It has multiple paragraphs and should be used directly
 without needing HTML conversion.</p>
-<p>Best regards,<br>John</p>
+<p>Best regards,<br>Joe</p>
 </body>
 </html>
 ------boundary456--

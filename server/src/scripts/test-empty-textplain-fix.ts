@@ -30,7 +30,7 @@ Content-Type: text/html; charset=UTF-8
 <h1>Receipt from Test Merchant</h1>
 <p>Purchase Amount: $100.00</p>
 <p>Date: Monday, October 20 at 06:44PM PDT</p>
-<p>From: John Doe</p>
+<p>From: Joe Doe</p>
 <p>Total: $100.00</p>
 </body>
 </html>
