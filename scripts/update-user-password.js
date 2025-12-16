@@ -70,5 +70,5 @@ async function updateUserPassword(email, newPassword) {
   }
 }
 
-// Update jess@test.com password to 12345678
-updateUserPassword('jess@test.com', '12345678');
+// Update jane@test.com password to 12345678
+updateUserPassword('jane@test.com', '12345678');

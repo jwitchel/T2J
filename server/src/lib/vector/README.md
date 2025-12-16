@@ -62,7 +62,7 @@ const result = await vectorSearchService.search({
   queryText: 'Let me know if you need anything',
   filters: {
     relationship: 'colleague',
-    recipientEmail: 'john@example.com'  // Optional: direct correspondence
+    recipientEmail: 'joe@example.com'  // Optional: direct correspondence
   },
   limit: 5,
   scoreThreshold: 0.5

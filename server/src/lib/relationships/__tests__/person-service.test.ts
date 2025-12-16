@@ -71,7 +71,7 @@ describe('PersonService', () => {
       expect(person.name).toBe('Joe Doe');
       expect(person.user_id).toBe(testUserId);
       expect(person.emails).toHaveLength(1);
-      expect(person.emails[0].email_address).toBe('john@example.com');
+      expect(person.emails[0].email_address).toBe('joe@example.com');
       expect(person.emails[0].is_primary).toBe(true);
     });
 

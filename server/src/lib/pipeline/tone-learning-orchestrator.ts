@@ -170,7 +170,7 @@ Email Details:
    * Load test data (user's emails)
    * @deprecated Use seed-demo.ts instead
    */
-  async loadTestData(_userId: string = 'john-test-user'): Promise<void> {
+  async loadTestData(_userId: string = 'test-user'): Promise<void> {
     console.log('loadTestData is deprecated. Use npm run seed instead.');
   }
   
