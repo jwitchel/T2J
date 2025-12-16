@@ -40,7 +40,7 @@ async function diagnoseDuplicateSignature() {
   const llmResponseWithName = `Keep me in the loop.
 
 
-John`;
+Joe`;
 
   console.log('📧 Simulated LLM Response (with name):\n---');
   console.log(llmResponseWithName);
@@ -53,7 +53,7 @@ John`;
 
   const buggedResult = `${llmResponseWithName}\n${typedName}\n${signatureBlock}`;
   console.log(buggedResult);
-  console.log('\n❌ Result shows DUPLICATE: "John" appears twice!\n');
+  console.log('\n❌ Result shows DUPLICATE: "Joe" appears twice!\n');
 
   // Test fixed behavior
   console.log('✅ EXPECTED BEHAVIOR (Fixed):');

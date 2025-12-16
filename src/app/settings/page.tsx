@@ -388,7 +388,7 @@ export default function SettingsPage() {
                     type="text"
                     value={nicknames}
                     onChange={(e) => setNicknames(e.target.value)}
-                    placeholder="e.g. Jessica, Jess, JW"
+                    placeholder="e.g. Jane, JS"
                     disabled={isLoading}
                   />
                   <p className="text-sm text-muted-foreground">
@@ -437,7 +437,7 @@ export default function SettingsPage() {
                     id="signatureBlock"
                     value={signatureBlock}
                     onChange={(e) => setSignatureBlock(e.target.value)}
-                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
+                    placeholder={`---\nCell: 555-0100\nReplied on ${new Date().toLocaleDateString()}`}
                     className="min-h-[120px] font-mono text-sm"
                     disabled={isLoading}
                   />

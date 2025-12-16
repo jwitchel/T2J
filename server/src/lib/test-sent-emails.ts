@@ -221,14 +221,14 @@ Let me know if you'd like to discuss these points further.`,
         date: new Date('2024-01-15T16:00:00Z'),
         textContent: `Approved! Please proceed with the purchase.
 
-On Mon, Jan 15, 2024 at 9:00 AM John Doe <john@company.com> wrote:
+On Mon, Jan 15, 2024 at 9:00 AM Joe Doe <joe@company.com> wrote:
 > Hi Sarah,
 > 
 > We need approval for the new software licenses.
 > Total cost: $5,000
 > 
 > Thanks,
-> John`,
+> Joe`,
         expectedExtraction: 'Approved! Please proceed with the purchase.',
         description: 'Gmail-style attribution line'
       },
@@ -340,16 +340,16 @@ Here are the notes from today's meeting...`,
         textContent: `I've reviewed the contract and everything looks good to me.
 
 Best regards,
-John Smith
+Joe Smith
 
 --
-John Smith
+Joe Smith
 Senior Legal Counsel
 Acme Corporation
 Direct: +1 (555) 123-4567
 Mobile: +1 (555) 987-6543
-Email: john.smith@acme.com
-LinkedIn: linkedin.com/in/johnsmith
+Email: joe.smith@acme.com
+LinkedIn: linkedin.com/in/joesmith
 
 This email is confidential and may be legally privileged.
 
@@ -357,16 +357,16 @@ This email is confidential and may be legally privileged.
         expectedExtraction: `I've reviewed the contract and everything looks good to me.
 
 Best regards,
-John Smith
+Joe Smith
 
 --
-John Smith
+Joe Smith
 Senior Legal Counsel
 Acme Corporation
 Direct: +1 (555) 123-4567
 Mobile: +1 (555) 987-6543
-Email: john.smith@acme.com
-LinkedIn: linkedin.com/in/johnsmith
+Email: joe.smith@acme.com
+LinkedIn: linkedin.com/in/joesmith
 
 This email is confidential and may be legally privileged.`,
         description: 'Email with professional signature block'
@@ -411,9 +411,9 @@ I'll have limited access to email during this time. For urgent matters, please c
 I'll respond to your message when I return.
 
 Best regards,
-John Smith
+Joe Smith
 
-> Hi John, could you send me the latest project update?`,
+> Hi Joe, could you send me the latest project update?`,
         expectedExtraction: `Hi,
 
 I'm currently out of the office and will return on Monday, January 22nd.
@@ -423,7 +423,7 @@ I'll have limited access to email during this time. For urgent matters, please c
 I'll respond to your message when I return.
 
 Best regards,
-John Smith`,
+Joe Smith`,
         description: 'Automatic out-of-office reply'
       }
     ];

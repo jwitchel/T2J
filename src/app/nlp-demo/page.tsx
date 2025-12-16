@@ -18,7 +18,7 @@ const SAMPLE_TEXTS = [
   },
   {
     label: "Professional",
-    text: "Hi John, per our discussion, I've attached the quarterly report for your review. Please let me know if you need any clarification."
+    text: "Hi Joe, per our discussion, I've attached the quarterly report for your review. Please let me know if you need any clarification."
   },
   {
     label: "Formal",

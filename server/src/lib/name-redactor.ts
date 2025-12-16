@@ -97,7 +97,7 @@ export class NameRedactor {
     // Step 5: Perform replacements
     let result = protectedText;
     
-    // Sort by length (longest first) to handle "John Smith" before "John"
+    // Sort by length (longest first) to handle "Joe Smith" before "Joe"
     const sortedNames = Array.from(redactionMap.keys()).sort((a, b) => b.length - a.length);
     
     sortedNames.forEach(name => {

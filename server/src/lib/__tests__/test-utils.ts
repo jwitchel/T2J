@@ -259,7 +259,7 @@ export class MockDataGenerator {
       messageId: `<${Date.now()}@mock.local>`,
       inReplyTo: null,
       date: new Date(),
-      from: [{ address: 'john@example.com', name: 'John' }],
+      from: [{ address: 'joe@example.com', name: 'Joe' }],
       to: [{
         address: recipientAddr,
         name: relationship.charAt(0).toUpperCase() + relationship.slice(1)
@@ -271,7 +271,7 @@ export class MockDataGenerator {
       htmlContent: null,
       userReply: body,
       respondedTo: '',
-      fullMessage: `From: john@example.com\r\nTo: ${recipientAddr}\r\nSubject: ${subject}\r\n\r\n${body}`
+      fullMessage: `From: joe@example.com\r\nTo: ${recipientAddr}\r\nSubject: ${subject}\r\n\r\n${body}`
     };
   }
   

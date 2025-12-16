@@ -45,7 +45,7 @@ const createSampleExamples = (): SelectedExample[] => [
   },
   {
     id: 'ex3',
-    text: "Hi John, I've reviewed the Q3 proposal and have some feedback. The revenue projections look solid, but I think we need to revisit the timeline. Can we schedule a meeting this week to discuss?",
+    text: "Hi Joe, I've reviewed the Q3 proposal and have some feedback. The revenue projections look solid, but I think we need to revisit the timeline. Can we schedule a meeting this week to discuss?",
     metadata: {
       relationship: { type: 'colleagues', confidence: 0.85, detectionMethod: 'auto' },
       features: {
@@ -102,7 +102,7 @@ async function testTemplates() {
   
   const verbosePrompt = await formatter.formatVerbosePrompt({
     incomingEmail: "Can we discuss the project timeline?",
-    recipientEmail: "john@company.com",
+    recipientEmail: "joe@company.com",
     relationship: "colleagues",
     examples,
     relationshipProfile: null

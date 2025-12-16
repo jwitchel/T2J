@@ -28,7 +28,7 @@ export default function DemoPage() {
                   IMAP credentials for other providers. Your connection is encrypted and secure.
                 </p>
                 <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg p-4 font-mono text-sm">
-                  <div className="text-green-600 dark:text-green-400">Connected: john@gmail.com</div>
+                  <div className="text-green-600 dark:text-green-400">Connected: joe@gmail.com</div>
                   <div className="text-muted-foreground">Last sync: 2 minutes ago</div>
                   <div className="text-muted-foreground">Monitoring: Active</div>
                 </div>
@@ -96,7 +96,7 @@ export default function DemoPage() {
                   <div className="p-4 bg-blue-50/50 dark:bg-blue-950/50">
                     <p className="text-sm">&quot;Hi Sarah,</p>
                     <p className="text-sm mt-2">Thursday at 2pm works great for me. I&apos;ll update the calendar invite.</p>
-                    <p className="text-sm mt-2">Best,<br/>John&quot;</p>
+                    <p className="text-sm mt-2">Best,<br/>Joe&quot;</p>
                   </div>
                 </div>
               </CardContent>

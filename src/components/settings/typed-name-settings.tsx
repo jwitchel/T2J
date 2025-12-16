@@ -94,7 +94,7 @@ export function TypedNameSettings() {
 
     try {
       const regex = new RegExp(preferences.removalRegex, 'gmi')
-      const testText = "Thanks for your help!\n\n-John"
+      const testText = "Thanks for your help!\n\n-Joe"
       const result = testText.replace(regex, '').trim()
       success(`Test result: "${result}"`)
     } catch {
@@ -116,7 +116,7 @@ export function TypedNameSettings() {
         <Label htmlFor="removal-regex">Name Removal Pattern (Regex)</Label>
         <Input
           id="removal-regex"
-          placeholder="e.g., ^[-\\s]*(?:John|J)\\s*$"
+          placeholder="e.g., ^[-\\s]*(?:Joe|J)\\s*$"
           value={preferences.removalRegex}
           onChange={(e) => setPreferences({ ...preferences, removalRegex: e.target.value })}
         />
@@ -139,7 +139,7 @@ export function TypedNameSettings() {
         <Label htmlFor="append-string">Name to Append</Label>
         <Input
           id="append-string"
-          placeholder="e.g., -John"
+          placeholder="e.g., -Joe"
           value={preferences.appendString}
           onChange={(e) => setPreferences({ ...preferences, appendString: e.target.value })}
         />
@@ -152,11 +152,11 @@ export function TypedNameSettings() {
       <div className="bg-muted rounded-lg p-4">
         <h4 className="text-sm font-medium mb-2">Example Usage:</h4>
         <div className="space-y-2 text-sm text-muted-foreground">
-          <p><strong>Removal Pattern:</strong> <code>^[-\s]*(?:John|J)\s*$</code></p>
-          <p className="ml-4">Removes &quot;-John&quot;, &quot;-J&quot;, &quot;John&quot;, &quot; J&quot; etc. from emails</p>
+          <p><strong>Removal Pattern:</strong> <code>^[-\s]*(?:Joe|J)\s*$</code></p>
+          <p className="ml-4">Removes &quot;-Joe&quot;, &quot;-J&quot;, &quot;Joe&quot;, &quot; J&quot; etc. from emails</p>
           <p className="ml-4 text-xs">Works bottom-up: only removes the last occurrence (e.g., signature) while preserving names in the email body</p>
-          <p><strong>Append String:</strong> <code>-John</code></p>
-          <p className="ml-4">Adds &quot;-John&quot; to the end of generated responses</p>
+          <p><strong>Append String:</strong> <code>-Joe</code></p>
+          <p className="ml-4">Adds &quot;-Joe&quot; to the end of generated responses</p>
         </div>
       </div>
 
