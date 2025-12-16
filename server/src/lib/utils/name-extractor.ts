@@ -11,10 +11,10 @@ export class NameExtractor {
    * @returns Cleaned and normalized name
    *
    * @example
-   * extractName('raswheeler@gmail.com', 'Jessica Wheeler') // => 'Jessica Wheeler'
-   * extractName('raswheeler@gmail.com', '"Jessica Wheeler"') // => 'Jessica Wheeler'
-   * extractName('test@example.com', 'Viola, John L.') // => 'John L. Viola'
-   * extractName('john.doe@example.com', undefined) // => 'John Doe'
+   * extractName('jsmith@gmail.com', 'Jane Smith') // => 'Jane Smith'
+   * extractName('jsmith@gmail.com', '"Jane Smith"') // => 'Jane Smith'
+   * extractName('test@example.com', 'Adams, Joe L.') // => 'Joe L. Adams'
+   * extractName('joe.doe@example.com', undefined) // => 'Joe Doe'
    * extractName('j.w.smith@example.com', undefined) // => 'J W Smith'
    */
   public static extractName(emailAddress: string, recipientName?: string): string {
@@ -39,11 +39,11 @@ export class NameExtractor {
    * @returns Cleaned name or empty string if invalid
    *
    * @example
-   * cleanRecipientName('"Jessica Wheeler"') // => 'Jessica Wheeler'
-   * cleanRecipientName('  John   Doe  ') // => 'John Doe'
-   * cleanRecipientName('Viola, John L.') // => 'John L. Viola'
+   * cleanRecipientName('"Jane Smith"') // => 'Jane Smith'
+   * cleanRecipientName('  Joe   Doe  ') // => 'Joe Doe'
+   * cleanRecipientName('Adams, Joe L.') // => 'Joe L. Adams'
    * cleanRecipientName('Smith, Jane') // => 'Jane Smith'
-   * cleanRecipientName('john doe') // => 'John Doe'
+   * cleanRecipientName('joe doe') // => 'Joe Doe'
    * cleanRecipientName('""') // => ''
    */
   private static cleanRecipientName(recipientName: string): string {
@@ -84,9 +84,9 @@ export class NameExtractor {
    * @returns Formatted name from email prefix
    *
    * @example
-   * formatEmailPrefix('john.doe@example.com') // => 'John Doe'
+   * formatEmailPrefix('joe.doe@example.com') // => 'Joe Doe'
    * formatEmailPrefix('j.w.smith@example.com') // => 'J W Smith'
-   * formatEmailPrefix('raswheeler@gmail.com') // => 'Raswheeler'
+   * formatEmailPrefix('jsmith@gmail.com') // => 'Jsmith'
    */
   private static formatEmailPrefix(emailAddress: string): string {
     // Extract the part before @
@@ -112,9 +112,9 @@ export class NameExtractor {
    * @returns Name in "First Last" format
    *
    * @example
-   * flipLastFirstName('Viola, John L.') // => 'John L. Viola'
+   * flipLastFirstName('Adams, Joe L.') // => 'Joe L. Adams'
    * flipLastFirstName('Smith, Jane') // => 'Jane Smith'
-   * flipLastFirstName('John Doe') // => 'John Doe' (no comma, unchanged)
+   * flipLastFirstName('Joe Doe') // => 'Joe Doe' (no comma, unchanged)
    * flipLastFirstName('Company, Inc., Legal') // => 'Company, Inc., Legal' (multiple commas, unchanged)
    */
   private static flipLastFirstName(name: string): string {
@@ -147,7 +147,7 @@ export class NameExtractor {
    * @returns Capitalized word
    *
    * @example
-   * capitalizeWord('john') // => 'John'
+   * capitalizeWord('joe') // => 'Joe'
    * capitalizeWord('j') // => 'J'
    * capitalizeWord('') // => ''
    * capitalizeWord('"the') // => '"The' (capitalizes first letter after quote)

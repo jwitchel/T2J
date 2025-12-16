@@ -12,7 +12,7 @@ const path = require('path');
 const MODELS = [
   {
     name: 'Style-Embedding ONNX model',
-    url: 'https://github.com/jwitchel/T2J/releases/download/v0.0.1-models/model.onnx',
+    url: 'https://github.com/your-org/T2J/releases/download/v0.0.1-models/model.onnx',
     dest: path.join(__dirname, '../models/AnnaWegmann/Style-Embedding/onnx/model.onnx')
   }
 ];

@@ -25,11 +25,11 @@ describe('Email Text Extraction', () => {
     it('should handle Gmail-style quotes', () => {
       const emailBody = `I'll be there!
 
-On Mon, Jan 15, 2024 at 9:00 AM John Doe <john@example.com> wrote:
+On Mon, Jan 15, 2024 at 9:00 AM Joe Doe <joe@example.com> wrote:
 > Let's meet at 2pm
 > 
 > Thanks,
-> John`;
+> Joe`;
       
       const result = replyExtractor.extractUserText(emailBody);
       expect(result).toBe("I'll be there!");

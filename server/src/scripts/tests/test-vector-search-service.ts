@@ -94,9 +94,9 @@ async function setupTestData(): Promise<void> {
   const testEmails = [
     {
       id: 'email-1',
-      text: 'Hi John, hope you are doing well. Let me know if you need anything.',
+      text: 'Hi Joe, hope you are doing well. Let me know if you need anything.',
       relationship: 'colleague',
-      recipient: 'john@example.com',
+      recipient: 'joe@example.com',
       subject: 'Quick check-in',
       sentDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) // 10 days ago
     },
@@ -118,9 +118,9 @@ async function setupTestData(): Promise<void> {
     },
     {
       id: 'email-4',
-      text: 'Hi John, thanks for your help with the project. Much appreciated!',
+      text: 'Hi Joe, thanks for your help with the project. Much appreciated!',
       relationship: 'colleague',
-      recipient: 'john@example.com',
+      recipient: 'joe@example.com',
       subject: 'Thanks',
       sentDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) // 2 days ago
     },
@@ -260,7 +260,7 @@ async function testRecipientFilter(): Promise<void> {
     userId: TEST_USER_ID,
     queryText: 'Thanks for your help',
     filters: {
-      recipientEmail: 'john@example.com'
+      recipientEmail: 'joe@example.com'
     },
     limit: 10,
     scoreThreshold: 0.0
@@ -270,14 +270,14 @@ async function testRecipientFilter(): Promise<void> {
     throw new Error('Search failed');
   }
 
-  // Verify all results are to john@example.com
+  // Verify all results are to joe@example.com
   for (const doc of result.documents) {
-    if (doc.metadata.recipientEmail !== 'john@example.com') {
-      throw new Error(`Expected john@example.com, got ${doc.metadata.recipientEmail}`);
+    if (doc.metadata.recipientEmail !== 'joe@example.com') {
+      throw new Error(`Expected joe@example.com, got ${doc.metadata.recipientEmail}`);
     }
   }
 
-  console.log(chalk.gray(`  Found ${result.documents.length} emails to john@example.com`));
+  console.log(chalk.gray(`  Found ${result.documents.length} emails to joe@example.com`));
 }
 
 // Test 5: Date range filtering

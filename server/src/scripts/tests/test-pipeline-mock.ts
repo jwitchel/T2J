@@ -150,7 +150,7 @@ async function testPipelineWithMocks() {
       date: new Date(),
       from: [{ address: 'user@example.com', name: 'Test User' }],
       replyTo: [],
-      to: [{ address: 'friend@gmail.com', name: 'John Doe' }],
+      to: [{ address: 'friend@gmail.com', name: 'Joe Doe' }],
       cc: [],
       bcc: [],
       subject: 'Re: Lunch tomorrow?',

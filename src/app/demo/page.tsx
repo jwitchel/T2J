@@ -28,7 +28,7 @@ export default function DemoPage() {
                   IMAP credentials for other providers. Your connection is encrypted and secure.
                 </p>
                 <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg p-4 font-mono text-sm">
-                  <div className="text-green-600 dark:text-green-400">Connected: john@gmail.com</div>
+                  <div className="text-green-600 dark:text-green-400">Connected: joe@gmail.com</div>
                   <div className="text-muted-foreground">Last sync: 2 minutes ago</div>
                   <div className="text-muted-foreground">Monitoring: Active</div>
                 </div>

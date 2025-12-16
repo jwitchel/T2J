@@ -10,7 +10,7 @@ import { EmailDirection } from '../types/email-action-tracking';
 async function testMessageIdExtraction() {
   console.log('🧪 Testing Message-ID Extraction from IMAP...\n');
 
-  const emailAccountId = '687d0c14-0075-4426-bd10-8fbeab947235'; // jwitchel@kingenergy.com (test1 user)
+  const emailAccountId = '687d0c14-0075-4426-bd10-8fbeab947235'; // test-account@example.com (test1 user)
   const userId = 'febcebaa-a3a3-4127-8911-65a1653d13ba'; // test1@example.com
 
   try {
