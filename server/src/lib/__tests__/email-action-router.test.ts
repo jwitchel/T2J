@@ -74,8 +74,9 @@ describe('EmailActionRouter', () => {
         rootFolder: '',
         noActionFolder: 'AI-No-Action',
         spamFolder: 'AI-Spam',
-        todoFolder: 't2j-todo'
-      }, testDraftsPath);
+        todoFolder: 't2j-todo',
+        draftsFolderPath: testDraftsPath
+      });
     });
 
     it('should route reply actions to system drafts folder', () => {
@@ -96,18 +97,6 @@ describe('EmailActionRouter', () => {
       const forwardRoute = router.getActionRoute(EmailActionType.FORWARD);
       expect(forwardRoute.folder).toBe(testDraftsPath);
       expect(forwardRoute.displayName).toBe(testDraftsPath);
-    });
-
-    it('should throw error for draft actions when drafts path not configured', () => {
-      const routerNoDrafts = new EmailActionRouter({
-        rootFolder: '',
-        noActionFolder: 'AI-No-Action',
-        spamFolder: 'AI-Spam'
-      }); // No drafts path provided
-
-      expect(() => routerNoDrafts.getActionRoute(EmailActionType.REPLY)).toThrow('Draft folder path not configured');
-      expect(() => routerNoDrafts.getActionRoute(EmailActionType.REPLY_ALL)).toThrow('Draft folder path not configured');
-      expect(() => routerNoDrafts.getActionRoute(EmailActionType.FORWARD)).toThrow('Draft folder path not configured');
     });
 
     it('should route silent-fyi-only to no-action folder', () => {

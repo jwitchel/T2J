@@ -4,9 +4,10 @@
  * This ensures our fix doesn't break normal email parsing
  */
 
-import { EmailContentParser } from '../lib/email-content-parser';
+import { pool } from '../lib/db';
+import { EmailProcessor } from '../lib/email-processor';
 
-const parser = new EmailContentParser();
+const processor = new EmailProcessor(pool);
 
 // Normal email with proper text/plain
 const normalEmail = `From: sender@example.com
@@ -44,7 +45,7 @@ async function testNormalEmail() {
   console.log('Testing normal email parsing (should use text/plain)...\n');
 
   try {
-    const parsed = await parser.parseFromRaw(normalEmail);
+    const parsed = await processor.processRawEmail(normalEmail);
 
     console.log('✅ Email parsed successfully');
     console.log('\nParsed content:');
@@ -72,6 +73,8 @@ async function testNormalEmail() {
   } catch (error) {
     console.error('\n❌ ERROR parsing email:', error);
     process.exit(1);
+  } finally {
+    await pool.end();
   }
 }
 

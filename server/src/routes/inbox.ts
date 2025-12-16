@@ -54,10 +54,15 @@ router.post('/process-single', requireAuth, async (req, res): Promise<void> => {
         draftId: result.draftId
       });
     } else {
-      // Email processing failed (including skipped due to lock)
-      const statusCode = result.action === 'skipped' ? 409 : 500;  // 409 Conflict for lock contention
+      // Email processing failed
+      let statusCode = 500;
+      let errorMessage = 'Failed to process email';
+      if (result.action === 'malformed') {
+        statusCode = 400;
+        errorMessage = 'Malformed email';
+      }
       res.status(statusCode).json({
-        error: result.action === 'skipped' ? 'Email is being processed by another request' : 'Failed to process email',
+        error: errorMessage,
         message: result.error || result.actionDescription
       });
     }

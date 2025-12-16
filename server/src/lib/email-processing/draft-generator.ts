@@ -10,7 +10,7 @@ import { LLMMetadata } from '../llm-client';
 import { realTimeLogger } from '../real-time-logger';
 import { TypedNameRemover } from '../typed-name-remover';
 import { pool } from '../db';
-import { ParsedEmailData, UserContext } from './email-processing-service';
+import { ParsedEmailData, UserContext } from './inbox-processor';
 import { encode as encodeHtml } from 'he';
 import { EmailActionType } from '../../types/email-action-tracking';
 import { RelationshipType } from '../relationships/relationship-detector';
@@ -31,6 +31,14 @@ interface EmailAddress {
 interface RelationshipResult {
   type: string;
   confidence: number;
+}
+
+/**
+ * Result of email analysis (action determination without draft generation)
+ */
+export interface EmailAnalysisResult {
+  meta: LLMMetadata;
+  relationship: RelationshipResult;
 }
 
 /**
@@ -79,32 +87,21 @@ async function getOrchestrator(providerId: string): Promise<ToneLearningOrchestr
 
 export class DraftGenerator {
   /**
-   * Generate an AI-powered email draft with tone learning
-   * Full pipeline: example selection → pattern analysis → LLM calls → email formatting
+   * Determine recommended action for an incoming email (no draft generation)
+   * Returns action metadata and relationship - use when you only need to know what action to take
    */
-  async generateDraft(
+  async determineAction(
     userId: string,
     providerId: string,
     parsedData: ParsedEmailData,
     userContext: UserContext,
     spamCheckResult: SpamCheckResult
-  ): Promise<EmailProcessingResult> {
-    const { parsed, processedEmail } = parsedData;
+  ): Promise<EmailAnalysisResult> {
+    const { processedEmail } = parsedData;
     const recipientEmail = processedEmail.from[0].address;
-    const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
 
-    // Step 1: Get provider-specific orchestrator (cached, already initialized)
     const orchestrator = await getOrchestrator(providerId);
 
-    // Validate required fields for draft generation (fail fast)
-    if (!parsed.messageId) {
-      throw new Error('Email missing message-id, cannot generate draft');
-    }
-    if (!parsed.subject) {
-      throw new Error('Email missing subject, cannot generate draft');
-    }
-
-    // Initialize constants
     const incomingEmailMetadata = {
       from: processedEmail.from,
       to: processedEmail.to,
@@ -114,9 +111,61 @@ export class DraftGenerator {
       fullMessage: processedEmail.fullMessage
     };
 
-    // Step 2: Run AI pipeline with timeout protection
-    const llmTimeout = parseInt(process.env.EMAIL_PROCESSING_LLM_TIMEOUT || '20000');
-    const aiResult = await this._runAIPipelineWithTimeout(
+    return this._runAnalysisPipeline(
+      orchestrator,
+      processedEmail,
+      recipientEmail,
+      userId,
+      userContext,
+      incomingEmailMetadata,
+      spamCheckResult
+    );
+  }
+
+  /**
+   * Generate an AI-powered email draft with tone learning
+   * Calls determineAction first, then generateDraftFromAnalysis
+   */
+  async generateDraft(
+    userId: string,
+    providerId: string,
+    parsedData: ParsedEmailData,
+    userContext: UserContext,
+    spamCheckResult: SpamCheckResult
+  ): Promise<EmailProcessingResult> {
+    const analysis = await this.determineAction(userId, providerId, parsedData, userContext, spamCheckResult);
+    return this.generateDraftFromAnalysis(userId, providerId, parsedData, userContext, spamCheckResult, analysis);
+  }
+
+  /**
+   * Generate draft using pre-computed analysis result (skips action analysis LLM call)
+   * Use this when determineAction has already been called
+   */
+  async generateDraftFromAnalysis(
+    userId: string,
+    providerId: string,
+    parsedData: ParsedEmailData,
+    userContext: UserContext,
+    spamCheckResult: SpamCheckResult,
+    analysis: EmailAnalysisResult
+  ): Promise<EmailProcessingResult> {
+    const { parsed, processedEmail } = parsedData;
+    const recipientEmail = processedEmail.from[0].address;
+    const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
+
+    const orchestrator = await getOrchestrator(providerId);
+
+    const incomingEmailMetadata = {
+      from: processedEmail.from,
+      to: processedEmail.to,
+      cc: processedEmail.cc,
+      subject: processedEmail.subject,
+      date: processedEmail.date,
+      fullMessage: processedEmail.fullMessage
+    };
+
+    // Run response-only pipeline (skips action analysis since we have it)
+    const aiResult = await this._runResponsePipeline(
       orchestrator,
       processedEmail,
       recipientEmail,
@@ -124,22 +173,18 @@ export class DraftGenerator {
       userContext,
       maxExamples,
       incomingEmailMetadata,
-      spamCheckResult,
-      llmTimeout
+      analysis
     );
 
-    // Step 3: Clean any typed name that the LLM may have added
+    // Clean any typed name that the LLM may have added
     const cleanedBody = await this._removeTypedName(aiResult.body, userId);
 
-    // Step 4: Determine if this is a silent action
-    const isSilentAction = aiResult.meta && EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
+    const isSilentAction = EmailActionType.isSilentAction(aiResult.meta.recommendedAction);
 
-    // Step 5: Format complete draft response
     const formattedDraft = isSilentAction
       ? this._buildSilentDraft(parsed, aiResult.meta, aiResult.relationship, userContext, spamCheckResult)
-      : this._buildReplyDraft(parsed, parsedData.emailBody, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
+      : this._buildReplyDraft(parsed, processedEmail.textContent!, cleanedBody, aiResult.meta, aiResult.relationship, userContext, spamCheckResult);
 
-    // Step 6: Log completion
     this._logDraftCompletion(userId, aiResult);
 
     return {
@@ -147,13 +192,60 @@ export class DraftGenerator {
       draft: formattedDraft
     };
   }
-
   /**
-   * Run complete AI pipeline with timeout protection (moved from ToneLearningOrchestrator.generateDraft)
-   * Incorporates: example selection, pattern analysis, LLM calls (meta-context, action, response)
+   * Run analysis-only pipeline (no response generation)
+   * LLMClient handles timeout internally via AbortController
    * @private
    */
-  private async _runAIPipelineWithTimeout(
+  private async _runAnalysisPipeline(
+    orchestrator: ToneLearningOrchestrator,
+    processedEmail: ProcessedEmail,
+    recipientEmail: string,
+    userId: string,
+    userContext: UserContext,
+    incomingEmailMetadata: SimplifiedEmailMetadata,
+    spamCheckResult: SpamCheckResult
+  ): Promise<EmailAnalysisResult> {
+    const llmClient = orchestrator['patternAnalyzer']['llmClient']!;
+
+    // Relationship detection
+    const replyToEmail = processedEmail.replyTo[0]?.address;
+    const recipientName = processedEmail.from[0]?.name;
+    const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
+      userId,
+      recipientEmail,
+      recipientName,
+      replyToEmail
+    });
+
+    // Action Analysis (single LLM call)
+    const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
+      incomingEmail: processedEmail.userReply,
+      recipientEmail,
+      userNames: userContext.userNames,
+      incomingEmailMetadata,
+      spamCheckResult
+    });
+
+    const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
+    const meta = actionAnalysis.meta;
+
+    // Build relationship result
+    const relationship = EmailActionType.isSpamAction(meta.recommendedAction)
+      ? { type: RelationshipType.SPAM, confidence: 0.9 }
+      : { type: detectedRelationship.relationship, confidence: detectedRelationship.confidence };
+
+    console.log(`[DraftGenerator] determineAction: action=${meta.recommendedAction}, relationship=${relationship.type}`);
+
+    return { meta, relationship };
+  }
+
+  /**
+   * Run response generation pipeline with pre-computed analysis (skips action analysis LLM call)
+   * LLMClient handles timeout internally via AbortController
+   * @private
+   */
+  private async _runResponsePipeline(
     orchestrator: ToneLearningOrchestrator,
     processedEmail: ProcessedEmail,
     recipientEmail: string,
@@ -161,146 +253,76 @@ export class DraftGenerator {
     userContext: UserContext,
     maxExamples: number,
     incomingEmailMetadata: SimplifiedEmailMetadata,
-    spamCheckResult: SpamCheckResult,
-    timeoutMs: number
+    analysis: EmailAnalysisResult
   ): Promise<{ body: string; meta: LLMMetadata; relationship: RelationshipResult }> {
-    // Validate LLM client is available (should be already checked, but for type safety)
-    const llmClient = orchestrator['patternAnalyzer']['llmClient'];
-    if (!llmClient) {
-      throw new Error('LLM client not initialized');
+    const llmClient = orchestrator['patternAnalyzer']['llmClient']!;
+
+    // Step 1: Select relevant examples
+    const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
+      userId,
+      incomingEmail: processedEmail.userReply,
+      recipientEmail,
+      desiredCount: maxExamples
+    });
+
+    const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
+    const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;
+    console.log(`[DraftGenerator] 📧 Selected ${exampleSelection.examples.length} examples for ${exampleSelection.relationship} relationship: ${directCount} direct, ${categoryCount} category`);
+
+    // Step 2: Get enhanced profile with aggregated style
+    const styleService = new StyleAggregationService(pool);
+    const aggregatedStyle = await styleService.getAggregatedStyle(userId, exampleSelection.relationship);
+
+    const enhancedProfile = aggregatedStyle ? {
+      typicalFormality: aggregatedStyle.sentimentProfile.averageFormality.toFixed(2),
+      commonGreetings: aggregatedStyle.greetings?.map(g => g.text) ?? [],
+      commonClosings: aggregatedStyle.closings?.map(c => c.text) ?? [],
+      useEmojis: (aggregatedStyle.emojis?.length ?? 0) > 0,
+      useHumor: false,
+      preferredTopics: [],
+      avoidTopics: [],
+      aggregatedStyle
+    } : null;
+
+    // Step 3: Load writing patterns
+    const writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
+      userId,
+      exampleSelection.relationship
+    );
+
+    if (!writingPatterns) {
+      console.log(`[DraftGenerator] No writing patterns for ${exampleSelection.relationship} - using aggregatedStyle only`);
     }
 
-    const pipelinePromise = (async () => {
+    // Step 4: Response Generation (single LLM call - action analysis already done)
+    const needsResponse = !EmailActionType.isSilentAction(analysis.meta.recommendedAction);
+    let responseMessage = '';
 
-      // Step 1: Select relevant examples
-      const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
-        userId,
+    if (needsResponse) {
+      const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
         incomingEmail: processedEmail.userReply,
         recipientEmail,
-        desiredCount: maxExamples
-      });
-      // Log selected examples for draft generation
-      const directCount = exampleSelection.examples.filter(e => e.metadata.isDirectCorrespondence).length;
-      const categoryCount = exampleSelection.examples.filter(e => !e.metadata.isDirectCorrespondence).length;
-      console.log(`[DraftGenerator] 📧 Selected ${exampleSelection.examples.length} examples for ${exampleSelection.relationship} relationship: ${directCount} direct, ${categoryCount} category`);
-      // exampleSelection.examples.forEach((example, idx) => {
-      //   const relationshipLabel = example.metadata.relationship?.type || example.metadata.relationship || 'unknown';
-      //   const type = example.metadata.isDirectCorrespondence ? '[DIRECT]' : `[${relationshipLabel.toUpperCase()}]`;
-      //   const subject = example.metadata?.subject || 'No subject';
-      //   const snippet = example.text.substring(0, 80).replace(/\n/g, ' ');
-      //   const scores = `sem=${example.scores.semantic.toFixed(2)} sty=${example.scores.style.toFixed(2)} combined=${example.scores.combined.toFixed(2)}`;
-      //   console.log(`[DraftGenerator]   ${idx + 1}. ${type} ${subject} | ${snippet}... | ${scores}`);
-      // });
-
-      // Get the detected relationship
-      const replyToEmail = processedEmail.replyTo[0]?.address;
-      const recipientName = processedEmail.from[0]?.name;
-      const detectedRelationship = await orchestrator['relationshipDetector'].detectRelationship({
-        userId,
-        recipientEmail,
-        recipientName,
-        replyToEmail
-      });
-
-      // Get enhanced profile with aggregated style from PostgreSQL
-      const styleService = new StyleAggregationService(pool);
-      const aggregatedStyle = await styleService.getAggregatedStyle(userId, exampleSelection.relationship);
-
-      // Wrap aggregated style in enhanced profile structure
-      const enhancedProfile = aggregatedStyle ? {
-        // Basic relationship profile fields (all optional for now)
-        typicalFormality: aggregatedStyle.sentimentProfile.averageFormality.toFixed(2),
-        commonGreetings: aggregatedStyle.greetings?.map(g => g.text) ?? [],
-        commonClosings: aggregatedStyle.closings?.map(c => c.text) ?? [],
-        useEmojis: (aggregatedStyle.emojis?.length ?? 0) > 0,
-        useHumor: false,  // Not detected in current system
-        preferredTopics: [],
-        avoidTopics: [],
-        aggregatedStyle
-      } : null;
-
-      // Step 2: Load writing patterns (pre-computed during training)
-      const writingPatterns = await orchestrator['patternAnalyzer'].loadPatterns(
-        userId,
-        exampleSelection.relationship
-      );
-
-      // Note: If no patterns exist, we should NOT analyze on-demand during draft generation
-      // Pattern analysis is expensive (LLM calls + sentence stats calculation)
-      // Instead: Background jobs should pre-compute patterns periodically
-      // For now: If patterns don't exist, we'll use aggregatedStyle alone
-      if (!writingPatterns) {
-        console.log(`[DraftGenerator] No writing patterns for ${exampleSelection.relationship} - using aggregatedStyle only`);
-      }
-
-      // Step 3: Action Analysis (First LLM Call)
-      // Single source of truth for email classification and action determination
-      const actionPrompt = await orchestrator['promptFormatter'].formatActionAnalysis({
-        incomingEmail: processedEmail.userReply,
-        recipientEmail,
+        examples: exampleSelection.examples,
+        relationship: exampleSelection.relationship,
+        relationshipProfile: enhancedProfile,
+        writingPatterns,
         userNames: userContext.userNames,
         incomingEmailMetadata,
-        spamCheckResult
+        actionMeta: analysis.meta
       });
 
-      const actionAnalysis = await llmClient.generateActionAnalysis(actionPrompt);
+      responseMessage = await llmClient.generateResponseMessage(responsePrompt);
+    } else {
+      console.log('[DraftGenerator] Skipping response generation for silent action');
+    }
 
-      // Use action analysis as complete metadata (no merging needed)
-      const combinedMeta: LLMMetadata = actionAnalysis.meta;
+    console.log(`[DraftGenerator] generateDraftFromAnalysis: action=${analysis.meta.recommendedAction}, relationship=${analysis.relationship.type}, examples=${exampleSelection.examples.length}, patterns=${!!writingPatterns}, needsResponse=${needsResponse}`);
 
-      // Step 4: Response Generation (Second LLM Call - conditional)
-      const needsResponse = !EmailActionType.isSilentAction(combinedMeta.recommendedAction);
-      let responseMessage = '';
-
-      if (needsResponse) {
-
-        const responsePrompt = await orchestrator['promptFormatter'].formatResponseGeneration({
-          incomingEmail: processedEmail.userReply,
-          recipientEmail,
-          examples: exampleSelection.examples,
-          relationship: exampleSelection.relationship,
-          relationshipProfile: enhancedProfile,
-          writingPatterns,
-          userNames: userContext.userNames,
-          incomingEmailMetadata,
-          actionMeta: combinedMeta
-        });
-
-        responseMessage = await llmClient.generateResponseMessage(responsePrompt);
-      } else {
-        console.log('[DraftGenerator] Skipping response generation for silent action');
-      }
-
-      // Build final relationship
-      // Use detectedRelationship for both type and confidence (not exampleSelection.relationship)
-      // exampleSelection.relationship is only for finding similar historical examples, not the actual relationship
-      const finalRelationship = EmailActionType.isSpamAction(combinedMeta.recommendedAction)
-        ? { type: RelationshipType.SPAM, confidence: 0.9 }
-        : { type: detectedRelationship.relationship, confidence: detectedRelationship.confidence };
-
-      console.log(`[DraftGenerator] action=${combinedMeta.recommendedAction}, relationship=${finalRelationship.type}, examples=${exampleSelection.examples?.length || 0}, patterns=${!!writingPatterns}, needsResponse=${needsResponse}`);
-
-      return {
-        body: responseMessage,
-        meta: combinedMeta,
-        relationship: finalRelationship
-      };
-    })();
-
-    // Create timeout promise with cleanup capability
-    let timeoutId: NodeJS.Timeout;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        console.error(`[DraftGenerator] ⏱️ TIMEOUT: Pipeline exceeded ${timeoutMs}ms - aborting at runAIPipelineWithTimeout() level`);
-        reject(new Error(`LLM timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-
-    // Race between pipeline and timeout, then cleanup
-    return Promise.race([pipelinePromise, timeoutPromise]).finally(() => {
-      // Clear timeout to prevent false timeout messages after successful completion
-      clearTimeout(timeoutId);
-    });
+    return {
+      body: responseMessage,
+      meta: analysis.meta,
+      relationship: analysis.relationship
+    };
   }
 
   /**
@@ -549,13 +571,6 @@ ${originalHtml}
   }
 
   /**
-   * Escape HTML entities
-   * NOTE: Now using 'he' library's encode() function instead of custom implementation
-   * The 'he' library is the industry-standard, well-tested HTML entity encoder/decoder
-   * @deprecated - Replaced by he.encode() imported at top of file
-   */
-
-  /**
    * Log draft generation completion
    * @private
    */
@@ -573,7 +588,7 @@ ${originalHtml}
           draftId: `draft-${Date.now()}`,
           wordCount: aiResult.body.split(/\s+/).length,
           relationship: aiResult.relationship.type,
-          recommendedAction: aiResult.meta?.recommendedAction
+          recommendedAction: aiResult.meta.recommendedAction
         }
       }
     });

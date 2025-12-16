@@ -6,9 +6,10 @@
  * - Full content in text/html part
  */
 
-import { EmailContentParser } from '../lib/email-content-parser';
+import { pool } from '../lib/db';
+import { EmailProcessor } from '../lib/email-processor';
 
-const parser = new EmailContentParser();
+const processor = new EmailProcessor(pool);
 
 // Simulated Venmo-style email with empty text/plain
 const testEmail = `From: Venmo <venmo@venmo.com>
@@ -41,7 +42,7 @@ async function testEmptyTextPlainFix() {
   console.log('Testing empty text/plain fallback fix...\n');
 
   try {
-    const parsed = await parser.parseFromRaw(testEmail);
+    const parsed = await processor.processRawEmail(testEmail);
 
     console.log('✅ Email parsed successfully');
     console.log('\nParsed content:');
@@ -70,6 +71,8 @@ async function testEmptyTextPlainFix() {
   } catch (error) {
     console.error('\n❌ ERROR parsing email:', error);
     process.exit(1);
+  } finally {
+    await pool.end();
   }
 }
 

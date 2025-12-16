@@ -13,7 +13,7 @@ import { EmailActionRouter } from '../email-action-router';
 import { LLMMetadata } from '../llm-client';
 import { EmailActionType } from '../../types/email-action-tracking';
 import { EmailRepository } from '../repositories/email-repository';
-import { preferencesService } from '../preferences-service';
+import { FolderPreferences } from '../../types/settings';
 
 // Helper function to create RFC2822 formatted email using nodemailer
 async function createEmailMessage(
@@ -86,13 +86,15 @@ export interface UploadDraftParams {
   inReplyTo?: string;
   references?: string;
   recommendedAction?: LLMMetadata['recommendedAction'];
+  folderPreferences: FolderPreferences;
 }
 
-export interface UploadDraftResult {
+export interface EmailMoverResult {
   success: boolean;
   message?: string;
   folder?: string;
   action?: string;
+  removedFromInbox?: boolean;
   error?: string;
 }
 
@@ -103,22 +105,14 @@ export interface MoveEmailParams {
   messageId: string; // The email's message ID for tracking (required for action updates)
   sourceFolder: string;
   recommendedAction: LLMMetadata['recommendedAction'];
-}
-
-export interface MoveEmailResult {
-  success: boolean;
-  message?: string;
-  folder?: string;
-  action?: string;
-  removedFromInbox?: boolean;
-  error?: string;
+  folderPreferences: FolderPreferences;
 }
 
 export class EmailMover {
   /**
    * Upload a draft email to the user's drafts folder
    */
-  async uploadDraft(params: UploadDraftParams): Promise<UploadDraftResult> {
+  async uploadDraft(params: UploadDraftParams): Promise<EmailMoverResult> {
     const {
       emailAccountId,
       userId,
@@ -129,7 +123,8 @@ export class EmailMover {
       bodyHtml,
       inReplyTo,
       references,
-      recommendedAction
+      recommendedAction,
+      folderPreferences
     } = params;
 
     try {
@@ -147,11 +142,7 @@ export class EmailMover {
       }
 
       const fromEmail = accountResult.rows[0].email_address;
-
-      // Get user's folder preferences (single call returns all preferences)
-      const prefs = await preferencesService.getPreferences(userId);
-      const folderPrefs = prefs.folderPreferences;
-      const draftsFolderPath = folderPrefs.draftsFolderPath;
+      const draftsFolderPath = folderPreferences.draftsFolderPath;
 
       await withImapContext(emailAccountId, userId, async () => {
         // Create IMAP operations instance (connection managed by context)
@@ -195,23 +186,20 @@ export class EmailMover {
   /**
    * Move an email to a folder based on the recommended action
    */
-  async moveEmail(params: MoveEmailParams): Promise<MoveEmailResult> {
+  async moveEmail(params: MoveEmailParams): Promise<EmailMoverResult> {
     const {
       emailAccountId,
       userId,
       messageUid,
       messageId,
       sourceFolder,
-      recommendedAction
+      recommendedAction,
+      folderPreferences
     } = params;
 
     try {
-      // Get user's folder preferences (single call returns all preferences)
-      const prefs = await preferencesService.getPreferences(userId);
-      const folderPrefs = prefs.folderPreferences;
-
       // Resolve destination folder and flags
-      const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);
+      const actionRouter = new EmailActionRouter(folderPreferences);
       const routeResult = actionRouter.getActionRoute(recommendedAction as any);
 
       // Skip IMAP operation if source === destination (e.g., KEEP_IN_INBOX)
