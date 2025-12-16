@@ -42,7 +42,7 @@ async function executeOnAllAccounts(
   const folderPrefs = prefs.folderPreferences;
 
   // Create router with user's preferences
-  const actionRouter = new EmailActionRouter(folderPrefs, folderPrefs.draftsFolderPath);
+  const actionRouter = new EmailActionRouter(folderPrefs);
   const requiredFolders = actionRouter.getRequiredFolders();
 
   // Execute operation on each account

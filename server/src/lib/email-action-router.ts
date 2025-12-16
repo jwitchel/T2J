@@ -29,9 +29,8 @@ export class EmailActionRouter {
   }
 
   private folderPrefs: FolderPreferences;
-  private draftsFolderPath: string | undefined;
 
-  constructor(preferences?: Partial<FolderPreferences>, draftsFolderPath?: string) {
+  constructor(preferences?: Partial<FolderPreferences>) {
     this.folderPrefs = {
       rootFolder: preferences?.rootFolder ?? EmailActionRouter.DEFAULT_ROOT_FOLDER,
       draftsFolderPath: preferences?.draftsFolderPath ?? EmailActionRouter.DEFAULT_DRAFTS_FOLDER,
@@ -39,7 +38,6 @@ export class EmailActionRouter {
       spamFolder: preferences?.spamFolder ?? EmailActionRouter.DEFAULT_SPAM_FOLDER,
       todoFolder: preferences?.todoFolder ?? EmailActionRouter.DEFAULT_TODO_FOLDER
     };
-    this.draftsFolderPath = draftsFolderPath;
   }
 
   /**
@@ -53,13 +51,10 @@ export class EmailActionRouter {
       case EmailActionType.REPLY_ALL:
       case EmailActionType.FORWARD:
       case EmailActionType.FORWARD_WITH_COMMENT:
-        if (!this.draftsFolderPath) {
-          throw new Error('Draft folder path not configured. Please configure folderPreferences.draftsFolderPath in user settings (e.g., "[Gmail]/Drafts" for Gmail)');
-        }
         return {
-          folder: this.draftsFolderPath,
+          folder: this.folderPrefs.draftsFolderPath,
           flags: ['\\Draft'],  // Drafts should not be marked as Seen
-          displayName: this.draftsFolderPath
+          displayName: this.folderPrefs.draftsFolderPath
         };
 
       case EmailActionType.SILENT_FYI_ONLY:
