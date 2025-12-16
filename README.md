@@ -32,7 +32,7 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-org/test-repo.git
+   git clone https://github.com/jwitchel/test-repo.git
    cd test-repo
    ```
 

@@ -10,22 +10,22 @@ This is an AI Email Assistant application that generates email reply drafts matc
 ### Finding Projects and Issues
 ```bash
 # List all projects for an owner (CORRECT)
-gh project list --owner your-org
+gh project list --owner jwitchel
 
 # View project details (replace PROJECT_NUMBER with actual number)
-gh project view PROJECT_NUMBER --owner your-org
+gh project view PROJECT_NUMBER --owner jwitchel
 
 # List all issues in the repository
-gh issue list --repo your-org/test-repo --limit 100
+gh issue list --repo jwitchel/test-repo --limit 100
 
 # View specific issue details
-gh issue view ISSUE_NUMBER --repo your-org/test-repo
+gh issue view ISSUE_NUMBER --repo jwitchel/test-repo
 
 # List all issues with specific label
-gh issue list --repo your-org/test-repo --label "bug"
+gh issue list --repo jwitchel/test-repo --label "bug"
 
 # Export issues to JSON
-gh issue list --repo your-org/test-repo --json number,title,body,labels --limit 100 > issues.json
+gh issue list --repo jwitchel/test-repo --json number,title,body,labels --limit 100 > issues.json
 ```
 
 ### Managing Tasks
@@ -35,34 +35,34 @@ When creating a new issue, you MUST also add it to project 3. The `--project` fl
 
 ```bash
 # Create a new issue
-gh issue create --repo your-org/T2J --title "Task Title" --body "Task description"
+gh issue create --repo jwitchel/T2J --title "Task Title" --body "Task description"
 
 # REQUIRED: Add the issue to project 3 (issues not in the project won't appear in the backlog!)
-gh project item-add 3 --owner your-org --url https://github.com/your-org/T2J/issues/ISSUE_NUMBER
+gh project item-add 3 --owner jwitchel --url https://github.com/jwitchel/T2J/issues/ISSUE_NUMBER
 
 # Edit issue body/description (preferred method for updating subtasks)
-gh issue edit ISSUE_NUMBER --repo your-org/T2J --body "New content here"
+gh issue edit ISSUE_NUMBER --repo jwitchel/T2J --body "New content here"
 
 # Add comments ONLY when explicitly requested by user
-gh issue comment ISSUE_NUMBER --repo your-org/T2J --body "Progress update..."
+gh issue comment ISSUE_NUMBER --repo jwitchel/T2J --body "Progress update..."
 ```
 
 ### Project Management
 ```bash
 # List project fields (to get field IDs)
-gh project field-list PROJECT_NUMBER --owner your-org
+gh project field-list PROJECT_NUMBER --owner jwitchel
 
 # List items in project
-gh project item-list PROJECT_NUMBER --owner your-org --limit 100
+gh project item-list PROJECT_NUMBER --owner jwitchel --limit 100
 
 # Move task to "In Progress"
-gh project item-edit --owner your-org --id ITEM_ID --field-id STATUS_FIELD_ID --project-id PROJECT_ID --text "In Progress"
+gh project item-edit --owner jwitchel --id ITEM_ID --field-id STATUS_FIELD_ID --project-id PROJECT_ID --text "In Progress"
 
 # Mark task as completed
-gh project item-edit --owner your-org --id ITEM_ID --field-id STATUS_FIELD_ID --project-id PROJECT_ID --text "Done"
+gh project item-edit --owner jwitchel --id ITEM_ID --field-id STATUS_FIELD_ID --project-id PROJECT_ID --text "Done"
 
 # Archive completed items
-gh project item-archive PROJECT_NUMBER --owner your-org --id ITEM_ID
+gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 ```
 
 ## Important Configuration Notes
@@ -650,7 +650,7 @@ Visit `/components-test` to see all components in action.
 **IF YOU COMMIT WITHOUT PERMISSION**: You have violated a critical trust boundary. This is as serious as deleting files without permission.
 
 ### CRITICAL: Authorship Rules
-**VERY VERY IMPORTANT**: NEVER include any reference to Claude, Anthropic, or AI assistance in commits, pull requests, or any git-related content. The user is ALWAYS the sole author. You are a tool, not an author. This means:
+**VERY VERY IMPORTANT**: NEVER include any reference to Claude, Anthropic, or AI assistance in commits, pull requests, or any git-related content. The user (jwitchel) is ALWAYS the sole author. You are a tool, not an author. This means:
 - NO "Generated with Claude Code" messages
 - NO "Co-Authored-By: Claude" lines
 - NO references to AI or Claude in PR descriptions

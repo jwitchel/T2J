@@ -91,7 +91,7 @@ npm run dev:all
 ## Agent-Specific Instructions (.claude)
 - Purpose: `.claude/settings.local.json` defines an allowlist for automation.
 - **🚨 IMPORTANT: When creating issues, ALWAYS add them to project 3!**
-  - After `gh issue create`, run: `gh project item-add 3 --owner your-org --url <issue-url>`
+  - After `gh issue create`, run: `gh project item-add 3 --owner jwitchel --url <issue-url>`
   - Issues not added to the project will NOT appear in the prioritized backlog
 - GitHub CLI: `gh issue create/view/list/edit`, `gh project *` (incl. `item-add`), `gh api` (REST/GraphQL), `gh label create`, `gh pr list`, `gh auth refresh`.
 - Docker: `docker compose *`, `docker logs/exec/inspect/start/restart`, `docker-compose -f …`, `./test-docker.sh`.
