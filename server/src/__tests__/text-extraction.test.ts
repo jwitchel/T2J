@@ -73,7 +73,7 @@ CEO, Acme Corp
 > Please review the attached proposal`;
       
       const result = replyExtractor.extractUserText(emailBody);
-      expect(result).toBe('I agree with your proposal.\n\nBest regards,\nJohn Smith\nCEO, Acme Corp');
+      expect(result).toBe('I agree with your proposal.\n\nBest regards,\nJoe Smith\nCEO, Acme Corp');
     });
 
     it('should handle empty replies', () => {
