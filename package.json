@@ -12,7 +12,6 @@
     "lint": "next lint",
     "server": "nodemon --config server/nodemon.json",
     "server:verbose": "nodemon --verbose --config server/nodemon.json",
-    "server:debug": "node scripts/debug-nodemon.js",
     "server:inspect": "TS_NODE_PROJECT=server/tsconfig.json node --inspect=9229 -r ts-node/register -r tsconfig-paths/register server/src/server.ts",
     "workers:inspect": "TS_NODE_PROJECT=server/tsconfig.json node --inspect=9230 -r ts-node/register -r tsconfig-paths/register server/src/scripts/start-workers.ts",
     "dev:all:debug": "npm run redis:reset && npm run dev:kill-ports && concurrently -n \"NEXT,SERVER,WORKERS\" -c \"blue,green,yellow\" \"npm run dev\" \"npm run server:inspect\" \"npm run workers:inspect\"",
@@ -32,7 +31,6 @@
     "redis:logs": "docker compose logs -f redis",
     "db:migrate": "node db/migrate.js",
     "seed": "cd server && npx tsx src/scripts/seed-demo.ts",
-    "vector:test": "cd server && npx tsx src/scripts/tests/vector-comprehensive-test.ts",
     "mail:up": "docker run -d --name test-mailserver --hostname mail.testmail.local -p 1025:25 -p 1143:143 -p 1587:587 -p 1993:993 -e OVERRIDE_HOSTNAME=mail.testmail.local mailserver/docker-mailserver:latest",
     "mail:down": "docker stop test-mailserver && docker rm test-mailserver",
     "mail:reset": "npm run mail:down && npm run mail:up && sleep 3 && npm run mail:seed",
@@ -47,14 +45,8 @@
     "docker:down": "docker compose down && npm run mail:down 2>/dev/null || true",
     "docker:reset": "npm run docker:down && npm run docker:up && sleep 5 && npm run db:migrate && npm run seed && npm run mail:seed",
     "docker:logs": "docker compose logs -f postgres redis",
-    "monitor:files": "node scripts/monitor-file-changes.js",
-    "monitor:all": "node scripts/monitor-all-changes.js",
-    "monitor:process": "node scripts/monitor-node-process.js",
-    "monitor:logs": "node scripts/watch-server-logs.js",
-    "test:stability": "node scripts/test-server-stability.js",
     "system:reset": "npm run docker:reset",
-    "workers": "cd server && npx ts-node src/scripts/start-workers.ts",
-    "workers:test": "cd server && npx ts-node src/scripts/test-workers.ts"
+    "workers": "cd server && npx ts-node src/scripts/start-workers.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
