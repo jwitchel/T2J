@@ -319,7 +319,7 @@ export class VectorSearchService {
     if (params.filters?.relationship) {
       paramCount++;
       // Handle NULL relationships (persons with no relationship set default to 'external')
-      whereClause += ` AND COALESCE(ur.relationship_type, '${RelationshipType.EXTERNAL}') = $${paramCount}`;
+      whereClause += ` AND COALESCE(p.relationship_type, '${RelationshipType.EXTERNAL}') = $${paramCount}`;
       queryParams.push(params.filters.relationship);
     }
 
