@@ -134,6 +134,7 @@ import jobsRoutes from './routes/jobs';
 import workersRoutes from './routes/workers';
 import schedulersRoutes from './routes/schedulers';
 import dashboardAnalyticsRoutes from './routes/dashboard-analytics';
+import actionRulesRoutes from './routes/action-rules';
 
 app.use('/api/custom-auth', authRoutes);
 app.use('/api/email-accounts', emailAccountRoutes);
@@ -157,6 +158,7 @@ app.use('/api/jobs', jobsRoutes);
 app.use('/api/workers', workersRoutes);
 app.use('/api/schedulers', schedulersRoutes);
 app.use('/api/dashboard', dashboardAnalyticsRoutes);
+app.use('/api/action-rules', actionRulesRoutes);
 
 // Error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

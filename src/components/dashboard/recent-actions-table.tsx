@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { EmailActionType } from '../../../server/src/types/email-action-tracking'
 import { RelationshipType } from '../../../server/src/lib/relationships/types'
 import { RelationshipSelector } from '@/components/relationship-selector'
+import { ActionSelector } from '@/components/action-selector'
 
 interface RecentAction {
   id: string
@@ -217,9 +218,17 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
                       {action.subject}
                     </td>
                     <td className="px-2 py-1.5">
-                      <Badge className={`${actionInfo.color} px-1.5 py-0 text-xs text-white`}>
-                        {actionInfo.label}
-                      </Badge>
+                      {action.senderEmail ? (
+                        <ActionSelector
+                          emailAddress={action.senderEmail}
+                          currentAction={action.actionTaken}
+                          relationshipType={action.relationship}
+                        />
+                      ) : (
+                        <Badge className={`${actionInfo.color} px-1.5 py-0 text-xs text-white`}>
+                          {actionInfo.label}
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 text-center">
                       <div className="flex justify-center">

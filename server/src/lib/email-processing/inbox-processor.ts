@@ -24,6 +24,8 @@ import { normalizeMessageId } from '../message-id-utils';
 import { RelationshipType } from '../relationships/types';
 import { personService } from '../relationships/person-service';
 import PostalMime, { Email as PostalMimeEmail, Address } from 'postal-mime';
+import { actionRulesService } from '../action-rules-service';
+import { ActionRuleMatchResult } from '../../types/action-rules';
 import addressparser from 'nodemailer/lib/addressparser';
 import { withTransaction } from '../db/transaction-utils';
 
@@ -627,6 +629,27 @@ export class InboxProcessor {
   }
 
   /**
+   * Check user-defined action rules
+   * Sender rules are checked first, then relationship rules
+   * @private
+   */
+  private async _checkUserRules(
+    context: ProcessingContext,
+    senderEmail: string
+  ): Promise<ActionRuleMatchResult> {
+    // Look up sender's relationship in the database
+    let relationshipType: string | null = null;
+
+    const person = await personService.findPersonByEmail(senderEmail, context.userId);
+    if (person?.relationship_type) {
+      relationshipType = person.relationship_type;
+    }
+
+    // Check rules (sender rules first, then relationship rules)
+    return actionRulesService.checkRules(context.userId, senderEmail, relationshipType);
+  }
+
+  /**
    * Determine the raw action for an email
    * @private
    */
@@ -644,6 +667,14 @@ export class InboxProcessor {
         rawAction: preGeneratedDraft.meta.recommendedAction as EmailActionType,
         analysis: null
       };
+    }
+
+    // Check user-defined action rules FIRST (before spam/LLM)
+    const senderEmail = parsedData.processedEmail.from[0].address.toLowerCase();
+    const ruleResult = await this._checkUserRules(context, senderEmail);
+    if (ruleResult.matched && ruleResult.action) {
+      console.log(`[InboxProcessor] User rule matched: ${ruleResult.rule?.conditionType}=${ruleResult.rule?.conditionValue} -> ${ruleResult.action}`);
+      return { rawAction: ruleResult.action as EmailActionType, analysis: null };
     }
 
     if (isSpam) {

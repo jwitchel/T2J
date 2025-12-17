@@ -496,38 +496,40 @@ function InboxContent() {
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       {/* Left Column */}
                       <div className="space-y-3">
-                        <div>
-                          <div className="text-muted-foreground mb-1 text-sm font-medium">
-                            Spam Analysis
+                        {llmResponse.spamAnalysis && (
+                          <div>
+                            <div className="text-muted-foreground mb-1 text-sm font-medium">
+                              Spam Analysis
+                            </div>
+                            {llmResponse.spamAnalysis.isSpam ? (
+                              <Badge
+                                variant="destructive"
+                                className="cursor-help"
+                                title={llmResponse.spamAnalysis.indicators.join('\n')}
+                              >
+                                ⚠️ Spam
+                                {llmResponse.spamAnalysis.senderResponseCount > 0 && (
+                                  <span className="ml-1">
+                                    (replied {llmResponse.spamAnalysis.senderResponseCount}x)
+                                  </span>
+                                )}
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="default"
+                                className="cursor-help"
+                                title={llmResponse.spamAnalysis.indicators.join('\n')}
+                              >
+                                ✓ Not Spam
+                                {llmResponse.spamAnalysis.senderResponseCount > 0 && (
+                                  <span className="ml-1">
+                                    (replied {llmResponse.spamAnalysis.senderResponseCount}x)
+                                  </span>
+                                )}
+                              </Badge>
+                            )}
                           </div>
-                          {llmResponse.spamAnalysis.isSpam ? (
-                            <Badge
-                              variant="destructive"
-                              className="cursor-help"
-                              title={llmResponse.spamAnalysis.indicators.join('\n')}
-                            >
-                              ⚠️ Spam
-                              {llmResponse.spamAnalysis.senderResponseCount > 0 && (
-                                <span className="ml-1">
-                                  (replied {llmResponse.spamAnalysis.senderResponseCount}x)
-                                </span>
-                              )}
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="default"
-                              className="cursor-help"
-                              title={llmResponse.spamAnalysis.indicators.join('\n')}
-                            >
-                              ✓ Not Spam
-                              {llmResponse.spamAnalysis.senderResponseCount > 0 && (
-                                <span className="ml-1">
-                                  (replied {llmResponse.spamAnalysis.senderResponseCount}x)
-                                </span>
-                              )}
-                            </Badge>
-                          )}
-                        </div>
+                        )}
 
                         <div>
                           <div className="text-muted-foreground mb-1 text-sm font-medium">

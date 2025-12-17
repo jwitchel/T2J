@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SignaturePatterns } from '@/components/settings/signature-patterns'
 import { TypedNameSettings } from '@/components/settings/typed-name-settings'
+import { ActionRulesPanel } from '@/components/settings/action-rules-panel'
 import { useState, useEffect } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet, apiPost } from '@/lib/api'
@@ -549,6 +550,13 @@ export default function SettingsPage() {
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
+              </SectionCard>
+
+              <SectionCard
+                title="Action Override Rules"
+                description="Rules that override AI action decisions for specific relationships or senders. Create rules by clicking on an action in the Dashboard."
+              >
+                <ActionRulesPanel />
               </SectionCard>
             </TabsContent>
 
