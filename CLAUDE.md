@@ -690,6 +690,34 @@ git checkout -b task-X.X-description
     - `git branch -d feature-branch-name`
     - Issue should auto-close from PR
 
+### Releasing / Versioning
+
+When deploying to production, use `npm version` to create a tagged release. This:
+- Bumps the version in `package.json`
+- Creates a git commit with the version change
+- Creates an annotated git tag
+
+```bash
+# After merging to main and before pushing:
+npm version patch -m "Release %s: Brief description of changes"  # 1.0.0 → 1.0.1
+npm version minor -m "Release %s: Brief description of changes"  # 1.0.0 → 1.1.0
+npm version major -m "Release %s: Brief description of changes"  # 1.0.0 → 2.0.0
+
+# Then push with tags:
+git push origin main --tags
+```
+
+**Version guidelines:**
+- `patch`: Bug fixes, small improvements, no new features
+- `minor`: New features, significant improvements (backward compatible)
+- `major`: Breaking changes, major rewrites
+
+**Example:**
+```bash
+npm version minor -m "Release %s: Dark mode support, pipeline refactor, UI standardization"
+git push origin main --tags
+```
+
 ## Testing Commands
 When completing tasks, always run:
 ```bash

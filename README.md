@@ -176,6 +176,12 @@ npm run lint            # Run ESLint
 npm run build          # Build Next.js for production
 npm run server:build   # Build Express server
 
+# Releasing (creates tagged release)
+npm version patch -m "Release %s: description"  # Bug fixes (1.0.0 → 1.0.1)
+npm version minor -m "Release %s: description"  # New features (1.0.0 → 1.1.0)
+npm version major -m "Release %s: description"  # Breaking changes (1.0.0 → 2.0.0)
+git push origin main --tags                      # Push with tags
+
 # Testing
 npm test               # Run all tests (requires Docker services)
 npm run test:unit      # Run only unit tests (no external dependencies)
