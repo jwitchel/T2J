@@ -463,7 +463,7 @@ export default function SettingsPage() {
                     id="signatureBlock"
                     value={signatureBlock}
                     onChange={(e) => setSignatureBlock(e.target.value)}
-                    placeholder={`---\nCell: 970-759-1403\nReplied on ${new Date().toLocaleDateString()}`}
+                    placeholder={`---\nCell: 212-555-1212\nReplied on ${new Date().toLocaleDateString()}`}
                     className="min-h-[120px] font-mono text-sm"
                     disabled={isLoading}
                   />

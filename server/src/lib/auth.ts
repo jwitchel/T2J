@@ -1,11 +1,27 @@
 import { betterAuth } from 'better-auth';
 import { pool } from './db';
+import { sharedConnection } from './redis-connection';
 import crypto from 'crypto';
 import { preferencesService } from './preferences-service';
 
 const auth = betterAuth({
   database: pool,
   baseURL: process.env.BACKEND_URL!,
+  secondaryStorage: {
+    get: async (key) => {
+      return sharedConnection.get(key);
+    },
+    set: async (key, value, ttl) => {
+      if (ttl) {
+        await sharedConnection.set(key, value, 'EX', ttl);
+      } else {
+        await sharedConnection.set(key, value);
+      }
+    },
+    delete: async (key) => {
+      await sharedConnection.del(key);
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Disable for development
@@ -25,7 +41,7 @@ const auth = betterAuth({
     updateAge: 60 * 60 * 24, // 1 day
     cookieCache: {
       enabled: true,
-      maxAge: 60 * 5, // 5 minutes
+      maxAge: 60, // 1 minute (Redis makes cache misses cheap)
     },
   },
   advanced: {

@@ -18,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/hooks/use-toast'
 
 const signInSchema = z.object({
@@ -30,8 +29,8 @@ type SignInFormData = z.infer<typeof signInSchema>
 
 export function SignInForm() {
   const router = useRouter()
-  const { signIn, error, clearError } = useAuth()
-  const { success } = useToast()
+  const { signIn } = useAuth()
+  const { success, error: showError } = useToast()
   const [isLoading, setIsLoading] = useState(false)
 
   const {
@@ -45,12 +44,13 @@ export function SignInForm() {
   async function onSubmit(data: SignInFormData) {
     try {
       setIsLoading(true)
-      clearError()
       await signIn(data.email, data.password)
       success('Welcome back!')
+      router.refresh()
       router.push('/dashboard')
-    } catch {
-      // Error is already handled in context
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sign in failed'
+      showError(message)
     } finally {
       setIsLoading(false)
     }
@@ -74,12 +74,6 @@ export function SignInForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input

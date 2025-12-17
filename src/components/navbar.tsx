@@ -31,7 +31,7 @@ import { ThemeToggle } from '@/components/theme-toggle'
 
 export function Navbar() {
   const pathname = usePathname()
-  const { user, signOut } = useAuth()
+  const { user, loading, signOut } = useAuth()
   const [displayName, setDisplayName] = useState<string>('')
   const [isLocalhost, setIsLocalhost] = useState(false)
 
@@ -61,7 +61,7 @@ export function Navbar() {
     loadUserPreferences()
   }, [user])
 
-  if (!user) return null
+  if (loading || !user) return null
 
   const isActive = (path: string) => pathname === path
 
