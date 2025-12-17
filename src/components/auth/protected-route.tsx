@@ -20,10 +20,12 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   }, [user, loading, router])
 
   if (loading) {
-    return fallback || (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
+    return (
+      fallback || (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-lg">Loading...</div>
+        </div>
+      )
     )
   }
 

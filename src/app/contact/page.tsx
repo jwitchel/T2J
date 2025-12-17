@@ -1,87 +1,71 @@
 import { PublicNavbar } from '@/components/public-navbar'
 import { Footer } from '@/components/footer'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail, MessageSquare, Clock } from 'lucide-react'
+import { PageHeader, SectionCard } from '@/components/patterns'
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="bg-background flex min-h-screen flex-col">
       <PublicNavbar />
 
-      <main className="container mx-auto px-4 sm:px-6 py-12 sm:py-16 flex-1">
-        <div className="max-w-3xl mx-auto">
-          <h1 className="text-3xl sm:text-4xl font-bold text-center mb-4">Contact Us</h1>
-          <p className="text-lg sm:text-xl text-muted-foreground text-center mb-8 sm:mb-12">
-            We&apos;d love to hear from you
-          </p>
+      <main className="container mx-auto flex-1 px-4 py-16">
+        <div className="mx-auto max-w-3xl">
+          <PageHeader
+            title="Contact Us"
+            description="We'd love to hear from you"
+            centered
+            className="mb-12"
+          />
 
-          <div className="grid sm:grid-cols-2 gap-6 mb-8 sm:mb-12">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Mail className="h-6 w-6 text-indigo-500" />
-                  <CardTitle>Email Support</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="mb-4">
-                  For general inquiries, technical support, or account issues.
-                </CardDescription>
-                <a
-                  href="mailto:support@timetojust.com"
-                  className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
-                >
-                  support@timetojust.com
-                </a>
-              </CardContent>
-            </Card>
+          <div className="mb-12 grid gap-6 md:grid-cols-2">
+            <SectionCard title="Email Support" icon={<Mail className="h-6 w-6 text-indigo-500" />}>
+              <p className="text-muted-foreground mb-4">
+                For general inquiries, technical support, or account issues.
+              </p>
+              <a
+                href="mailto:support@timetojust.com"
+                className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+              >
+                support@timetojust.com
+              </a>
+            </SectionCard>
 
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Clock className="h-6 w-6 text-amber-500" />
-                  <CardTitle>Response Time</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CardDescription>
-                  We typically respond within 24-48 hours during business days.
-                  For urgent issues, please include &quot;URGENT&quot; in your subject line.
-                </CardDescription>
-              </CardContent>
-            </Card>
+            <SectionCard
+              title="Response Time"
+              icon={<Clock className="h-6 w-6 text-amber-500" />}
+            >
+              <p className="text-muted-foreground">
+                We typically respond within 24-48 hours during business days. For urgent issues,
+                please include &quot;URGENT&quot; in your subject line.
+              </p>
+            </SectionCard>
           </div>
 
-          <Card className="mb-8 sm:mb-12">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <MessageSquare className="h-6 w-6 text-green-500" />
-                <CardTitle>Feedback</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardDescription className="mb-4">
-                Have ideas to improve Time to Just? We value your feedback and
-                suggestions. Let us know what features you&apos;d like to see or how
-                we can make your experience better.
-              </CardDescription>
-              <a
-                href="mailto:feedback@timetojust.com"
-                className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
-              >
-                feedback@timetojust.com
-              </a>
-            </CardContent>
-          </Card>
+          <SectionCard
+            title="Feedback"
+            icon={<MessageSquare className="h-6 w-6 text-green-500" />}
+            className="mb-12"
+          >
+            <p className="text-muted-foreground mb-4">
+              Have ideas to improve Time to Just? We value your feedback and suggestions. Let us
+              know what features you&apos;d like to see or how we can make your experience better.
+            </p>
+            <a
+              href="mailto:feedback@timetojust.com"
+              className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            >
+              feedback@timetojust.com
+            </a>
+          </SectionCard>
 
           <div className="text-center">
-            <h2 className="text-xl font-semibold mb-2">Before You Reach Out</h2>
+            <h2 className="mb-2 text-xl font-semibold">Before You Reach Out</h2>
             <p className="text-muted-foreground">
               Check our{' '}
-              <a href="/faq" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+              <a href="/faq" className="text-indigo-600 hover:underline dark:text-indigo-400">
                 FAQ page
-              </a>
-              {' '}for answers to common questions.
+              </a>{' '}
+              for answers to common questions.
             </p>
           </div>
         </div>

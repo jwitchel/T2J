@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -45,6 +45,53 @@
 
 :root {
   --radius: 0.625rem;
+
+  /* ========================================
+     DESIGN TOKENS - Single source of truth
+     Change these values to restyle the entire app
+     ======================================== */
+
+  /* Layout */
+  --navbar-height: 64px;
+  --page-height: calc(100vh - var(--navbar-height));
+  --container-max-width: 80rem; /* max-w-7xl equivalent */
+  --container-padding: 2rem;
+
+  /* Spacing Scale */
+  --space-xs: 0.25rem;   /* 4px */
+  --space-sm: 0.5rem;    /* 8px */
+  --space-md: 1rem;      /* 16px */
+  --space-lg: 1.5rem;    /* 24px */
+  --space-xl: 2rem;      /* 32px */
+  --space-2xl: 3rem;     /* 48px */
+  --space-section: var(--space-xl);  /* Between major sections */
+  --space-group: var(--space-lg);    /* Between related items */
+  --space-item: var(--space-md);     /* Between individual items */
+
+  /* Border Radii */
+  --radius-card: var(--radius);
+  --radius-button: calc(var(--radius) - 2px);
+  --radius-input: calc(var(--radius) - 2px);
+  --radius-badge: 9999px;
+
+  /* Typography Scale */
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.875rem;   /* 30px */
+  --font-size-page-title: var(--font-size-3xl);
+  --font-size-section-title: var(--font-size-xl);
+  --font-size-card-title: var(--font-size-base);
+  --font-size-body: var(--font-size-sm);
+  --font-size-caption: var(--font-size-xs);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
 
   /* Custom theme additions */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -126,23 +173,28 @@
   }
 }
 
+
 /* Sonner toast styles */
-[data-sonner-toast][data-type="success"] {
-  @apply !bg-green-50 !text-green-900 !border-green-200 dark:!bg-green-950 dark:!text-green-100 dark:!border-green-800;
+[data-sonner-toast][data-type='success'] {
+  @apply !border-green-200 !bg-green-50 !text-green-900 dark:!border-green-800 dark:!bg-green-950 dark:!text-green-100;
 }
 
-[data-sonner-toast][data-type="error"] {
-  @apply !bg-red-50 !text-red-900 !border-red-200 dark:!bg-red-950 dark:!text-red-100 dark:!border-red-800;
+[data-sonner-toast][data-type='error'] {
+  @apply !border-red-200 !bg-red-50 !text-red-900 dark:!border-red-800 dark:!bg-red-950 dark:!text-red-100;
 }
 
-[data-sonner-toast][data-type="info"] {
-  @apply !bg-blue-50 !text-blue-900 !border-blue-200 dark:!bg-blue-950 dark:!text-blue-100 dark:!border-blue-800;
+[data-sonner-toast][data-type='info'] {
+  @apply !border-blue-200 !bg-blue-50 !text-blue-900 dark:!border-blue-800 dark:!bg-blue-950 dark:!text-blue-100;
 }
 
 /* Slow counter-clockwise logo rotation */
 @keyframes logo-rotate-ccw {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(-360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
 }
 
 .logo-rotate {
@@ -150,5 +202,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .logo-rotate { animation: none; }
+  .logo-rotate {
+    animation: none;
+  }
 }

@@ -2,7 +2,6 @@
 
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth-context'
@@ -22,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { PageHeader, SectionCard } from '@/components/patterns'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -33,7 +33,7 @@ export default function SettingsPage() {
     rootFolder: '',
     noActionFolder: '',
     spamFolder: '',
-    todoFolder: ''
+    todoFolder: '',
   })
   const [actionPreferences, setActionPreferences] = useState({
     spamDetection: true,
@@ -41,9 +41,9 @@ export default function SettingsPage() {
       'silent-fyi-only': true,
       'silent-large-list': true,
       'silent-unsubscribe': true,
-      'silent-todo': true
+      'silent-todo': true,
     },
-    draftGeneration: true
+    draftGeneration: true,
   })
   const [workDomainsCSV, setWorkDomainsCSV] = useState('')
   const [familyEmailsCSV, setFamilyEmailsCSV] = useState('')
@@ -51,56 +51,59 @@ export default function SettingsPage() {
   const [originalWorkDomainsCSV, setOriginalWorkDomainsCSV] = useState('')
   const [originalFamilyEmailsCSV, setOriginalFamilyEmailsCSV] = useState('')
   const [originalSpouseEmailsCSV, setOriginalSpouseEmailsCSV] = useState('')
+  const [recategorization, setRecategorization] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTestingFolders, setIsTestingFolders] = useState(false)
   const [isCreatingFolders, setIsCreatingFolders] = useState(false)
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const [folderTestResult, setFolderTestResult] = useState<{
-    requiredFolders?: string[];
-    existing?: string[];
-    missing?: string[];
+    requiredFolders?: string[]
+    existing?: string[]
+    missing?: string[]
     accounts?: Array<{
-      accountId: string;
-      email: string;
-      success: boolean;
-      existing?: string[];
-      missing?: string[];
-      error?: string;
-    }>;
+      accountId: string
+      email: string
+      success: boolean
+      existing?: string[]
+      missing?: string[]
+      error?: string
+    }>
   } | null>(null)
 
   // Load user preferences on mount
   useEffect(() => {
     const loadPreferences = async () => {
       if (!user?.id) return
-      
+
       setIsLoading(true)
       try {
-        const data = await apiGet<{ preferences: {
-          name?: string;
-          nicknames?: string;
-          signatureBlock?: string;
-          folderPreferences?: {
-            rootFolder?: string;
-            noActionFolder?: string;
-            spamFolder?: string;
-            todoFolder?: string;
-          };
-          actionPreferences?: {
-            spamDetection?: boolean;
-            silentActions?: {
-              'silent-fyi-only'?: boolean;
-              'silent-large-list'?: boolean;
-              'silent-unsubscribe'?: boolean;
-              'silent-todo'?: boolean;
-            };
-            draftGeneration?: boolean;
-          };
-          workDomainsCSV?: string;
-          familyEmailsCSV?: string;
-          spouseEmailsCSV?: string;
-        } }>('/api/settings/profile')
+        const data = await apiGet<{
+          preferences: {
+            name?: string
+            nicknames?: string
+            signatureBlock?: string
+            folderPreferences?: {
+              rootFolder?: string
+              noActionFolder?: string
+              spamFolder?: string
+              todoFolder?: string
+            }
+            actionPreferences?: {
+              spamDetection?: boolean
+              silentActions?: {
+                'silent-fyi-only'?: boolean
+                'silent-large-list'?: boolean
+                'silent-unsubscribe'?: boolean
+                'silent-todo'?: boolean
+              }
+              draftGeneration?: boolean
+            }
+            workDomainsCSV?: string
+            familyEmailsCSV?: string
+            spouseEmailsCSV?: string
+          }
+        }>('/api/settings/profile')
         if (data.preferences) {
           setName(data.preferences.name || user.name || '')
           setNicknames(data.preferences.nicknames || '')
@@ -115,22 +118,32 @@ export default function SettingsPage() {
           setOriginalFamilyEmailsCSV(familyEmails)
           setOriginalSpouseEmailsCSV(spouseEmails)
           if (data.preferences.folderPreferences) {
-            setFolderPreferences(prev => ({
+            setFolderPreferences((prev) => ({
               ...prev,
-              ...data.preferences.folderPreferences
+              ...data.preferences.folderPreferences,
             }))
           }
           if (data.preferences.actionPreferences) {
-            setActionPreferences(prev => ({
+            setActionPreferences((prev) => ({
               ...prev,
-              spamDetection: data.preferences.actionPreferences?.spamDetection ?? prev.spamDetection,
+              spamDetection:
+                data.preferences.actionPreferences?.spamDetection ?? prev.spamDetection,
               silentActions: {
-                'silent-fyi-only': data.preferences.actionPreferences?.silentActions?.['silent-fyi-only'] ?? prev.silentActions['silent-fyi-only'],
-                'silent-large-list': data.preferences.actionPreferences?.silentActions?.['silent-large-list'] ?? prev.silentActions['silent-large-list'],
-                'silent-unsubscribe': data.preferences.actionPreferences?.silentActions?.['silent-unsubscribe'] ?? prev.silentActions['silent-unsubscribe'],
-                'silent-todo': data.preferences.actionPreferences?.silentActions?.['silent-todo'] ?? prev.silentActions['silent-todo'],
+                'silent-fyi-only':
+                  data.preferences.actionPreferences?.silentActions?.['silent-fyi-only'] ??
+                  prev.silentActions['silent-fyi-only'],
+                'silent-large-list':
+                  data.preferences.actionPreferences?.silentActions?.['silent-large-list'] ??
+                  prev.silentActions['silent-large-list'],
+                'silent-unsubscribe':
+                  data.preferences.actionPreferences?.silentActions?.['silent-unsubscribe'] ??
+                  prev.silentActions['silent-unsubscribe'],
+                'silent-todo':
+                  data.preferences.actionPreferences?.silentActions?.['silent-todo'] ??
+                  prev.silentActions['silent-todo'],
               },
-              draftGeneration: data.preferences.actionPreferences?.draftGeneration ?? prev.draftGeneration,
+              draftGeneration:
+                data.preferences.actionPreferences?.draftGeneration ?? prev.draftGeneration,
             }))
           }
         } else {
@@ -142,7 +155,7 @@ export default function SettingsPage() {
         setIsLoading(false)
       }
     }
-    
+
     loadPreferences()
   }, [user])
 
@@ -155,16 +168,20 @@ export default function SettingsPage() {
     const workChanged = workDomainsCSV !== originalWorkDomainsCSV
 
     try {
-      await apiPost<{
-        success: boolean;
-        preferences: Record<string, unknown>;
+      const response = await apiPost<{
+        success: boolean
+        preferences: Record<string, unknown>
+        recategorization?: {
+          updated: number
+          breakdown: { spouse: number; family: number; colleague: number }
+        }
       }>('/api/settings/profile', {
         name,
         nicknames,
         signatureBlock,
         workDomainsCSV,
         familyEmailsCSV,
-        spouseEmailsCSV
+        spouseEmailsCSV,
       })
 
       // Update original values after successful save
@@ -172,9 +189,33 @@ export default function SettingsPage() {
       setOriginalFamilyEmailsCSV(familyEmailsCSV)
       setOriginalSpouseEmailsCSV(spouseEmailsCSV)
 
-      if (spouseChanged || familyChanged || workChanged) {
+      if (response.recategorization && (spouseChanged || familyChanged || workChanged)) {
+        const { breakdown, updated } = response.recategorization
+        const messages: string[] = []
+
+        if (spouseChanged && breakdown.spouse > 0) {
+          messages.push(
+            `${breakdown.spouse} spouse ${breakdown.spouse === 1 ? 'email' : 'emails'} updated`
+          )
+        }
+        if (familyChanged && breakdown.family > 0) {
+          messages.push(
+            `${breakdown.family} family ${breakdown.family === 1 ? 'email' : 'emails'} updated`
+          )
+        }
+        if (workChanged && breakdown.colleague > 0) {
+          messages.push(
+            `${breakdown.colleague} work ${breakdown.colleague === 1 ? 'email' : 'emails'} updated`
+          )
+        }
+
+        setRecategorization(messages)
+        success(`Profile updated! Re-categorized ${updated} contacts.`)
+      } else if (spouseChanged || familyChanged || workChanged) {
+        setRecategorization([])
         success('Relationships updated.')
       } else {
+        setRecategorization([])
         success('Profile updated successfully')
       }
     } catch (err) {
@@ -204,16 +245,16 @@ export default function SettingsPage() {
 
       // Then test folders
       const result = await apiPost<{
-        success: boolean;
-        requiredFolders: string[];
+        success: boolean
+        requiredFolders: string[]
         accounts: Array<{
-          accountId: string;
-          email: string;
-          success: boolean;
-          existing?: string[];
-          missing?: string[];
-          error?: string;
-        }>;
+          accountId: string
+          email: string
+          success: boolean
+          existing?: string[]
+          missing?: string[]
+          error?: string
+        }>
       }>('/api/settings/test-folders', {})
 
       // Combine results from all accounts
@@ -221,10 +262,10 @@ export default function SettingsPage() {
       const allMissing = new Set<string>()
       let hasConnectionErrors = false
 
-      result.accounts?.forEach(account => {
+      result.accounts?.forEach((account) => {
         if (account.success) {
-          account.existing?.forEach(f => allExisting.add(f))
-          account.missing?.forEach(f => allMissing.add(f))
+          account.existing?.forEach((f) => allExisting.add(f))
+          account.missing?.forEach((f) => allMissing.add(f))
         } else {
           hasConnectionErrors = true
         }
@@ -233,7 +274,7 @@ export default function SettingsPage() {
       const testResult = {
         ...result,
         existing: Array.from(allExisting),
-        missing: Array.from(allMissing)
+        missing: Array.from(allMissing),
       }
 
       setFolderTestResult(testResult)
@@ -258,15 +299,15 @@ export default function SettingsPage() {
 
     try {
       const result = await apiPost<{
-        success: boolean;
+        success: boolean
         accounts: Array<{
-          accountId: string;
-          email: string;
-          success: boolean;
-          created?: string[];
-          failed?: Array<{ folder: string; error: string }>;
-          error?: string;
-        }>;
+          accountId: string
+          email: string
+          success: boolean
+          created?: string[]
+          failed?: Array<{ folder: string; error: string }>
+          error?: string
+        }>
       }>('/api/settings/create-folders', {})
 
       // Count total created and failed across all accounts
@@ -274,7 +315,7 @@ export default function SettingsPage() {
       let totalFailed = 0
       let accountsWithErrors = 0
 
-      result.accounts?.forEach(account => {
+      result.accounts?.forEach((account) => {
         if (account.success) {
           totalCreated += account.created?.length || 0
           totalFailed += account.failed?.length || 0
@@ -288,31 +329,31 @@ export default function SettingsPage() {
         error(`Failed to create some folders. Please check your email account connections.`)
         // Re-test to show updated status
         const retestResult = await apiPost<{
-          success: boolean;
-          requiredFolders: string[];
+          success: boolean
+          requiredFolders: string[]
           accounts: Array<{
-            accountId: string;
-            email: string;
-            success: boolean;
-            existing?: string[];
-            missing?: string[];
-            error?: string;
-          }>;
+            accountId: string
+            email: string
+            success: boolean
+            existing?: string[]
+            missing?: string[]
+            error?: string
+          }>
         }>('/api/settings/test-folders', {})
 
         const allExisting = new Set<string>()
         const allMissing = new Set<string>()
-        retestResult.accounts?.forEach(account => {
+        retestResult.accounts?.forEach((account) => {
           if (account.success) {
-            account.existing?.forEach(f => allExisting.add(f))
-            account.missing?.forEach(f => allMissing.add(f))
+            account.existing?.forEach((f) => allExisting.add(f))
+            account.missing?.forEach((f) => allMissing.add(f))
           }
         })
 
         setFolderTestResult({
           ...retestResult,
           existing: Array.from(allExisting),
-          missing: Array.from(allMissing)
+          missing: Array.from(allMissing),
         })
       } else {
         // All folders created successfully - preferences already saved, close modal
@@ -350,12 +391,11 @@ export default function SettingsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-background p-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8">Settings</h1>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <PageHeader title="Settings" className="mb-8" />
 
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="w-full mb-6">
+            <TabsList className="mb-6 w-full">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="relationships">Relationships</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
@@ -364,12 +404,11 @@ export default function SettingsPage() {
             </TabsList>
 
             <TabsContent value="profile" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile Information</CardTitle>
-                <CardDescription>Update your personal information</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <SectionCard
+                title="Profile Information"
+                description="Update your personal information"
+                contentClassName="space-y-4"
+              >
                 <div className="space-y-2">
                   <Label htmlFor="name">Name</Label>
                   <Input
@@ -391,46 +430,32 @@ export default function SettingsPage() {
                     placeholder="e.g. Jessica, Jess, JW"
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Enter common nicknames or variations of your name, separated by commas
                   </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    defaultValue={user?.email || ''}
-                    disabled
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Email cannot be changed
-                  </p>
+                  <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
+                  <p className="text-muted-foreground text-sm">Email cannot be changed</p>
                 </div>
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
-              </CardContent>
-            </Card>
+              </SectionCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Typed Name Settings</CardTitle>
-                <CardDescription>Configure how your name appears in generated email responses</CardDescription>
-              </CardHeader>
-              <CardContent>
+              <SectionCard
+                title="Typed Name Settings"
+                description="Configure how your name appears in generated email responses"
+              >
                 <TypedNameSettings />
-              </CardContent>
-            </Card>
+              </SectionCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Email Signature Block</CardTitle>
-                <CardDescription>
-                  Add a signature that will be included in your generated email replies
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <SectionCard
+                title="Email Signature Block"
+                description="Add a signature that will be included in your generated email replies"
+                contentClassName="space-y-4"
+              >
                 <div className="space-y-2">
                   <Label htmlFor="signatureBlock">Signature Block</Label>
                   <Textarea
@@ -441,27 +466,23 @@ export default function SettingsPage() {
                     className="min-h-[120px] font-mono text-sm"
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    This signature will be added to your email replies before the quoted original message.
-                    You can use multiple lines.
+                  <p className="text-muted-foreground text-sm">
+                    This signature will be added to your email replies before the quoted original
+                    message. You can use multiple lines.
                   </p>
                 </div>
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Signature'}
                 </Button>
-              </CardContent>
-            </Card>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="relationships" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Relationship Categorization</CardTitle>
-                <CardDescription>
-                  Configure domains and emails to automatically categorize contacts for more precise tone when drafting emails.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+              <SectionCard
+                title="Relationship Categorization"
+                description="Configure domains and emails to automatically categorize contacts for more precise tone when drafting emails."
+                contentClassName="space-y-6"
+              >
                 <div className="space-y-2">
                   <Label htmlFor="spouseEmailsCSV">Spouse/Partner Email Addresses (CSV)</Label>
                   <Input
@@ -472,9 +493,11 @@ export default function SettingsPage() {
                     placeholder="partner@example.com"
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    Enter spouse/partner email addresses separated by commas.<br />
-                    This person is treated as a special case when drafting emails to only use the tone you use specifically for them.
+                  <p className="text-muted-foreground text-sm">
+                    Enter spouse/partner email addresses separated by commas.
+                    <br />
+                    This person is treated as a special case when drafting emails to only use the
+                    tone you use specifically for them.
                   </p>
                 </div>
 
@@ -488,8 +511,9 @@ export default function SettingsPage() {
                     placeholder="dad@example.com, mom@gmail.com"
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    Enter family email addresses separated by commas. These contacts will be categorized as &quot;family&quot;.
+                  <p className="text-muted-foreground text-sm">
+                    Enter family email addresses separated by commas. These contacts will be
+                    categorized as &quot;family&quot;.
                   </p>
                 </div>
 
@@ -503,250 +527,284 @@ export default function SettingsPage() {
                     placeholder="company.com, subsidiary.co.uk"
                     disabled={isLoading}
                   />
-                  <p className="text-sm text-muted-foreground">
-                    Enter work domains separated by commas. Anyone from these domains will be categorized as &quot;colleague&quot;.
+                  <p className="text-muted-foreground text-sm">
+                    Enter work domains separated by commas. Anyone from these domains will be
+                    categorized as &quot;colleague&quot;.
                   </p>
                 </div>
+
+                {recategorization.length > 0 && (
+                  <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                    <h4 className="mb-2 text-sm font-semibold text-green-900 dark:text-green-100">
+                      Relationship Update Complete
+                    </h4>
+                    <ul className="mt-1 space-y-1 text-sm text-green-800 dark:text-green-200">
+                      {recategorization.map((message, index) => (
+                        <li key={index}>{message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
-              </CardContent>
-            </Card>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="services" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Email Processing</CardTitle>
-                <CardDescription>
-                  Configure which processing stages are enabled. Unprocessed emails will remain in your inbox.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Spam Detection Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="spamDetection">Spam Detection</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Detect and move spam emails to spam folder
+              <SectionCard
+                title="Email Processing"
+                description="Configure which processing stages are enabled. Unprocessed emails will remain in your inbox."
+                contentClassName="space-y-6"
+              >
+                  {/* Spam Detection Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="spamDetection">Spam Detection</Label>
+                      <p className="text-muted-foreground text-sm">
+                        Detect and move spam emails to spam folder
+                      </p>
+                    </div>
+                    <Switch
+                      id="spamDetection"
+                      checked={actionPreferences.spamDetection}
+                      onCheckedChange={(checked) =>
+                        setActionPreferences((prev) => ({ ...prev, spamDetection: checked }))
+                      }
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  {/* Silent Actions Toggle with Sub-toggles */}
+                  <div className="space-y-4">
+                    <div className="space-y-0.5">
+                      <Label>Organize Your Email</Label>
+                      <p className="text-muted-foreground text-sm">
+                        Automatically move emails that do <b>not</b> require a response to a
+                        specific folder.
+                      </p>
+                    </div>
+
+                    {/* Sub-toggles - indented */}
+                    <div className="space-y-3 pl-6">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="silent-fyi-only" className="font-normal">
+                          FYI Only.{' '}
+                          <span className="text-muted-foreground">
+                            Emails that do not require a response from you.
+                          </span>
+                        </Label>
+                        <Switch
+                          id="silent-fyi-only"
+                          checked={actionPreferences.silentActions['silent-fyi-only']}
+                          onCheckedChange={(checked) =>
+                            setActionPreferences((prev) => ({
+                              ...prev,
+                              silentActions: { ...prev.silentActions, 'silent-fyi-only': checked },
+                            }))
+                          }
+                          disabled={isLoading}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="silent-large-list" className="font-normal">
+                          Large Distribution Lists.{' '}
+                          <span className="text-muted-foreground">
+                            Emails that are sent to a large number of people.
+                          </span>
+                        </Label>
+                        <Switch
+                          id="silent-large-list"
+                          checked={actionPreferences.silentActions['silent-large-list']}
+                          onCheckedChange={(checked) =>
+                            setActionPreferences((prev) => ({
+                              ...prev,
+                              silentActions: {
+                                ...prev.silentActions,
+                                'silent-large-list': checked,
+                              },
+                            }))
+                          }
+                          disabled={isLoading}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="silent-unsubscribe" className="font-normal">
+                          Unsubscribe Candidates.{' '}
+                          <span className="text-muted-foreground">
+                            Emails that are asking you to unsubscribe from a mailing list.
+                          </span>
+                        </Label>
+                        <Switch
+                          id="silent-unsubscribe"
+                          checked={actionPreferences.silentActions['silent-unsubscribe']}
+                          onCheckedChange={(checked) =>
+                            setActionPreferences((prev) => ({
+                              ...prev,
+                              silentActions: {
+                                ...prev.silentActions,
+                                'silent-unsubscribe': checked,
+                              },
+                            }))
+                          }
+                          disabled={isLoading}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="silent-todo" className="font-normal">
+                          Todo Items.{' '}
+                          <span className="text-muted-foreground">
+                            Emails that are asking you to complete a task.
+                          </span>
+                        </Label>
+                        <Switch
+                          id="silent-todo"
+                          checked={actionPreferences.silentActions['silent-todo']}
+                          onCheckedChange={(checked) =>
+                            setActionPreferences((prev) => ({
+                              ...prev,
+                              silentActions: { ...prev.silentActions, 'silent-todo': checked },
+                            }))
+                          }
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Draft Generation Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="draftGeneration">Draft Generation</Label>
+                      <p className="text-muted-foreground text-sm">
+                        Upload AI-generated reply drafts to your Drafts folder
+                      </p>
+                    </div>
+                    <Switch
+                      id="draftGeneration"
+                      checked={actionPreferences.draftGeneration}
+                      onCheckedChange={(checked) =>
+                        setActionPreferences((prev) => ({ ...prev, draftGeneration: checked }))
+                      }
+                      disabled={isLoading}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleSaveActionPreferences}
+                    disabled={isSavingActionPreferences || isLoading}
+                  >
+                    {isSavingActionPreferences ? 'Saving...' : 'Save Action Preferences'}
+                  </Button>
+              </SectionCard>
+
+              <SectionCard
+                title="Email Folder Preferences"
+                description="Configure folders for organizing emails based on AI recommendations"
+                contentClassName="space-y-4"
+              >
+                  <div className="space-y-2">
+                    <Label htmlFor="rootFolder">Root Folder</Label>
+                    <Input
+                      id="rootFolder"
+                      value={folderPreferences.rootFolder}
+                      onChange={(e) =>
+                        setFolderPreferences((prev) => ({ ...prev, rootFolder: e.target.value }))
+                      }
+                      placeholder="Leave empty for root level"
+                      disabled={isLoading}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      Leave empty to create folders at the root level
                     </p>
                   </div>
-                  <Switch
-                    id="spamDetection"
-                    checked={actionPreferences.spamDetection}
-                    onCheckedChange={(checked) =>
-                      setActionPreferences(prev => ({ ...prev, spamDetection: checked }))
-                    }
-                    disabled={isLoading}
-                  />
-                </div>
 
-                {/* Silent Actions Toggle with Sub-toggles */}
-                <div className="space-y-4">
-                  <div className="space-y-0.5">
-                    <Label>Organize Your Email</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically move emails that do <b>not</b> require a response to a specific folder. 
+                  <div className="space-y-2">
+                    <Label htmlFor="noActionFolder">No Action Folder</Label>
+                    <Input
+                      id="noActionFolder"
+                      value={folderPreferences.noActionFolder}
+                      onChange={(e) =>
+                        setFolderPreferences((prev) => ({
+                          ...prev,
+                          noActionFolder: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g., *No Action"
+                      disabled={isLoading}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      For: FYI only, large lists, unsubscribe candidates. Names starting with *
+                      appear at top.
                     </p>
                   </div>
 
-                  {/* Sub-toggles - indented */}
-                  <div style={{ marginLeft: '1.5rem' }} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-fyi-only" className="font-normal">FYI Only. <span className="text-muted-foreground">Emails that do not require a response from you.</span></Label>
-                      <Switch
-                        id="silent-fyi-only"
-                        checked={actionPreferences.silentActions['silent-fyi-only']}
-                        onCheckedChange={(checked) =>
-                          setActionPreferences(prev => ({
-                            ...prev,
-                            silentActions: { ...prev.silentActions, 'silent-fyi-only': checked }
-                          }))
-                        }
-                        disabled={isLoading}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-large-list" className="font-normal">Large Distribution Lists. <span className="text-muted-foreground">Emails that are sent to a large number of people.</span></Label>
-                      <Switch
-                        id="silent-large-list"
-                        checked={actionPreferences.silentActions['silent-large-list']}
-                        onCheckedChange={(checked) =>
-                          setActionPreferences(prev => ({
-                            ...prev,
-                            silentActions: { ...prev.silentActions, 'silent-large-list': checked }
-                          }))
-                        }
-                        disabled={isLoading}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-unsubscribe" className="font-normal">Unsubscribe Candidates. <span className="text-muted-foreground">Emails that are asking you to unsubscribe from a mailing list.</span></Label>
-                      <Switch
-                        id="silent-unsubscribe"
-                        checked={actionPreferences.silentActions['silent-unsubscribe']}
-                        onCheckedChange={(checked) =>
-                          setActionPreferences(prev => ({
-                            ...prev,
-                            silentActions: { ...prev.silentActions, 'silent-unsubscribe': checked }
-                          }))
-                        }
-                        disabled={isLoading}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="silent-todo" className="font-normal">Todo Items. <span className="text-muted-foreground">Emails that are asking you to complete a task.</span></Label>
-                      <Switch
-                        id="silent-todo"
-                        checked={actionPreferences.silentActions['silent-todo']}
-                        onCheckedChange={(checked) =>
-                          setActionPreferences(prev => ({
-                            ...prev,
-                            silentActions: { ...prev.silentActions, 'silent-todo': checked }
-                          }))
-                        }
-                        disabled={isLoading}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Draft Generation Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="draftGeneration">Draft Generation</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Upload AI-generated reply drafts to your Drafts folder
+                  <div className="space-y-2">
+                    <Label htmlFor="spamFolder">Spam Folder</Label>
+                    <Input
+                      id="spamFolder"
+                      value={folderPreferences.spamFolder}
+                      onChange={(e) =>
+                        setFolderPreferences((prev) => ({ ...prev, spamFolder: e.target.value }))
+                      }
+                      placeholder="e.g., *Spam"
+                      disabled={isLoading}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      For: emails identified as spam. Names starting with * appear at top.
                     </p>
                   </div>
-                  <Switch
-                    id="draftGeneration"
-                    checked={actionPreferences.draftGeneration}
-                    onCheckedChange={(checked) =>
-                      setActionPreferences(prev => ({ ...prev, draftGeneration: checked }))
-                    }
-                    disabled={isLoading}
-                  />
-                </div>
 
-                <Button onClick={handleSaveActionPreferences} disabled={isSavingActionPreferences || isLoading}>
-                  {isSavingActionPreferences ? 'Saving...' : 'Save Action Preferences'}
-                </Button>
-              </CardContent>
-            </Card>
+                  <div className="space-y-2">
+                    <Label htmlFor="todoFolder">Todo Folder</Label>
+                    <Input
+                      id="todoFolder"
+                      value={folderPreferences.todoFolder}
+                      onChange={(e) =>
+                        setFolderPreferences((prev) => ({ ...prev, todoFolder: e.target.value }))
+                      }
+                      placeholder="e.g., *Todo"
+                      disabled={isLoading}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      For: action items requiring external action (no email response needed). Names
+                      starting with * appear at top.
+                    </p>
+                  </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Email Folder Preferences</CardTitle>
-                <CardDescription>
-                  Configure folders for organizing emails based on AI recommendations
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="rootFolder">Root Folder</Label>
-                  <Input
-                    id="rootFolder"
-                    value={folderPreferences.rootFolder}
-                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, rootFolder: e.target.value }))}
-                    placeholder="Leave empty for root level"
-                    disabled={isLoading}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Leave empty to create folders at the root level
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="noActionFolder">No Action Folder</Label>
-                  <Input
-                    id="noActionFolder"
-                    value={folderPreferences.noActionFolder}
-                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, noActionFolder: e.target.value }))}
-                    placeholder="e.g., *No Action"
-                    disabled={isLoading}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    For: FYI only, large lists, unsubscribe candidates. Names starting with * appear at top.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="spamFolder">Spam Folder</Label>
-                  <Input
-                    id="spamFolder"
-                    value={folderPreferences.spamFolder}
-                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, spamFolder: e.target.value }))}
-                    placeholder="e.g., *Spam"
-                    disabled={isLoading}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    For: emails identified as spam. Names starting with * appear at top.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="todoFolder">Todo Folder</Label>
-                  <Input
-                    id="todoFolder"
-                    value={folderPreferences.todoFolder}
-                    onChange={(e) => setFolderPreferences(prev => ({ ...prev, todoFolder: e.target.value }))}
-                    placeholder="e.g., *Todo"
-                    disabled={isLoading}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    For: action items requiring external action (no email response needed). Names starting with * appear at top.
-                  </p>
-                </div>
-
-                <Button
-                  onClick={handleSaveFolderSettings}
-                  disabled={isTestingFolders || isLoading}
-                >
-                  {isTestingFolders ? 'Verifying...' : 'Save Folder Settings'}
-                </Button>
-              </CardContent>
-            </Card>
+                  <Button
+                    onClick={handleSaveFolderSettings}
+                    disabled={isTestingFolders || isLoading}
+                  >
+                    {isTestingFolders ? 'Verifying...' : 'Save Folder Settings'}
+                  </Button>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="signatures" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Email Signature Detection</CardTitle>
-                <CardDescription>
-                  Configure patterns to automatically detect and remove your email signature when analyzing your writing style
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              <SectionCard
+                title="Email Signature Detection"
+                description="Configure patterns to automatically detect and remove your email signature when analyzing your writing style"
+              >
                 <SignaturePatterns />
-              </CardContent>
-            </Card>
+              </SectionCard>
             </TabsContent>
 
             <TabsContent value="security" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Security</CardTitle>
-                <CardDescription>Manage your password and security settings</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <SectionCard
+                title="Security"
+                description="Manage your password and security settings"
+                contentClassName="space-y-4"
+              >
                 <Button variant="outline">Change Password</Button>
-              </CardContent>
-            </Card>
+              </SectionCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Danger Zone</CardTitle>
-                <CardDescription>Irreversible actions</CardDescription>
-              </CardHeader>
-              <CardContent>
+              <SectionCard title="Danger Zone" description="Irreversible actions">
                 <Button variant="destructive">Delete Account</Button>
-              </CardContent>
-            </Card>
+              </SectionCard>
             </TabsContent>
           </Tabs>
-        </div>
       </div>
 
       {/* Folder Verification Dialog */}
@@ -765,8 +823,8 @@ export default function SettingsPage() {
             <div className="space-y-4">
               {/* Required Folders */}
               <div>
-                <span className="font-medium text-sm">Required Folders:</span>
-                <ul className="list-disc list-inside mt-1 text-sm text-muted-foreground">
+                <span className="text-sm font-medium">Required Folders:</span>
+                <ul className="text-muted-foreground mt-1 list-inside list-disc text-sm">
                   {folderTestResult.requiredFolders?.map((folder: string) => (
                     <li key={folder}>{folder || 'Root Level'}</li>
                   ))}
@@ -775,10 +833,13 @@ export default function SettingsPage() {
 
               {/* Per-Account Results */}
               <div className="space-y-3">
-                <span className="font-medium text-sm">Account Status:</span>
+                <span className="text-sm font-medium">Account Status:</span>
                 {folderTestResult.accounts?.map((account) => (
-                  <div key={account.accountId} className="border-l-2 border-muted-foreground/20 pl-3 ml-2">
-                    <div className="font-medium text-sm mb-1">{account.email}</div>
+                  <div
+                    key={account.accountId}
+                    className="border-muted-foreground/20 ml-2 border-l-2 pl-3"
+                  >
+                    <div className="mb-1 text-sm font-medium">{account.email}</div>
 
                     {account.success ? (
                       <div className="space-y-1 text-xs">
@@ -792,12 +853,11 @@ export default function SettingsPage() {
                             ⚠ Missing: {account.missing.join(', ')}
                           </div>
                         )}
-                        {account.existing && folderTestResult.requiredFolders &&
-                         account.existing.length === folderTestResult.requiredFolders.length && (
-                          <div className="text-green-600">
-                            ✓ All folders exist
-                          </div>
-                        )}
+                        {account.existing &&
+                          folderTestResult.requiredFolders &&
+                          account.existing.length === folderTestResult.requiredFolders.length && (
+                            <div className="text-green-600">✓ All folders exist</div>
+                          )}
                       </div>
                     ) : (
                       <div className="text-xs text-red-600">

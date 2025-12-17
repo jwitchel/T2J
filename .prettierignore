@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+server/dist/
+
+# Handlebars templates (Prettier doesn't support Handlebars partials)
+server/src/lib/pipeline/templates/
+
+# Generated files
+*.min.js
+*.min.css
+
+# Large binary/model files
+*.onnx
+server/models/

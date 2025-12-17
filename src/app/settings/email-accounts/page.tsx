@@ -9,19 +9,52 @@ import useSWR from 'swr'
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Mail, Server, Eye, EyeOff, Info } from 'lucide-react'
 import { EmailAccountResponse } from '@/types/email-account'
 import { FcGoogle } from 'react-icons/fc'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { PageHeader } from '@/components/patterns'
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then(res => res.json())
+const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
 
 const emailAccountSchema = z.object({
   email_address: z.string().email('Invalid email address'),
@@ -29,7 +62,7 @@ const emailAccountSchema = z.object({
   imap_password: z.string().min(1, 'Password is required'),
   imap_host: z.string().min(1, 'IMAP host is required'),
   imap_port: z.number().min(1).max(65535, 'Invalid port number'),
-  imap_secure: z.boolean()
+  imap_secure: z.boolean(),
 })
 
 function EmailAccountsContent() {
@@ -38,18 +71,31 @@ function EmailAccountsContent() {
   const [isAddingAccount, setIsAddingAccount] = useState(false)
   const [editingAccount, setEditingAccount] = useState<EmailAccountResponse | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const { data: accounts, error, mutate } = useSWR<EmailAccountResponse[]>(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts`, fetcher)
+  const {
+    data: accounts,
+    error,
+    mutate,
+  } = useSWR<EmailAccountResponse[]>(
+    `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts`,
+    fetcher
+  )
   const { success, error: showError } = useToast()
 
-  const reauthAccount = useMemo(() => (accounts || []).find(a => a.id === reauthId), [accounts, reauthId])
+  const reauthAccount = useMemo(
+    () => (accounts || []).find((a) => a.id === reauthId),
+    [accounts, reauthId]
+  )
 
   const handleDelete = async (accountId: string) => {
     setDeletingId(accountId)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${accountId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${accountId}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      )
 
       if (response.ok) {
         success('Email account deleted successfully')
@@ -67,10 +113,13 @@ function EmailAccountsContent() {
 
   const handleTest = async (account: EmailAccountResponse) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/test`, {
-        method: 'POST',
-        credentials: 'include'
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/test`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        }
+      )
 
       if (response.ok) {
         const result = await response.json()
@@ -83,15 +132,18 @@ function EmailAccountsContent() {
       showError('Network error. Please try again.')
     }
   }
-  
+
   const handleToggleMonitoring = async (account: EmailAccountResponse, enabled: boolean) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/monitoring`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ enabled })
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/monitoring`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ enabled }),
+        }
+      )
 
       if (response.ok) {
         success(enabled ? 'Monitoring enabled' : 'Monitoring disabled')
@@ -108,7 +160,7 @@ function EmailAccountsContent() {
   if (error) {
     return (
       <ProtectedRoute>
-        <div className="container mx-auto py-6 px-4 md:px-6">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="text-center text-red-600">Failed to load email accounts</div>
         </div>
       </ProtectedRoute>
@@ -117,25 +169,31 @@ function EmailAccountsContent() {
 
   return (
     <ProtectedRoute>
-      <div className="container mx-auto py-6 px-4 md:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {reauthAccount && (
           <div className="mb-4">
-            <Alert className="py-2 border-amber-300 bg-amber-50 dark:bg-amber-950">
+            <Alert className="border-amber-300 bg-amber-50 py-2 dark:bg-amber-950">
               <AlertDescription className="flex items-center justify-between">
                 <span className="text-xs">
-                  <strong>{reauthAccount.email_address}</strong> requires re-authorization. Click reconnect to resume syncing.
+                  <strong>{reauthAccount.email_address}</strong> requires re-authorization. Click
+                  reconnect to resume syncing.
                 </span>
                 <Button
                   variant="outline"
                   className="h-7 px-2 text-xs"
                   onClick={async () => {
                     try {
-                      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ provider: reauthAccount.oauth_provider || 'google' })
-                      })
+                      const response = await fetch(
+                        `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
+                        {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            provider: reauthAccount.oauth_provider || 'google',
+                          }),
+                        }
+                      )
                       if (!response.ok) {
                         const err = await response.json()
                         showError(err.error || 'Failed to start OAuth flow')
@@ -154,12 +212,11 @@ function EmailAccountsContent() {
             </Alert>
           </div>
         )}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Email Accounts</h1>
-          <p className="text-muted-foreground">
-            Connect your email accounts to enable AI-powered email assistance
-          </p>
-        </div>
+        <PageHeader
+          title="Email Accounts"
+          description="Connect your email accounts to enable AI-powered email assistance"
+          className="mb-8"
+        />
 
         {!isAddingAccount && !editingAccount ? (
           <AccountList
@@ -195,16 +252,16 @@ function EmailAccountsContent() {
   )
 }
 
-function AccountList({ 
-  accounts, 
+function AccountList({
+  accounts,
   isLoading,
   onAdd,
-  onEdit, 
+  onEdit,
   onDelete,
   onTest,
   onToggleMonitoring,
-  deletingId 
-}: { 
+  deletingId,
+}: {
   accounts: EmailAccountResponse[]
   isLoading: boolean
   onAdd: () => void
@@ -214,12 +271,12 @@ function AccountList({
   onToggleMonitoring: (account: EmailAccountResponse, enabled: boolean) => void
   deletingId: string | null
 }) {
-  const { error: showError } = useToast();
+  const { error: showError } = useToast()
   if (isLoading) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
         </CardContent>
       </Card>
     )
@@ -228,11 +285,9 @@ function AccountList({
   if (accounts.length === 0) {
     return (
       <Card>
-        <CardContent className="text-center py-8">
-          <Mail className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground mb-4">
-            No email accounts connected yet
-          </p>
+        <CardContent className="py-8 text-center">
+          <Mail className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
+          <p className="text-muted-foreground mb-4">No email accounts connected yet</p>
           <Button onClick={onAdd}>Add Email Account</Button>
         </CardContent>
       </Card>
@@ -241,7 +296,7 @@ function AccountList({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Connected Accounts</h2>
         <Button onClick={onAdd}>Add Account</Button>
       </div>
@@ -258,13 +313,13 @@ function AccountList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {accounts.map(account => (
+            {accounts.map((account) => (
               <TableRow key={account.id}>
                 <TableCell className="font-medium">
                   <div>
                     {account.email_address}
                     {account.oauth_provider && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                      <span className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
                         <FcGoogle className="h-3 w-3" />
                         Connected via OAuth
                       </span>
@@ -272,7 +327,7 @@ function AccountList({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <div className="text-muted-foreground flex items-center gap-1 text-sm">
                     <Server className="h-3 w-3" />
                     {account.imap_host}:{account.imap_port}
                   </div>
@@ -282,7 +337,7 @@ function AccountList({
                     {account.monitoring_enabled ? (
                       <Eye className="h-4 w-4" />
                     ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      <EyeOff className="text-muted-foreground h-4 w-4" />
                     )}
                     <Switch
                       checked={account.monitoring_enabled || false}
@@ -291,10 +346,7 @@ function AccountList({
                   </div>
                 </TableCell>
                 <TableCell>
-                  {account.last_sync
-                    ? new Date(account.last_sync).toLocaleString()
-                    : 'Never'
-                  }
+                  {account.last_sync ? new Date(account.last_sync).toLocaleString() : 'Never'}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
@@ -304,12 +356,15 @@ function AccountList({
                         className="h-7 px-2 text-xs"
                         onClick={async () => {
                           try {
-                            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              credentials: 'include',
-                              body: JSON.stringify({ provider: account.oauth_provider })
-                            })
+                            const response = await fetch(
+                              `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({ provider: account.oauth_provider }),
+                              }
+                            )
                             if (!response.ok) {
                               const err = await response.json()
                               showError(err.error || 'Failed to start OAuth flow')
@@ -353,21 +408,22 @@ function AccountList({
                           )}
                         </Button>
                       </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Email Account</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete {account.email_address}? This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => onDelete(account.id)}>
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Email Account</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {account.email_address}? This action
+                            cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => onDelete(account.id)}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </TableCell>
               </TableRow>
@@ -393,8 +449,8 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
       imap_password: '',
       imap_host: 'localhost',
       imap_port: 1143,
-      imap_secure: false
-    }
+      imap_secure: false,
+    },
   })
 
   // Auto-detect provider settings
@@ -413,7 +469,11 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
       form.setValue('imap_host', 'imap.mail.yahoo.com')
       form.setValue('imap_port', 993)
       form.setValue('imap_secure', true)
-    } else if (email.includes('@icloud.com') || email.includes('@me.com') || email.includes('@mac.com')) {
+    } else if (
+      email.includes('@icloud.com') ||
+      email.includes('@me.com') ||
+      email.includes('@mac.com')
+    ) {
       form.setValue('imap_host', 'imap.mail.me.com')
       form.setValue('imap_port', 993)
       form.setValue('imap_secure', true)
@@ -431,13 +491,13 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
 
     const data = form.getValues()
     setIsTesting(true)
-    
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       })
 
       if (response.ok) {
@@ -463,7 +523,7 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       })
 
       if (response.ok) {
@@ -495,14 +555,15 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
       <CardHeader>
         <CardTitle>Add Email Account</CardTitle>
         <CardDescription>
-          Connect your email account to enable AI-powered assistance. Your credentials are securely encrypted.
+          Connect your email account to enable AI-powered assistance. Your credentials are securely
+          encrypted.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-6">
-          <div className="text-center mb-4">
-            <h4 className="text-lg font-semibold mb-2">Connect with OAuth (Recommended)</h4>
-            <p className="text-sm text-muted-foreground mb-4">
+          <div className="mb-4 text-center">
+            <h4 className="mb-2 text-lg font-semibold">Connect with OAuth (Recommended)</h4>
+            <p className="text-muted-foreground mb-4 text-sm">
               The most secure way to connect your email account
             </p>
             <Button
@@ -513,26 +574,29 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
               onClick={async () => {
                 try {
                   // Request OAuth URL from our dedicated email OAuth endpoint
-                  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ provider: 'google' })
-                  });
+                  const response = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ provider: 'google' }),
+                    }
+                  )
 
                   if (!response.ok) {
-                    const error = await response.json();
-                    showError(error.error || 'Failed to start OAuth flow');
-                    return;
+                    const error = await response.json()
+                    showError(error.error || 'Failed to start OAuth flow')
+                    return
                   }
 
-                  const { authUrl } = await response.json();
-                  
+                  const { authUrl } = await response.json()
+
                   // Redirect to Google OAuth
-                  window.location.href = authUrl;
+                  window.location.href = authUrl
                 } catch (error) {
-                  console.error('OAuth error:', error);
-                  showError('Failed to connect with Google. Please try again.');
+                  console.error('OAuth error:', error)
+                  showError('Failed to connect with Google. Please try again.')
                 }
               }}
             >
@@ -540,13 +604,13 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
               Connect with Google
             </Button>
           </div>
-          
+
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or connect manually</span>
+              <span className="bg-background text-muted-foreground px-2">Or connect manually</span>
             </div>
           </div>
         </div>
@@ -554,7 +618,7 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
         <div className="mb-6 flex justify-center">
           <Dialog>
             <DialogTrigger asChild>
-              <button className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+              <button className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400">
                 <Info className="h-4 w-4" />
                 Manual connection settings
               </button>
@@ -569,28 +633,48 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
               <div className="space-y-3 text-sm">
                 <div>
                   <span className="font-medium">Gmail:</span>
-                  <span className="text-muted-foreground"> Server: imap.gmail.com, Port: 993, Secure: Yes</span>
-                  <span className="text-blue-600 dark:text-blue-400 block text-xs mt-1">
-                    Requires app-specific password. <a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener noreferrer" className="underline">Learn how</a>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    Server: imap.gmail.com, Port: 993, Secure: Yes
+                  </span>
+                  <span className="mt-1 block text-xs text-blue-600 dark:text-blue-400">
+                    Requires app-specific password.{' '}
+                    <a
+                      href="https://support.google.com/mail/answer/185833"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline"
+                    >
+                      Learn how
+                    </a>
                   </span>
                 </div>
                 <div>
                   <span className="font-medium">Outlook/Hotmail:</span>
-                  <span className="text-muted-foreground"> Server: outlook.office365.com, Port: 993, Secure: Yes</span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    Server: outlook.office365.com, Port: 993, Secure: Yes
+                  </span>
                 </div>
                 <div>
                   <span className="font-medium">Yahoo:</span>
-                  <span className="text-muted-foreground"> Server: imap.mail.yahoo.com, Port: 993, Secure: Yes</span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    Server: imap.mail.yahoo.com, Port: 993, Secure: Yes
+                  </span>
                 </div>
                 <div>
                   <span className="font-medium">iCloud:</span>
-                  <span className="text-muted-foreground"> Server: imap.mail.me.com, Port: 993, Secure: Yes</span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    Server: imap.mail.me.com, Port: 993, Secure: Yes
+                  </span>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
         </div>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
@@ -611,7 +695,8 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
                     />
                   </FormControl>
                   <FormDescription>
-                    For testing, use: user1@testmail.local, user2@testmail.local, or user3@testmail.local
+                    For testing, use: user1@testmail.local, user2@testmail.local, or
+                    user3@testmail.local
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -688,8 +773,8 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
             </div>
 
             <div className="flex justify-between">
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 variant="secondary"
                 onClick={testConnection}
                 disabled={isTesting || isSubmitting}
@@ -703,15 +788,15 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
                   'Test Connection'
                 )}
               </Button>
-              
+
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={onCancel}>
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isSubmitting}
-                  variant={connectionTested ? "default" : "outline"}
+                  variant={connectionTested ? 'default' : 'outline'}
                 >
                   {isSubmitting ? (
                     <>
@@ -731,10 +816,14 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
   )
 }
 
-function EditAccountForm({ account, onSuccess, onCancel }: { 
+function EditAccountForm({
+  account,
+  onSuccess,
+  onCancel,
+}: {
   account: EmailAccountResponse
   onSuccess: () => void
-  onCancel: () => void 
+  onCancel: () => void
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
@@ -749,8 +838,8 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
       imap_password: '', // Password field starts empty for security
       imap_host: account.imap_host,
       imap_port: account.imap_port,
-      imap_secure: account.imap_secure
-    }
+      imap_secure: account.imap_secure,
+    },
   })
 
   const testConnection = async () => {
@@ -759,13 +848,13 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
 
     const data = form.getValues()
     setIsTesting(true)
-    
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       })
 
       if (response.ok) {
@@ -787,17 +876,20 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
   const onSubmit = async (data: z.infer<typeof emailAccountSchema>) => {
     setIsSubmitting(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/update-credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          imap_host: data.imap_host,
-          imap_port: data.imap_port,
-          imap_username: data.imap_username,
-          imap_password: data.imap_password
-        })
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/update-credentials`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            imap_host: data.imap_host,
+            imap_port: data.imap_port,
+            imap_username: data.imap_username,
+            imap_password: data.imap_password,
+          }),
+        }
+      )
 
       if (response.ok) {
         success('Email account credentials updated successfully!')
@@ -837,9 +929,7 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
                       disabled // Email address cannot be changed
                     />
                   </FormControl>
-                  <FormDescription>
-                    Email address cannot be changed
-                  </FormDescription>
+                  <FormDescription>Email address cannot be changed</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -868,9 +958,7 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
                   <FormControl>
                     <Input type="password" placeholder="Enter new password" {...field} />
                   </FormControl>
-                  <FormDescription>
-                    Re-enter your password to save changes
-                  </FormDescription>
+                  <FormDescription>Re-enter your password to save changes</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -911,8 +999,8 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
             </div>
 
             <div className="flex justify-between">
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 variant="secondary"
                 onClick={testConnection}
                 disabled={isTesting || isSubmitting}
@@ -926,15 +1014,15 @@ function EditAccountForm({ account, onSuccess, onCancel }: {
                   'Test Connection'
                 )}
               </Button>
-              
+
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={onCancel}>
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isSubmitting}
-                  variant={connectionTested ? "default" : "outline"}
+                  variant={connectionTested ? 'default' : 'outline'}
                 >
                   {isSubmitting ? (
                     <>

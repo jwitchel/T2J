@@ -9,14 +9,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-react'
 
-
-
 export function SignaturePatterns() {
   const [patterns, setPatterns] = useState<string[]>([])
   const [newPattern, setNewPattern] = useState('')
   const [testText, setTestText] = useState('')
   const [testResults, setTestResults] = useState<{
-    patterns?: Array<{ pattern: string; matches?: unknown[]; wouldRemoveFrom?: number; error?: string }>
+    patterns?: Array<{
+      pattern: string
+      matches?: unknown[]
+      wouldRemoveFrom?: number
+      error?: string
+    }>
     removal?: { cleanedText: string; signature: string; matchedPattern: string }
   } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -32,11 +35,11 @@ export function SignaturePatterns() {
   const loadPatterns = async () => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/signature-patterns`, {
-        credentials: 'include'
+        credentials: 'include',
       })
-      
+
       if (!response.ok) throw new Error('Failed to load patterns')
-      
+
       const data = await response.json()
       setPatterns(data.patterns || [])
     } catch (err) {
@@ -54,19 +57,21 @@ export function SignaturePatterns() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ patterns })
+        body: JSON.stringify({ patterns }),
       })
-      
+
       if (!response.ok) {
         const data = await response.json()
         if (data.details) {
-          error(`Invalid patterns: ${data.details.map((d: { pattern: string }) => d.pattern).join(', ')}`)
+          error(
+            `Invalid patterns: ${data.details.map((d: { pattern: string }) => d.pattern).join(', ')}`
+          )
         } else {
           throw new Error(data.error || 'Failed to save patterns')
         }
         return
       }
-      
+
       success('Signature patterns saved successfully')
     } catch (err) {
       error('Failed to save patterns')
@@ -101,18 +106,21 @@ export function SignaturePatterns() {
 
     setIsTesting(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/signature-patterns/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          text: testText,
-          patterns: patterns.length > 0 ? patterns : undefined
-        })
-      })
-      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/signature-patterns/test`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            text: testText,
+            patterns: patterns.length > 0 ? patterns : undefined,
+          }),
+        }
+      )
+
       if (!response.ok) throw new Error('Failed to test patterns')
-      
+
       const data = await response.json()
       setTestResults(data)
     } catch (err) {
@@ -122,8 +130,6 @@ export function SignaturePatterns() {
       setIsTesting(false)
     }
   }
-
-
 
   if (isLoading) {
     return (
@@ -142,10 +148,11 @@ export function SignaturePatterns() {
         <div className="flex items-center justify-between">
           <Label>Signature Detection Patterns</Label>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Regular expressions to match and remove email signatures. Patterns are tested from the bottom of emails upward.
+        <p className="text-muted-foreground text-sm">
+          Regular expressions to match and remove email signatures. Patterns are tested from the
+          bottom of emails upward.
         </p>
-        
+
         {patterns.length === 0 ? (
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -157,14 +164,8 @@ export function SignaturePatterns() {
           <div className="space-y-2">
             {patterns.map((pattern, index) => (
               <div key={index} className="flex items-center gap-2">
-                <code className="flex-1 p-2 bg-muted rounded text-sm font-mono">
-                  {pattern}
-                </code>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removePattern(index)}
-                >
+                <code className="bg-muted flex-1 rounded p-2 font-mono text-sm">{pattern}</code>
+                <Button variant="ghost" size="sm" onClick={() => removePattern(index)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -191,18 +192,16 @@ export function SignaturePatterns() {
               }
             }}
           />
-          <Button
-            onClick={addPattern}
-            disabled={!newPattern.trim()}
-          >
+          <Button onClick={addPattern} disabled={!newPattern.trim()}>
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Hint: Use multiline patterns like <code className="bg-muted px-1 py-0.5 rounded">——+[\s\S]*?ycbm\.com\/</code> to match signatures that span multiple lines
+        <p className="text-muted-foreground text-xs">
+          Hint: Use multiline patterns like{' '}
+          <code className="bg-muted rounded px-1 py-0.5">——+[\s\S]*?ycbm\.com\/</code> to match
+          signatures that span multiple lines
         </p>
       </div>
-
 
       {/* Test Patterns */}
       <div className="space-y-2">
@@ -215,15 +214,11 @@ export function SignaturePatterns() {
           rows={6}
           className="font-mono text-sm"
         />
-        <Button
-          onClick={testPatterns}
-          disabled={!testText.trim() || isTesting}
-          variant="outline"
-        >
+        <Button onClick={testPatterns} disabled={!testText.trim() || isTesting} variant="outline">
           {isTesting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Test Patterns
         </Button>
-        
+
         {testResults && (
           <div className="mt-4 space-y-4">
             {testResults.removal?.signature && (
@@ -231,21 +226,22 @@ export function SignaturePatterns() {
                 <CheckCircle className="h-4 w-4 text-green-500" />
                 <div className="ml-2">
                   <p className="text-sm font-medium">Signature detected!</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Matched pattern: <code className="bg-muted px-1 py-0.5 rounded">
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Matched pattern:{' '}
+                    <code className="bg-muted rounded px-1 py-0.5">
                       {testResults.removal?.matchedPattern}
                     </code>
                   </p>
                   <details className="mt-2">
-                    <summary className="text-sm cursor-pointer">View detected signature</summary>
-                    <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-x-auto">
+                    <summary className="cursor-pointer text-sm">View detected signature</summary>
+                    <pre className="bg-muted mt-2 overflow-x-auto rounded p-2 text-xs">
                       {testResults.removal?.signature}
                     </pre>
                   </details>
                 </div>
               </Alert>
             )}
-            
+
             {!testResults.removal?.signature && (
               <Alert>
                 <AlertCircle className="h-4 w-4" />
@@ -260,10 +256,7 @@ export function SignaturePatterns() {
 
       {/* Save Button */}
       <div className="flex justify-end">
-        <Button
-          onClick={savePatterns}
-          disabled={isSaving}
-        >
+        <Button onClick={savePatterns} disabled={isSaving}>
           {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save Patterns
         </Button>

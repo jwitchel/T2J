@@ -10,8 +10,39 @@ interface BrandLogoProps {
 }
 
 export function BrandLogo({ href = '/', size = 'md' }: BrandLogoProps) {
-  const words = ['Think', 'Breathe', 'Work', 'Plan', 'Ride', 'Run', 'Smile', 'Relax', 'Center', 'Spin', 'Walk', 'Sleep', 'Stretch', 'Move', 'Laugh', 'Make', 'Build', 'Design', 'Paint', 'Sketch']
-  const colors = ['#93c5fd', '#a5b4fc', '#c4b5fd', '#f9a8d4', '#fdba74', '#fcd34d', '#86efac', '#67e8f9', '#94a3b8']
+  const words = [
+    'Think',
+    'Breathe',
+    'Work',
+    'Plan',
+    'Ride',
+    'Run',
+    'Smile',
+    'Relax',
+    'Center',
+    'Spin',
+    'Walk',
+    'Sleep',
+    'Stretch',
+    'Move',
+    'Laugh',
+    'Make',
+    'Build',
+    'Design',
+    'Paint',
+    'Sketch',
+  ]
+  const colors = [
+    '#93c5fd',
+    '#a5b4fc',
+    '#c4b5fd',
+    '#f9a8d4',
+    '#fdba74',
+    '#fcd34d',
+    '#86efac',
+    '#67e8f9',
+    '#94a3b8',
+  ]
   const [wordIndex, setWordIndex] = useState(0)
   const [isVisible, setIsVisible] = useState(true)
 
@@ -42,7 +73,7 @@ export function BrandLogo({ href = '/', size = 'md' }: BrandLogoProps) {
         alt="Time to Just Logo"
         width={config.logo}
         height={config.logo}
-        className="object-contain logo-rotate"
+        className="logo-rotate object-contain"
         style={{ width: `${config.logo}px`, height: `${config.logo}px` }}
       />
       <span className={`font-semibold ${config.text} text-zinc-900 dark:text-zinc-100`}>
@@ -72,7 +103,11 @@ export function BrandLogo({ href = '/', size = 'md' }: BrandLogoProps) {
   )
 
   if (href) {
-    return <Link href={href}>{content}</Link>
+    return (
+      <Link href={href} className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+        {content}
+      </Link>
+    )
   }
 
   return content

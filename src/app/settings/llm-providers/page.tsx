@@ -7,7 +7,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +44,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Check } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
+import { PageHeader } from '@/components/patterns'
 
 interface LLMProvider {
   id: string
@@ -108,14 +116,14 @@ const PROVIDER_INFO = {
   },
 }
 
-const fetcher = (url: string) => 
-  fetch(url, { credentials: 'include' }).then(res => res.json())
+const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
 
 export default function LLMProvidersPage() {
-  const { data: providers, error, isLoading } = useSWR<LLMProvider[]>(
-    `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`,
-    fetcher
-  )
+  const {
+    data: providers,
+    error,
+    isLoading,
+  } = useSWR<LLMProvider[]>(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`, fetcher)
   const { success, error: showError } = useToast()
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -136,11 +144,15 @@ export default function LLMProvidersPage() {
   useEffect(() => {
     if (formData.api_key) {
       if (formData.api_key.startsWith('sk-ant-')) {
-        setFormData(prev => ({ ...prev, provider_type: 'anthropic', model_name: 'claude-3-sonnet-20240229' }))
+        setFormData((prev) => ({
+          ...prev,
+          provider_type: 'anthropic',
+          model_name: 'claude-3-sonnet-20240229',
+        }))
       } else if (formData.api_key.startsWith('sk-')) {
-        setFormData(prev => ({ ...prev, provider_type: 'openai', model_name: 'gpt-3.5-turbo' }))
+        setFormData((prev) => ({ ...prev, provider_type: 'openai', model_name: 'gpt-3.5-turbo' }))
       } else if (formData.api_key.startsWith('AIza')) {
-        setFormData(prev => ({ ...prev, provider_type: 'google', model_name: 'gemini-pro' }))
+        setFormData((prev) => ({ ...prev, provider_type: 'google', model_name: 'gemini-pro' }))
       }
     }
   }, [formData.api_key])
@@ -152,11 +164,11 @@ export default function LLMProvidersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
         success('Connection test successful!')
         setConnectionTested(true)
@@ -184,7 +196,7 @@ export default function LLMProvidersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
@@ -224,12 +236,15 @@ export default function LLMProvidersPage() {
         updateData.api_endpoint = formData.api_endpoint
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${selectedProvider.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(updateData)
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${selectedProvider.id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(updateData),
+        }
+      )
 
       const data = await response.json()
 
@@ -253,10 +268,13 @@ export default function LLMProvidersPage() {
     if (!selectedProvider) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${selectedProvider.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${selectedProvider.id}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      )
 
       if (response.ok) {
         success('LLM provider deleted successfully')
@@ -304,28 +322,23 @@ export default function LLMProvidersPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto py-6 px-4">
-        <Alert className="max-w-md mx-auto">
-          <AlertDescription>
-            Failed to load LLM providers. Please try again later.
-          </AlertDescription>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <Alert className="mx-auto max-w-md">
+          <AlertDescription>Failed to load LLM providers. Please try again later.</AlertDescription>
         </Alert>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 md:px-6">
-
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">LLM Providers</h1>
-        <p className="text-muted-foreground">
-          Configure AI providers for generating email replies
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        title="LLM Providers"
+        description="Configure AI providers for generating email replies"
+      />
 
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Connected Providers</h2>
           <Button onClick={openAddDialog}>Add Provider</Button>
         </div>
@@ -333,7 +346,7 @@ export default function LLMProvidersPage() {
         {isLoading ? (
           <Card>
             <CardContent className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
             </CardContent>
           </Card>
         ) : providers && providers.length > 0 ? (
@@ -352,11 +365,9 @@ export default function LLMProvidersPage() {
               <TableBody>
                 {providers.map((provider) => (
                   <TableRow key={provider.id}>
-                    <TableCell className="font-medium">
-                      {provider.provider_name}
-                    </TableCell>
+                    <TableCell className="font-medium">{provider.provider_name}</TableCell>
                     <TableCell>
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-muted-foreground text-sm">
                         {PROVIDER_INFO[provider.provider_type].name}
                       </span>
                     </TableCell>
@@ -369,9 +380,7 @@ export default function LLMProvidersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {provider.is_default && (
-                        <Badge variant="default">Default</Badge>
-                      )}
+                      {provider.is_default && <Badge variant="default">Default</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -384,10 +393,7 @@ export default function LLMProvidersPage() {
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button
-                              variant="destructive"
-                              className="h-7 px-2 text-xs"
-                            >
+                            <Button variant="destructive" className="h-7 px-2 text-xs">
                               Delete
                             </Button>
                           </AlertDialogTrigger>
@@ -395,15 +401,18 @@ export default function LLMProvidersPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete LLM Provider</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete &quot;{provider.provider_name}&quot;? This action cannot be undone.
+                                Are you sure you want to delete &quot;{provider.provider_name}
+                                &quot;? This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => {
-                                setSelectedProvider(provider)
-                                handleDelete()
-                              }}>
+                              <AlertDialogAction
+                                onClick={() => {
+                                  setSelectedProvider(provider)
+                                  handleDelete()
+                                }}
+                              >
                                 Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>
@@ -418,11 +427,9 @@ export default function LLMProvidersPage() {
           </Card>
         ) : (
           <Card>
-            <CardContent className="text-center py-8">
-              <Plus className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground mb-4">
-                No LLM providers configured yet
-              </p>
+            <CardContent className="py-8 text-center">
+              <Plus className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
+              <p className="text-muted-foreground mb-4">No LLM providers configured yet</p>
               <Button onClick={openAddDialog}>Add Provider</Button>
             </CardContent>
           </Card>
@@ -448,7 +455,7 @@ export default function LLMProvidersPage() {
                 onChange={(e) => setFormData({ ...formData, provider_name: e.target.value })}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="api_key">API Key</Label>
               <Input
@@ -458,7 +465,7 @@ export default function LLMProvidersPage() {
                 value={formData.api_key}
                 onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Your API key will be encrypted and stored securely
               </p>
             </div>
@@ -468,10 +475,10 @@ export default function LLMProvidersPage() {
               <Select
                 value={formData.provider_type}
                 onValueChange={(value: 'openai' | 'anthropic' | 'google' | 'local') => {
-                  setFormData({ 
-                    ...formData, 
+                  setFormData({
+                    ...formData,
                     provider_type: value,
-                    model_name: PROVIDER_MODELS[value][0].value
+                    model_name: PROVIDER_MODELS[value][0].value,
                   })
                   setConnectionTested(false)
                 }}
@@ -535,7 +542,7 @@ export default function LLMProvidersPage() {
             </div>
 
             {connectionTested && (
-              <Alert className="bg-green-50 border-green-200">
+              <Alert className="border-green-200 bg-green-50">
                 <Check className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800">
                   Connection test successful! You can now save the provider.
@@ -558,10 +565,7 @@ export default function LLMProvidersPage() {
                 'Test Connection'
               )}
             </Button>
-            <Button
-              onClick={handleAdd}
-              disabled={!connectionTested || isSaving}
-            >
+            <Button onClick={handleAdd} disabled={!connectionTested || isSaving}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -580,9 +584,7 @@ export default function LLMProvidersPage() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Edit LLM Provider</DialogTitle>
-            <DialogDescription>
-              Update provider configuration
-            </DialogDescription>
+            <DialogDescription>Update provider configuration</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -593,7 +595,7 @@ export default function LLMProvidersPage() {
                 onChange={(e) => setFormData({ ...formData, provider_name: e.target.value })}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="edit_api_key">API Key</Label>
               <Input
@@ -663,11 +665,7 @@ export default function LLMProvidersPage() {
           </div>
           <DialogFooter>
             {formData.api_key && formData.api_key !== '••••••••' && !connectionTested && (
-              <Button
-                variant="outline"
-                onClick={testConnection}
-                disabled={isTesting}
-              >
+              <Button variant="outline" onClick={testConnection} disabled={isTesting}>
                 {isTesting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -680,7 +678,10 @@ export default function LLMProvidersPage() {
             )}
             <Button
               onClick={handleEdit}
-              disabled={isSaving || (!!formData.api_key && formData.api_key !== '••••••••' && !connectionTested)}
+              disabled={
+                isSaving ||
+                (!!formData.api_key && formData.api_key !== '••••••••' && !connectionTested)
+              }
             >
               {isSaving ? (
                 <>

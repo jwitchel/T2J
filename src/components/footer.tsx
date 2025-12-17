@@ -5,9 +5,9 @@ export function Footer() {
 
   return (
     <footer className="border-t bg-zinc-50 dark:bg-zinc-900">
-      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-muted-foreground">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+          <div className="text-muted-foreground text-sm">
             &copy; {currentYear} Time to Just. All rights reserved.
           </div>
 

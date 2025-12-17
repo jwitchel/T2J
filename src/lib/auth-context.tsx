@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { createContext, useContext, useState, ReactNode } from 'react'
 import { authClient } from './auth-client'
@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
       })
-      
+
       if (error) {
         throw new Error(error.message || 'Sign in failed')
       }
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         name: name || '',
       })
-      
+
       if (error) {
         throw new Error(error.message || 'Sign up failed')
       }
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null)
       const { error } = await authClient.signOut()
-      
+
       if (error) {
         throw new Error(error.message || 'Sign out failed')
       }

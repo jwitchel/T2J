@@ -4,9 +4,9 @@ import { Footer } from '@/components/footer'
 
 export default function SignUpPage() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="bg-background flex min-h-screen flex-col">
       <PublicNavbar />
-      <div className="flex items-center justify-center py-12 sm:py-16 px-4 flex-1">
+      <div className="flex flex-1 items-center justify-center py-16">
         <SignUpForm />
       </div>
       <Footer />
