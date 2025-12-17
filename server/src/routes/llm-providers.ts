@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { pool } from '../lib/db';
-
+import { withTransaction } from '../lib/db/transaction-utils';
 import { encryptPassword } from '../lib/crypto';
 import {
   CreateLLMProviderRequest,
@@ -131,114 +131,132 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+// Result type for transaction callbacks
+type TransactionResult<T> = {
+  success: true;
+  data: T;
+} | {
+  success: false;
+  error: string;
+  status: number;
+  field?: string;
+  message?: string;
+}
+
 // Add new LLM provider
 router.post('/', requireAuth, validateLLMProvider, async (req, res): Promise<void> => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    
     const userId = req.user.id;
     const data = req.body as CreateLLMProviderRequest;
-    
-    // Check if provider name already exists for this user
-    const existing = await client.query(
-      'SELECT id FROM llm_providers WHERE user_id = $1 AND provider_name = $2',
-      [userId, data.provider_name]
-    );
-    
-    if (existing.rows.length > 0) {
-      await client.query('ROLLBACK');
-      res.status(409).json({ 
-        error: 'Provider name already exists',
-        field: 'provider_name'
-      });
-      return;
-    }
-    
-    // Test the provider connection first
-    const config: LLMProviderConfig = {
-      id: 'test',
-      type: data.provider_type,
-      apiKey: data.api_key,
-      apiEndpoint: data.api_endpoint,
-      modelName: data.model_name
-    };
-    
-    const llmClient = new LLMClient(config);
-    const connectionTest = await llmClient.testConnection();
-    
-    if (!connectionTest) {
-      await client.query('ROLLBACK');
-      res.status(400).json({ 
-        error: 'Connection test failed',
-        message: 'Unable to connect to the LLM provider'
-      });
-      return;
-    }
-    
-    // If this should be the default, unset other defaults
-    if (data.is_default) {
-      await client.query(
-        'UPDATE llm_providers SET is_default = false WHERE user_id = $1',
+
+    const result = await withTransaction(pool, async (client): Promise<TransactionResult<LLMProviderResponse>> => {
+      // Check if provider name already exists for this user
+      const existing = await client.query(
+        'SELECT id FROM llm_providers WHERE user_id = $1 AND provider_name = $2',
+        [userId, data.provider_name]
+      );
+
+      if (existing.rows.length > 0) {
+        return {
+          success: false,
+          error: 'Provider name already exists',
+          status: 409,
+          field: 'provider_name'
+        };
+      }
+
+      // Test the provider connection first
+      const config: LLMProviderConfig = {
+        id: 'test',
+        type: data.provider_type,
+        apiKey: data.api_key,
+        apiEndpoint: data.api_endpoint,
+        modelName: data.model_name
+      };
+
+      const llmClient = new LLMClient(config);
+      const connectionTest = await llmClient.testConnection();
+
+      if (!connectionTest) {
+        return {
+          success: false,
+          error: 'Connection test failed',
+          status: 400,
+          message: 'Unable to connect to the LLM provider'
+        };
+      }
+
+      // If this should be the default, unset other defaults
+      if (data.is_default) {
+        await client.query(
+          'UPDATE llm_providers SET is_default = false WHERE user_id = $1',
+          [userId]
+        );
+      }
+
+      // Check if this is the first provider for the user
+      const countResult = await client.query(
+        'SELECT COUNT(*) as count FROM llm_providers WHERE user_id = $1',
         [userId]
       );
+      const isFirstProvider = parseInt(countResult.rows[0].count) === 0;
+
+      // Encrypt the API key
+      const encryptedApiKey = encryptPassword(data.api_key);
+
+      // Insert the new provider
+      const insertResult = await client.query(
+        `INSERT INTO llm_providers
+         (user_id, provider_name, provider_type, api_key_encrypted, api_endpoint, model_name, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, provider_name, provider_type, api_endpoint, model_name,
+                   is_active, is_default, created_at, updated_at`,
+        [
+          userId,
+          data.provider_name,
+          data.provider_type,
+          encryptedApiKey,
+          data.api_endpoint || null,
+          data.model_name,
+          data.is_default || isFirstProvider
+        ]
+      );
+
+      const provider: LLMProviderResponse = {
+        id: insertResult.rows[0].id,
+        provider_name: insertResult.rows[0].provider_name,
+        provider_type: insertResult.rows[0].provider_type,
+        api_endpoint: insertResult.rows[0].api_endpoint,
+        model_name: insertResult.rows[0].model_name,
+        is_active: insertResult.rows[0].is_active,
+        is_default: insertResult.rows[0].is_default,
+        created_at: insertResult.rows[0].created_at.toISOString(),
+        updated_at: insertResult.rows[0].updated_at.toISOString()
+      };
+
+      return { success: true, data: provider };
+    });
+
+    if (!result.success) {
+      const response: Record<string, unknown> = { error: result.error };
+      if (result.field) response.field = result.field;
+      if (result.message) response.message = result.message;
+      res.status(result.status).json(response);
+      return;
     }
-    
-    // Check if this is the first provider for the user
-    const countResult = await client.query(
-      'SELECT COUNT(*) as count FROM llm_providers WHERE user_id = $1',
-      [userId]
-    );
-    const isFirstProvider = parseInt(countResult.rows[0].count) === 0;
-    
-    // Encrypt the API key
-    const encryptedApiKey = encryptPassword(data.api_key);
-    
-    // Insert the new provider
-    const result = await client.query(
-      `INSERT INTO llm_providers 
-       (user_id, provider_name, provider_type, api_key_encrypted, api_endpoint, model_name, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
-       RETURNING id, provider_name, provider_type, api_endpoint, model_name, 
-                 is_active, is_default, created_at, updated_at`,
-      [
-        userId,
-        data.provider_name,
-        data.provider_type,
-        encryptedApiKey,
-        data.api_endpoint || null,
-        data.model_name,
-        data.is_default || isFirstProvider // Set as default if it's the first provider
-      ]
-    );
-    
-    await client.query('COMMIT');
-    
-    const provider: LLMProviderResponse = {
-      id: result.rows[0].id,
-      provider_name: result.rows[0].provider_name,
-      provider_type: result.rows[0].provider_type,
-      api_endpoint: result.rows[0].api_endpoint,
-      model_name: result.rows[0].model_name,
-      is_active: result.rows[0].is_active,
-      is_default: result.rows[0].is_default,
-      created_at: result.rows[0].created_at.toISOString(),
-      updated_at: result.rows[0].updated_at.toISOString()
-    };
-    
-    res.status(201).json(provider);
-  } catch (error: any) {
-    await client.query('ROLLBACK');
+
+    res.status(201).json(result.data);
+  } catch (error: unknown) {
     console.error('Error creating LLM provider:', error);
-    
+
     if (error instanceof LLMProviderError) {
       if (error.code === 'INVALID_API_KEY') {
-        res.status(401).json({ 
+        res.status(401).json({
           error: 'Invalid API key',
           message: 'The API key provided is invalid'
         });
       } else {
-        res.status(400).json({ 
+        res.status(400).json({
           error: error.code,
           message: error.message
         });
@@ -246,148 +264,144 @@ router.post('/', requireAuth, validateLLMProvider, async (req, res): Promise<voi
     } else {
       res.status(500).json({ error: 'Failed to create LLM provider' });
     }
-  } finally {
-    client.release();
   }
 });
 
 // Update LLM provider
 router.put('/:id', requireAuth, async (req, res): Promise<void> => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    
     const userId = req.user.id;
     const providerId = req.params.id;
     const updates = req.body as UpdateLLMProviderRequest;
-    
-    // Validate UUID format
+
+    // Validate UUID format (before transaction)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(providerId)) {
-      await client.query('ROLLBACK');
       res.status(400).json({ error: 'Invalid provider ID format' });
       return;
     }
-    
-    // Check if provider exists and belongs to user
-    const existing = await client.query(
-      'SELECT * FROM llm_providers WHERE id = $1 AND user_id = $2',
-      [providerId, userId]
-    );
-    
-    if (existing.rows.length === 0) {
-      await client.query('ROLLBACK');
-      res.status(404).json({ error: 'LLM provider not found' });
-      return;
-    }
-    
-    const currentProvider = existing.rows[0];
-    
-    // If updating API key, test the connection
-    if (updates.api_key) {
-      const config: LLMProviderConfig = {
-        id: providerId,
-        type: currentProvider.provider_type,
-        apiKey: updates.api_key,
-        apiEndpoint: updates.api_endpoint || currentProvider.api_endpoint,
-        modelName: updates.model_name || currentProvider.model_name
+
+    const result = await withTransaction(pool, async (client): Promise<TransactionResult<LLMProviderResponse>> => {
+      // Check if provider exists and belongs to user
+      const existing = await client.query(
+        'SELECT * FROM llm_providers WHERE id = $1 AND user_id = $2',
+        [providerId, userId]
+      );
+
+      if (existing.rows.length === 0) {
+        return { success: false, error: 'LLM provider not found', status: 404 };
+      }
+
+      const currentProvider = existing.rows[0];
+
+      // If updating API key, test the connection
+      if (updates.api_key) {
+        const config: LLMProviderConfig = {
+          id: providerId,
+          type: currentProvider.provider_type,
+          apiKey: updates.api_key,
+          apiEndpoint: updates.api_endpoint || currentProvider.api_endpoint,
+          modelName: updates.model_name || currentProvider.model_name
+        };
+
+        const llmClient = new LLMClient(config);
+        const connectionTest = await llmClient.testConnection();
+
+        if (!connectionTest) {
+          return {
+            success: false,
+            error: 'Connection test failed',
+            status: 400,
+            message: 'Unable to connect with the new settings'
+          };
+        }
+      }
+
+      // Build update query dynamically
+      const updateFields: string[] = [];
+      const values: unknown[] = [];
+      let paramIndex = 1;
+
+      if (updates.provider_name !== undefined) {
+        updateFields.push(`provider_name = $${paramIndex++}`);
+        values.push(updates.provider_name);
+      }
+
+      if (updates.api_key !== undefined) {
+        updateFields.push(`api_key_encrypted = $${paramIndex++}`);
+        values.push(encryptPassword(updates.api_key));
+      }
+
+      if (updates.api_endpoint !== undefined) {
+        updateFields.push(`api_endpoint = $${paramIndex++}`);
+        values.push(updates.api_endpoint || null);
+      }
+
+      if (updates.model_name !== undefined) {
+        updateFields.push(`model_name = $${paramIndex++}`);
+        values.push(updates.model_name);
+      }
+
+      if (updates.is_active !== undefined) {
+        updateFields.push(`is_active = $${paramIndex++}`);
+        values.push(updates.is_active);
+      }
+
+      if (updates.is_default !== undefined) {
+        // If setting as default, unset other defaults
+        if (updates.is_default) {
+          await client.query(
+            'UPDATE llm_providers SET is_default = false WHERE user_id = $1 AND id != $2',
+            [userId, providerId]
+          );
+        }
+        updateFields.push(`is_default = $${paramIndex++}`);
+        values.push(updates.is_default);
+      }
+
+      if (updateFields.length === 0) {
+        return { success: false, error: 'No valid fields to update', status: 400 };
+      }
+
+      // Add WHERE clause parameters
+      values.push(providerId, userId);
+
+      const updateQuery = `
+        UPDATE llm_providers
+        SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+        RETURNING id, provider_name, provider_type, api_endpoint, model_name,
+                  is_active, is_default, created_at, updated_at
+      `;
+
+      const updateResult = await client.query(updateQuery, values);
+
+      const provider: LLMProviderResponse = {
+        id: updateResult.rows[0].id,
+        provider_name: updateResult.rows[0].provider_name,
+        provider_type: updateResult.rows[0].provider_type,
+        api_endpoint: updateResult.rows[0].api_endpoint,
+        model_name: updateResult.rows[0].model_name,
+        is_active: updateResult.rows[0].is_active,
+        is_default: updateResult.rows[0].is_default,
+        created_at: updateResult.rows[0].created_at.toISOString(),
+        updated_at: updateResult.rows[0].updated_at.toISOString()
       };
-      
-      const llmClient = new LLMClient(config);
-      const connectionTest = await llmClient.testConnection();
-      
-      if (!connectionTest) {
-        await client.query('ROLLBACK');
-        res.status(400).json({ 
-          error: 'Connection test failed',
-          message: 'Unable to connect with the new settings'
-        });
-        return;
-      }
-    }
-    
-    // Build update query dynamically
-    const updateFields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
-    
-    if (updates.provider_name !== undefined) {
-      updateFields.push(`provider_name = $${paramIndex++}`);
-      values.push(updates.provider_name);
-    }
-    
-    if (updates.api_key !== undefined) {
-      updateFields.push(`api_key_encrypted = $${paramIndex++}`);
-      values.push(encryptPassword(updates.api_key));
-    }
-    
-    if (updates.api_endpoint !== undefined) {
-      updateFields.push(`api_endpoint = $${paramIndex++}`);
-      values.push(updates.api_endpoint || null);
-    }
-    
-    if (updates.model_name !== undefined) {
-      updateFields.push(`model_name = $${paramIndex++}`);
-      values.push(updates.model_name);
-    }
-    
-    if (updates.is_active !== undefined) {
-      updateFields.push(`is_active = $${paramIndex++}`);
-      values.push(updates.is_active);
-    }
-    
-    if (updates.is_default !== undefined) {
-      // If setting as default, unset other defaults
-      if (updates.is_default) {
-        await client.query(
-          'UPDATE llm_providers SET is_default = false WHERE user_id = $1 AND id != $2',
-          [userId, providerId]
-        );
-      }
-      updateFields.push(`is_default = $${paramIndex++}`);
-      values.push(updates.is_default);
-    }
-    
-    if (updateFields.length === 0) {
-      await client.query('ROLLBACK');
-      res.status(400).json({ error: 'No valid fields to update' });
+
+      return { success: true, data: provider };
+    });
+
+    if (!result.success) {
+      const response: Record<string, unknown> = { error: result.error };
+      if (result.message) response.message = result.message;
+      res.status(result.status).json(response);
       return;
     }
-    
-    // Add WHERE clause parameters
-    values.push(providerId, userId);
-    
-    const updateQuery = `
-      UPDATE llm_providers 
-      SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
-      RETURNING id, provider_name, provider_type, api_endpoint, model_name, 
-                is_active, is_default, created_at, updated_at
-    `;
-    
-    const result = await client.query(updateQuery, values);
-    
-    await client.query('COMMIT');
-    
-    const provider: LLMProviderResponse = {
-      id: result.rows[0].id,
-      provider_name: result.rows[0].provider_name,
-      provider_type: result.rows[0].provider_type,
-      api_endpoint: result.rows[0].api_endpoint,
-      model_name: result.rows[0].model_name,
-      is_active: result.rows[0].is_active,
-      is_default: result.rows[0].is_default,
-      created_at: result.rows[0].created_at.toISOString(),
-      updated_at: result.rows[0].updated_at.toISOString()
-    };
-    
-    res.json(provider);
+
+    res.json(result.data);
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Error updating LLM provider:', error);
     res.status(500).json({ error: 'Failed to update LLM provider' });
-  } finally {
-    client.release();
   }
 });
 

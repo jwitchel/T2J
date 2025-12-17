@@ -13,6 +13,7 @@
  */
 
 import { Pool } from 'pg';
+import { withTransaction } from '../db/transaction-utils';
 import { StyleEmbeddingService, styleEmbeddingService } from './style-embedding-service';
 import {
   StyleClusterParams,
@@ -299,7 +300,7 @@ export class StyleClusteringService {
    * Save clusters to database
    *
    * Purpose: Persist cluster assignments with transaction support
-   * Following pattern: Transaction management from PersonService
+   * Following pattern: Using withTransaction utility
    * @private
    */
   private async _saveClusters(
@@ -307,11 +308,7 @@ export class StyleClusteringService {
     relationship: string,
     clusters: StyleCluster[]
   ): Promise<void> {
-    const client = await this.pool.connect();
-
-    try {
-      await client.query('BEGIN');
-
+    await withTransaction(this.pool, async (client) => {
       // Delete existing clusters for this user/relationship
       await client.query(
         'DELETE FROM style_clusters WHERE user_id = $1 AND relationship_type = $2',
@@ -331,7 +328,7 @@ export class StyleClusteringService {
         // Map emails to clusters
         if (cluster.emailIds.length > 0) {
           const values: string[] = [];
-          const params: any[] = [];
+          const params: unknown[] = [];
           let paramCount = 0;
 
           cluster.emailIds.forEach((emailId) => {
@@ -354,15 +351,8 @@ export class StyleClusteringService {
         }
       }
 
-      await client.query('COMMIT');
       console.log(`[StyleClustering] Saved ${clusters.length} clusters for ${userId}/${relationship}`);
-
-    } catch (error: unknown) {
-      await client.query('ROLLBACK');
-      throw new ClusteringError(`Failed to save clusters: ${error}`);
-    } finally {
-      client.release();
-    }
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { pool } from '../lib/db';
+import { withTransaction } from '../lib/db/transaction-utils';
 import { encrypt } from '../lib/crypto';
 import { ImapOperations } from '../lib/imap-operations';
 import { withImapContext } from '../lib/imap-context';
@@ -38,11 +39,9 @@ router.post('/connect', requireAuth, async (req, res): Promise<void> => {
 
 // Complete OAuth email connection
 router.post('/complete', requireAuth, async (req, res): Promise<void> => {
-  const client = await pool.connect();
-  
   try {
     const userId = req.user.id;
-    const { 
+    const {
       provider,
       email,
       accessToken,
@@ -56,79 +55,74 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    await client.query('BEGIN');
-
-    // Check if email account already exists
-    const existing = await client.query(
-      'SELECT id FROM email_accounts WHERE user_id = $1 AND email_address = $2',
-      [userId, email]
-    );
-
-    const expiresAt = new Date(Date.now() + expiresIn * 1000);
-
-    if (existing.rows.length > 0) {
-      // Update existing account with OAuth credentials
-      await client.query(
-        `UPDATE email_accounts 
-         SET oauth_provider = $1,
-             oauth_refresh_token = $2,
-             oauth_access_token = $3,
-             oauth_token_expires_at = $4,
-             oauth_user_id = $5,
-             updated_at = NOW()
-         WHERE id = $6`,
-        [
-          provider,
-          refreshToken ? encrypt(refreshToken) : null,
-          encrypt(accessToken),
-          expiresAt,
-          oauthUserId,
-          existing.rows[0].id
-        ]
+    await withTransaction(pool, async (client) => {
+      // Check if email account already exists
+      const existing = await client.query(
+        'SELECT id FROM email_accounts WHERE user_id = $1 AND email_address = $2',
+        [userId, email]
       );
-    } else {
-      // Create new email account with OAuth
-      const imapHost = provider === 'google' ? IMAP_HOSTS.GMAIL : '';
-      const imapPort = 993;
 
-      await client.query(
-        `INSERT INTO email_accounts
-         (user_id, email_address, imap_host, imap_port, imap_username,
-          oauth_provider, oauth_refresh_token, oauth_access_token,
-          oauth_token_expires_at, oauth_user_id, sent_folder)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          userId,
-          email,
-          imapHost,
-          imapPort,
-          email, // Username is email for OAuth
-          provider,
-          refreshToken ? encrypt(refreshToken) : null,
-          encrypt(accessToken),
-          expiresAt,
-          oauthUserId,
-          detectSentFolder(imapHost)
-        ]
-      );
-    }
+      const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-    await client.query('COMMIT');
+      if (existing.rows.length > 0) {
+        // Update existing account with OAuth credentials
+        await client.query(
+          `UPDATE email_accounts
+           SET oauth_provider = $1,
+               oauth_refresh_token = $2,
+               oauth_access_token = $3,
+               oauth_token_expires_at = $4,
+               oauth_user_id = $5,
+               updated_at = NOW()
+           WHERE id = $6`,
+          [
+            provider,
+            refreshToken ? encrypt(refreshToken) : null,
+            encrypt(accessToken),
+            expiresAt,
+            oauthUserId,
+            existing.rows[0].id
+          ]
+        );
+      } else {
+        // Create new email account with OAuth
+        const imapHost = provider === 'google' ? IMAP_HOSTS.GMAIL : '';
+        const imapPort = 993;
 
-    // Test the connection
+        await client.query(
+          `INSERT INTO email_accounts
+           (user_id, email_address, imap_host, imap_port, imap_username,
+            oauth_provider, oauth_refresh_token, oauth_access_token,
+            oauth_token_expires_at, oauth_user_id, sent_folder)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            userId,
+            email,
+            imapHost,
+            imapPort,
+            email, // Username is email for OAuth
+            provider,
+            refreshToken ? encrypt(refreshToken) : null,
+            encrypt(accessToken),
+            expiresAt,
+            oauthUserId,
+            detectSentFolder(imapHost)
+          ]
+        );
+      }
+    });
+
+    // Test the connection (outside transaction)
     const testResult = await testOAuthConnection(userId, email);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       email,
       connectionTest: testResult
     });
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('OAuth email complete error:', error);
     res.status(500).json({ error: 'Failed to save OAuth credentials' });
-  } finally {
-    client.release();
   }
 });
 

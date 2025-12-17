@@ -179,72 +179,70 @@ export class PersonService {
     // Trust caller - params.userId is typed as string
     this._validateName(params.name);
     this._validateEmail(params.emailAddress);
-    
+
     if (params.confidence !== undefined && (params.confidence < 0 || params.confidence > 1)) {
       throw new ValidationError('Confidence must be between 0 and 1');
     }
-    
-    const client = await this._beginTransaction();
-    
+
     try {
-      this._logOperation('createPerson', params.userId, { name: params.name, email: params.emailAddress });
-      
-      // Check if email already exists for this user
-      const normalizedEmail = this._normalizeEmail(params.emailAddress);
-      const emailCheck = await client.query(
-        `SELECT p.id, p.name 
-         FROM people p
-         INNER JOIN person_emails pe ON pe.person_id = p.id
-         WHERE pe.email_address = $1 AND p.user_id = $2`,
-        [normalizedEmail, params.userId]
-      );
-      
-      if (emailCheck.rows.length > 0) {
-        throw new DuplicateEmailError(normalizedEmail);
-      }
-      
-      // Create the person with relationship directly on the row
-      const personResult = await client.query(
-        `INSERT INTO people (user_id, name, relationship_type, relationship_user_set, relationship_confidence, created_at, updated_at)
-         VALUES ($1, $2, $3, false, $4, NOW(), NOW())
-         RETURNING *`,
-        [params.userId, params.name.trim(), params.relationshipType || null, params.confidence || 1.0]
-      );
+      const personId = await withTransaction(this.pool, async (client) => {
+        this._logOperation('createPerson', params.userId, { name: params.name, email: params.emailAddress });
 
-      const person = personResult.rows[0];
+        // Check if email already exists for this user
+        const normalizedEmail = this._normalizeEmail(params.emailAddress);
+        const emailCheck = await client.query(
+          `SELECT p.id, p.name
+           FROM people p
+           INNER JOIN person_emails pe ON pe.person_id = p.id
+           WHERE pe.email_address = $1 AND p.user_id = $2`,
+          [normalizedEmail, params.userId]
+        );
 
-      // Add the primary email
-      await client.query(
-        `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
-         VALUES ($1, $2, true, NOW())`,
-        [person.id, normalizedEmail]
-      );
-      
-      await this._commitTransaction(client);
-      
-      // Return the complete person object with all details
-      const result = await this.getPersonById(person.id, params.userId);
+        if (emailCheck.rows.length > 0) {
+          throw new DuplicateEmailError(normalizedEmail);
+        }
+
+        // Create the person with relationship directly on the row
+        const personResult = await client.query(
+          `INSERT INTO people (user_id, name, relationship_type, relationship_user_set, relationship_confidence, created_at, updated_at)
+           VALUES ($1, $2, $3, false, $4, NOW(), NOW())
+           RETURNING id`,
+          [params.userId, params.name.trim(), params.relationshipType || null, params.confidence || 1.0]
+        );
+
+        const newPersonId = personResult.rows[0].id;
+
+        // Add the primary email
+        await client.query(
+          `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
+           VALUES ($1, $2, true, NOW())`,
+          [newPersonId, normalizedEmail]
+        );
+
+        return newPersonId;
+      });
+
+      // Return the complete person object with all details (outside transaction)
+      const result = await this.getPersonById(personId, params.userId);
       if (!result) {
         throw new PersonServiceError('Failed to retrieve person after creation');
       }
-      
+
       return result;
     } catch (error: unknown) {
-      await this._rollbackTransaction(client);
-      
       // Re-throw our custom errors as-is
       if (error instanceof PersonServiceError) {
         throw error;
       }
-      
+
       // Wrap database errors
       if (error instanceof Error && 'code' in error) {
-        const pgError = error as any;
+        const pgError = error as { code: string };
         if (pgError.code === '23505') { // Unique violation
           throw new DuplicateEmailError(params.emailAddress);
         }
       }
-      
+
       throw new PersonServiceError(`Failed to create person: ${error instanceof Error ? error.message : 'Unknown error'}`, 'CREATE_FAILED');
     }
   }
@@ -253,72 +251,68 @@ export class PersonService {
     // Trust caller - userId is typed as string
     this._validateUUID(personId, 'person ID');
     this._validateEmail(emailAddress);
-    
-    const client = await this._beginTransaction();
-    
+
     try {
-      this._logOperation('addEmailToPerson', userId, { personId, email: emailAddress });
-      
-      // Verify person belongs to user
-      const personCheck = await client.query(
-        `SELECT id, name FROM people WHERE id = $1 AND user_id = $2`,
-        [personId, userId]
-      );
-      
-      if (personCheck.rows.length === 0) {
-        throw new PersonNotFoundError(`Person ${personId} not found or unauthorized`);
-      }
-      
-      // Check if email already exists for this person
-      const normalizedEmail = this._normalizeEmail(emailAddress);
-      const emailCheck = await client.query(
-        `SELECT id FROM person_emails WHERE person_id = $1 AND email_address = $2`,
-        [personId, normalizedEmail]
-      );
-      
-      if (emailCheck.rows.length > 0) {
-        throw new DuplicateEmailError(normalizedEmail);
-      }
-      
-      // Check if email exists for another person under this user
-      const emailExistsCheck = await client.query(
-        `SELECT p.id, p.name 
-         FROM people p
-         INNER JOIN person_emails pe ON pe.person_id = p.id
-         WHERE pe.email_address = $1 AND p.user_id = $2 AND p.id != $3`,
-        [normalizedEmail, userId, personId]
-      );
-      
-      if (emailExistsCheck.rows.length > 0) {
-        const existingPerson = emailExistsCheck.rows[0];
-        throw new DuplicateEmailError(
-          `${normalizedEmail} (already assigned to ${existingPerson.name})`
+      await withTransaction(this.pool, async (client) => {
+        this._logOperation('addEmailToPerson', userId, { personId, email: emailAddress });
+
+        // Verify person belongs to user
+        const personCheck = await client.query(
+          `SELECT id, name FROM people WHERE id = $1 AND user_id = $2`,
+          [personId, userId]
         );
-      }
-      
-      // Add the new email
-      await client.query(
-        `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
-         VALUES ($1, $2, false, NOW())`,
-        [personId, normalizedEmail]
-      );
-      
-      await this._commitTransaction(client);
-      
-      // Return updated person with all details
+
+        if (personCheck.rows.length === 0) {
+          throw new PersonNotFoundError(`Person ${personId} not found or unauthorized`);
+        }
+
+        // Check if email already exists for this person
+        const normalizedEmail = this._normalizeEmail(emailAddress);
+        const emailCheck = await client.query(
+          `SELECT id FROM person_emails WHERE person_id = $1 AND email_address = $2`,
+          [personId, normalizedEmail]
+        );
+
+        if (emailCheck.rows.length > 0) {
+          throw new DuplicateEmailError(normalizedEmail);
+        }
+
+        // Check if email exists for another person under this user
+        const emailExistsCheck = await client.query(
+          `SELECT p.id, p.name
+           FROM people p
+           INNER JOIN person_emails pe ON pe.person_id = p.id
+           WHERE pe.email_address = $1 AND p.user_id = $2 AND p.id != $3`,
+          [normalizedEmail, userId, personId]
+        );
+
+        if (emailExistsCheck.rows.length > 0) {
+          const existingPerson = emailExistsCheck.rows[0];
+          throw new DuplicateEmailError(
+            `${normalizedEmail} (already assigned to ${existingPerson.name})`
+          );
+        }
+
+        // Add the new email
+        await client.query(
+          `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
+           VALUES ($1, $2, false, NOW())`,
+          [personId, normalizedEmail]
+        );
+      });
+
+      // Return updated person with all details (outside transaction)
       const result = await this.getPersonById(personId, userId);
       if (!result) {
         throw new PersonNotFoundError(`Failed to retrieve person after adding email`);
       }
-      
+
       return result;
     } catch (error: unknown) {
-      await this._rollbackTransaction(client);
-      
       if (error instanceof PersonServiceError) {
         throw error;
       }
-      
+
       throw new PersonServiceError(`Failed to add email: ${error instanceof Error ? error.message : 'Unknown error'}`, 'ADD_EMAIL_FAILED');
     }
   }
@@ -550,73 +544,71 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
       throw new ValidationError('Cannot merge a person with themselves');
     }
 
-    const client = await this._beginTransaction();
-
     try {
-      this._logOperation('mergePeople', params.userId, {
-        sourcePersonId: params.sourcePersonId,
-        targetPersonId: params.targetPersonId
+      await withTransaction(this.pool, async (client) => {
+        this._logOperation('mergePeople', params.userId, {
+          sourcePersonId: params.sourcePersonId,
+          targetPersonId: params.targetPersonId
+        });
+
+        // Verify both people belong to the user and get their relationship info
+        const peopleCheck = await client.query(
+          `SELECT id, name, relationship_type, relationship_user_set, relationship_confidence
+           FROM people
+           WHERE user_id = $1 AND id IN ($2, $3)`,
+          [params.userId, params.sourcePersonId, params.targetPersonId]
+        );
+
+        if (peopleCheck.rows.length !== 2) {
+          throw new PersonNotFoundError('One or both people not found or unauthorized');
+        }
+
+        const source = peopleCheck.rows.find(r => r.id === params.sourcePersonId)!;
+        const target = peopleCheck.rows.find(r => r.id === params.targetPersonId)!;
+
+        // Move all emails from source to target (skip duplicates)
+        await client.query(
+          `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
+           SELECT $1, email_address, false, created_at
+           FROM person_emails
+           WHERE person_id = $2
+           AND email_address NOT IN (
+             SELECT email_address FROM person_emails WHERE person_id = $1
+           )`,
+          [params.targetPersonId, params.sourcePersonId]
+        );
+
+        // Merge relationship: prefer user_set, then highest confidence
+        const sourceIsBetter = (source.relationship_user_set && !target.relationship_user_set) ||
+          (source.relationship_user_set === target.relationship_user_set &&
+           source.relationship_confidence > target.relationship_confidence);
+
+        if (sourceIsBetter && source.relationship_type) {
+          await client.query(
+            `UPDATE people
+             SET relationship_type = $1,
+                 relationship_user_set = $2,
+                 relationship_confidence = $3,
+                 updated_at = NOW()
+             WHERE id = $4`,
+            [source.relationship_type, source.relationship_user_set, source.relationship_confidence, params.targetPersonId]
+          );
+        } else {
+          // Just update timestamp
+          await client.query(
+            `UPDATE people SET updated_at = NOW() WHERE id = $1`,
+            [params.targetPersonId]
+          );
+        }
+
+        // Delete the source person (cascades to emails)
+        await client.query(
+          `DELETE FROM people WHERE id = $1 AND user_id = $2`,
+          [params.sourcePersonId, params.userId]
+        );
       });
 
-      // Verify both people belong to the user and get their relationship info
-      const peopleCheck = await client.query(
-        `SELECT id, name, relationship_type, relationship_user_set, relationship_confidence
-         FROM people
-         WHERE user_id = $1 AND id IN ($2, $3)`,
-        [params.userId, params.sourcePersonId, params.targetPersonId]
-      );
-
-      if (peopleCheck.rows.length !== 2) {
-        throw new PersonNotFoundError('One or both people not found or unauthorized');
-      }
-
-      const source = peopleCheck.rows.find(r => r.id === params.sourcePersonId)!;
-      const target = peopleCheck.rows.find(r => r.id === params.targetPersonId)!;
-
-      // Move all emails from source to target (skip duplicates)
-      await client.query(
-        `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
-         SELECT $1, email_address, false, created_at
-         FROM person_emails
-         WHERE person_id = $2
-         AND email_address NOT IN (
-           SELECT email_address FROM person_emails WHERE person_id = $1
-         )`,
-        [params.targetPersonId, params.sourcePersonId]
-      );
-
-      // Merge relationship: prefer user_set, then highest confidence
-      const sourceIsBetter = (source.relationship_user_set && !target.relationship_user_set) ||
-        (source.relationship_user_set === target.relationship_user_set &&
-         source.relationship_confidence > target.relationship_confidence);
-
-      if (sourceIsBetter && source.relationship_type) {
-        await client.query(
-          `UPDATE people
-           SET relationship_type = $1,
-               relationship_user_set = $2,
-               relationship_confidence = $3,
-               updated_at = NOW()
-           WHERE id = $4`,
-          [source.relationship_type, source.relationship_user_set, source.relationship_confidence, params.targetPersonId]
-        );
-      } else {
-        // Just update timestamp
-        await client.query(
-          `UPDATE people SET updated_at = NOW() WHERE id = $1`,
-          [params.targetPersonId]
-        );
-      }
-
-      // Delete the source person (cascades to emails)
-      await client.query(
-        `DELETE FROM people WHERE id = $1 AND user_id = $2`,
-        [params.sourcePersonId, params.userId]
-      );
-
-      await this._commitTransaction(client);
-
-      // Return the merged person
+      // Return the merged person (outside transaction)
       const mergedPerson = await this.getPersonById(params.targetPersonId, params.userId);
       if (!mergedPerson) {
         throw new PersonNotFoundError('Failed to retrieve merged person');
@@ -624,15 +616,13 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
 
       return mergedPerson;
     } catch (error: unknown) {
-      await this._rollbackTransaction(client);
-
       if (error instanceof PersonServiceError) {
         throw error;
       }
 
       // Handle specific database errors
       if (error instanceof Error && 'code' in error) {
-        const pgError = error as any;
+        const pgError = error as { code: string };
         if (pgError.code === '23505') { // Unique violation
           throw new PersonServiceError('Merge conflict: duplicate data detected', 'MERGE_CONFLICT');
         }
@@ -647,31 +637,6 @@ async findPersonByEmail(emailAddress: string, userId: string): Promise<PersonWit
    */
   private _normalizeEmail(email: string): string {
     return email.toLowerCase().trim();
-  }
-
-  /**
-   * Helper method to begin a database transaction
-   */
-  private async _beginTransaction() {
-    const client = await this.pool.connect();
-    await client.query('BEGIN');
-    return client;
-  }
-
-  /**
-   * Helper method to commit a transaction
-   */
-  private async _commitTransaction(client: any) {
-    await client.query('COMMIT');
-    client.release();
-  }
-
-  /**
-   * Helper method to rollback a transaction
-   */
-  private async _rollbackTransaction(client: any) {
-    await client.query('ROLLBACK');
-    client.release();
   }
 
   /**

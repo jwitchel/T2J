@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { pool } from '../lib/db';
+import { withTransaction } from '../lib/db/transaction-utils';
 import { encrypt } from '../lib/crypto';
 import crypto from 'crypto';
 import { detectSentFolder, IMAP_HOSTS } from './email-accounts';
@@ -177,8 +178,6 @@ router.get('/callback', async (req, res): Promise<void> => {
 
 // Complete OAuth flow - called by frontend
 router.post('/complete', requireAuth, async (req, res): Promise<void> => {
-  const client = await pool.connect();
-  
   try {
     const userId = req.user.id;
     const { sessionToken } = req.body;
@@ -188,87 +187,87 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    await client.query('BEGIN');
+    type CompleteResult = { success: true; email: string } | { error: string; status: number };
 
-    // Retrieve OAuth session
-    const sessionResult = await client.query(
-      `SELECT * FROM oauth_sessions WHERE token = $1 AND user_id = $2`,
-      [sessionToken, userId]
-    );
+    const result = await withTransaction(pool, async (client): Promise<CompleteResult> => {
+      // Retrieve OAuth session
+      const sessionResult = await client.query(
+        `SELECT * FROM oauth_sessions WHERE token = $1 AND user_id = $2`,
+        [sessionToken, userId]
+      );
 
-    if (sessionResult.rows.length === 0) {
-      res.status(400).json({ error: 'Invalid or expired session' });
+      if (sessionResult.rows.length === 0) {
+        return { error: 'Invalid or expired session', status: 400 };
+      }
+
+      const session = sessionResult.rows[0];
+      const expiresAt = new Date(Date.now() + session.expires_in * 1000);
+
+      // Check if email account already exists
+      const existing = await client.query(
+        'SELECT id FROM email_accounts WHERE user_id = $1 AND email_address = $2',
+        [userId, session.email]
+      );
+
+      if (existing.rows.length > 0) {
+        // Update existing account with OAuth credentials
+        await client.query(
+          `UPDATE email_accounts
+           SET oauth_provider = $1,
+               oauth_refresh_token = $2,
+               oauth_access_token = $3,
+               oauth_token_expires_at = $4,
+               oauth_user_id = $5,
+               imap_password_encrypted = NULL
+           WHERE id = $6`,
+          [
+            'google',
+            session.refresh_token,
+            session.access_token,
+            expiresAt,
+            session.email,
+            existing.rows[0].id
+          ]
+        );
+      } else {
+        // Create new email account with OAuth
+        await client.query(
+          `INSERT INTO email_accounts
+           (user_id, email_address, imap_host, imap_port, imap_username,
+            oauth_provider, oauth_refresh_token, oauth_access_token,
+            oauth_token_expires_at, oauth_user_id, sent_folder)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            userId,
+            session.email,
+            IMAP_HOSTS.GMAIL,
+            993,
+            session.email,
+            'google',
+            session.refresh_token,
+            session.access_token,
+            expiresAt,
+            session.email,
+            detectSentFolder(IMAP_HOSTS.GMAIL)
+          ]
+        );
+      }
+
+      // Delete the session
+      await client.query('DELETE FROM oauth_sessions WHERE token = $1', [sessionToken]);
+
+      return { success: true, email: session.email };
+    });
+
+    if ('error' in result) {
+      res.status(result.status).json({ error: result.error });
       return;
     }
 
-    const session = sessionResult.rows[0];
-    const expiresAt = new Date(Date.now() + session.expires_in * 1000);
-
-    // Check if email account already exists
-    const existing = await client.query(
-      'SELECT id FROM email_accounts WHERE user_id = $1 AND email_address = $2',
-      [userId, session.email]
-    );
-
-    if (existing.rows.length > 0) {
-      // Update existing account with OAuth credentials
-      await client.query(
-        `UPDATE email_accounts 
-         SET oauth_provider = $1,
-             oauth_refresh_token = $2,
-             oauth_access_token = $3,
-             oauth_token_expires_at = $4,
-             oauth_user_id = $5,
-             imap_password_encrypted = NULL
-         WHERE id = $6`,
-        [
-          'google',
-          session.refresh_token,
-          session.access_token,
-          expiresAt,
-          session.email,
-          existing.rows[0].id
-        ]
-      );
-    } else {
-      // Create new email account with OAuth
-      await client.query(
-        `INSERT INTO email_accounts
-         (user_id, email_address, imap_host, imap_port, imap_username,
-          oauth_provider, oauth_refresh_token, oauth_access_token,
-          oauth_token_expires_at, oauth_user_id, sent_folder)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          userId,
-          session.email,
-          IMAP_HOSTS.GMAIL,
-          993,
-          session.email,
-          'google',
-          session.refresh_token,
-          session.access_token,
-          expiresAt,
-          session.email,
-          detectSentFolder(IMAP_HOSTS.GMAIL)
-        ]
-      );
-    }
-
-    // Delete the session
-    await client.query('DELETE FROM oauth_sessions WHERE token = $1', [sessionToken]);
-
-    await client.query('COMMIT');
-
-    res.json({ 
-      success: true, 
-      email: session.email
-    });
+    res.json(result);
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('OAuth complete error:', error);
     res.status(500).json({ error: 'Failed to save OAuth credentials' });
-  } finally {
-    client.release();
   }
 });
 
