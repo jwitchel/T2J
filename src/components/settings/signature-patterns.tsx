@@ -183,7 +183,7 @@ export function SignaturePatterns() {
             type="text"
             value={newPattern}
             onChange={(e) => setNewPattern(e.target.value)}
-            placeholder="e.g., ——+[\s\S]*?ycbm\.com\/"
+            placeholder="e.g., ——+[\s\S]*?example\.com\/"
             className="font-mono text-sm"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -198,7 +198,7 @@ export function SignaturePatterns() {
         </div>
         <p className="text-muted-foreground text-xs">
           Hint: Use multiline patterns like{' '}
-          <code className="bg-muted rounded px-1 py-0.5">——+[\s\S]*?ycbm\.com\/</code> to match
+          <code className="bg-muted rounded px-1 py-0.5">——+[\s\S]*?example\.com\/</code> to match
           signatures that span multiple lines
         </p>
       </div>

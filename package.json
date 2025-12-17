@@ -38,7 +38,6 @@
     "mail:reset": "npm run mail:down && npm run mail:up && sleep 3 && npm run mail:seed",
     "mail:logs": "docker logs -f test-mailserver",
     "mail:seed": "cd server && npx tsx src/scripts/tools/seed-mail-accounts.ts",
-    "mail:load-johns": "cd server && npx tsx src/scripts/tools/load-johns-emails.ts",
     "mail:fix-encryption": "cd server && npx tsx src/scripts/tools/fix-test-account-encryption.ts",
     "mail:fix-encryption-simple": "cd server && npx tsx src/scripts/tools/fix-test-account-encryption-simple.ts",
     "roundcube:up": "docker-compose -f docker-compose.roundcube.yml up -d",
