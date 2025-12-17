@@ -307,6 +307,44 @@ export class InboxProcessor {
   }
 
   /**
+   * Check if sender is whitelisted via configured relationships
+   * @private
+   */
+  private _isWhitelistedSender(
+    senderEmail: string,
+    relationshipConfig: { workDomains: string[]; familyEmails: string[]; spouseEmails: string[] }
+  ): SpamCheckResult | null {
+    const senderDomain = senderEmail.split('@')[1];
+    const { workDomains, familyEmails, spouseEmails } = relationshipConfig;
+
+    if (senderDomain && workDomains.includes(senderDomain)) {
+      return {
+        isSpam: false,
+        indicators: [`Sender domain ${senderDomain} is a configured work domain`],
+        senderResponseCount: 0
+      };
+    }
+
+    if (familyEmails.includes(senderEmail)) {
+      return {
+        isSpam: false,
+        indicators: ['Sender is a configured family member'],
+        senderResponseCount: 0
+      };
+    }
+
+    if (spouseEmails.includes(senderEmail)) {
+      return {
+        isSpam: false,
+        indicators: ['Sender is a configured spouse'],
+        senderResponseCount: 0
+      };
+    }
+
+    return null;
+  }
+
+  /**
    * Check if email is spam (GATED by spamDetection preference)
    * @private
    */
@@ -326,6 +364,13 @@ export class InboxProcessor {
     }
 
     const senderEmail = parsedData.processedEmail.from[0].address.toLowerCase();
+
+    // GATE: Whitelisted senders cannot be spam
+    const whitelistResult = this._isWhitelistedSender(senderEmail, context.preferences.relationshipConfig);
+    if (whitelistResult) {
+      return whitelistResult;
+    }
+
     const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
 
     const spamDetector = await getSpamDetector(context.providerId);
