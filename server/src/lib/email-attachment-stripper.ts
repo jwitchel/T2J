@@ -21,20 +21,6 @@ export async function stripAttachments(fullMessage: string, parsed?: any): Promi
     parsed = await parser.parse(fullMessage);
   }
 
-  // Log what attachments we found (for debugging)
-  if (parsed.attachments && parsed.attachments.length > 0) {
-    const regularAttachments = parsed.attachments.filter((att: any) =>
-      att.disposition === 'attachment'
-    );
-
-    if (regularAttachments.length > 0) {
-      const attachmentInfo = regularAttachments.map((att: any) =>
-        `${att.filename || 'unnamed'} (${att.mimeType}, ${(att.content?.length || 0).toLocaleString()} bytes)`
-      ).join(', ');
-      console.log(`[EmailAttachmentStripper] Stripping ${regularAttachments.length} attachment(s): ${attachmentInfo}`);
-    }
-  }
-
   // Rebuild RFC 5322 message with all headers but without attachment binary data
   const messageParts: string[] = [];
 
@@ -104,10 +90,6 @@ export async function stripAttachments(fullMessage: string, parsed?: any): Promi
         const cidPattern = new RegExp(`src=["']cid:${escapedCid}["']`, 'gi');
         cleanHtml = cleanHtml.replace(cidPattern, 'src="[image removed]"');
       });
-
-      if (embeddedImageCids.size > 0) {
-        console.log(`[EmailAttachmentStripper] Stripped ${embeddedImageCids.size} embedded image(s) from HTML`);
-      }
     }
 
     messageParts.push(cleanHtml);
@@ -137,10 +119,6 @@ export async function stripAttachments(fullMessage: string, parsed?: any): Promi
         const cidPattern = new RegExp(`src=["']cid:${escapedCid}["']`, 'gi');
         cleanHtml = cleanHtml.replace(cidPattern, 'src="[image removed]"');
       });
-
-      if (embeddedImageCids.size > 0) {
-        console.log(`[EmailAttachmentStripper] Stripped ${embeddedImageCids.size} embedded image(s) from HTML`);
-      }
     }
 
     messageParts.push(cleanHtml);
