@@ -5,6 +5,17 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-react'
@@ -157,7 +168,7 @@ export function SignaturePatterns() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <div className="ml-2">
-              <p className="text-sm">No patterns configured. Using default patterns.</p>
+              <p className="text-sm">No patterns configured.</p>
             </div>
           </Alert>
         ) : (
@@ -165,9 +176,27 @@ export function SignaturePatterns() {
             {patterns.map((pattern, index) => (
               <div key={index} className="flex items-center gap-2">
                 <code className="bg-muted flex-1 rounded p-2 font-mono text-sm">{pattern}</code>
-                <Button variant="ghost" size="sm" onClick={() => removePattern(index)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Signature Pattern</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete this pattern? This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => removePattern(index)}>
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             ))}
           </div>
