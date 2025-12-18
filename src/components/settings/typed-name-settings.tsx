@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/lib/auth-context'
+import { RegexTesterModal } from '@/components/regex-tester-modal'
 
 interface TypedNamePreferences {
   removalRegex: string
@@ -13,6 +15,7 @@ interface TypedNamePreferences {
 }
 
 export function TypedNameSettings() {
+  const { user } = useAuth()
   const { success, error } = useToast()
   const [preferences, setPreferences] = useState<TypedNamePreferences>({
     removalRegex: '',
@@ -20,6 +23,7 @@ export function TypedNameSettings() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [regexModalOpen, setRegexModalOpen] = useState(false)
 
   useEffect(() => {
     fetchPreferences()
@@ -97,16 +101,26 @@ export function TypedNameSettings() {
     )
   }
 
+  const handleSetPattern = (pattern: string) => {
+    setPreferences({ ...preferences, removalRegex: pattern })
+  }
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="removal-regex">Name Removal Pattern (Regex)</Label>
-        <Input
-          id="removal-regex"
-          placeholder="e.g., ^[-\\s]*(?:John|J)\\s*$"
-          value={preferences.removalRegex}
-          onChange={(e) => setPreferences({ ...preferences, removalRegex: e.target.value })}
-        />
+        <div className="flex gap-2">
+          <Input
+            id="removal-regex"
+            placeholder="e.g., ^[-\\s]*(?:John|J)\\s*$"
+            value={preferences.removalRegex}
+            onChange={(e) => setPreferences({ ...preferences, removalRegex: e.target.value })}
+            className="font-mono text-sm"
+          />
+          <Button variant="outline" onClick={() => setRegexModalOpen(true)}>
+            Test
+          </Button>
+        </div>
         <p className="text-muted-foreground text-xs">
           Regular expression to match and remove your typed name from emails during training.
           Searches from bottom to top and removes only the first match found. Leave empty to disable
@@ -128,31 +142,20 @@ export function TypedNameSettings() {
         </p>
       </div>
 
-      <div className="bg-muted rounded-lg p-4">
-        <h4 className="mb-2 text-sm font-medium">Example Usage:</h4>
-        <div className="text-muted-foreground space-y-2 text-sm">
-          <p>
-            <strong>Removal Pattern:</strong> <code>^[-\s]*(?:John|J)\s*$</code>
-          </p>
-          <p className="ml-4">
-            Removes &quot;-John&quot;, &quot;-J&quot;, &quot;John&quot;, &quot; J&quot; etc. from
-            emails
-          </p>
-          <p className="ml-4 text-xs">
-            Works bottom-up: only removes the last occurrence (e.g., signature) while preserving
-            names in the email body
-          </p>
-          <p>
-            <strong>Append String:</strong> <code>-John</code>
-          </p>
-          <p className="ml-4">Adds &quot;-John&quot; to the end of generated responses</p>
-        </div>
-      </div>
-
       <Button onClick={handleSave} disabled={saving}>
         {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save Typed Name Settings
       </Button>
+
+      <RegexTesterModal
+        open={regexModalOpen}
+        onOpenChange={setRegexModalOpen}
+        onAddPattern={handleSetPattern}
+        title="Test Name Removal Pattern"
+        description="Test your regex pattern against sample text. The pattern will be set as your Name Removal Pattern."
+        initialPattern={preferences.removalRegex}
+        userName={user?.name || 'John'}
+      />
     </div>
   )
 }
