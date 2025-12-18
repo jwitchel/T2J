@@ -55,7 +55,6 @@ export default function SettingsPage() {
   const [originalWorkDomainsCSV, setOriginalWorkDomainsCSV] = useState('')
   const [originalFamilyEmailsCSV, setOriginalFamilyEmailsCSV] = useState('')
   const [originalSpouseEmailsCSV, setOriginalSpouseEmailsCSV] = useState('')
-  const [recategorization, setRecategorization] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTestingFolders, setIsTestingFolders] = useState(false)
@@ -220,13 +219,11 @@ export default function SettingsPage() {
           )
         }
 
-        setRecategorization(messages)
-        success(`Profile updated! Re-categorized ${updated} contacts.`)
+        const detail = messages.length > 0 ? ` (${messages.join(', ')})` : ''
+        success(`Profile updated! Re-categorized ${updated} contacts.${detail}`)
       } else if (spouseChanged || familyChanged || workChanged) {
-        setRecategorization([])
         success('Relationships updated.')
       } else {
-        setRecategorization([])
         success('Profile updated successfully')
       }
     } catch (err) {
@@ -569,19 +566,6 @@ export default function SettingsPage() {
                     categorized as &quot;colleague&quot;.
                   </p>
                 </div>
-
-                {recategorization.length > 0 && (
-                  <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                    <h4 className="mb-2 text-sm font-semibold text-green-900 dark:text-green-100">
-                      Relationship Update Complete
-                    </h4>
-                    <ul className="mt-1 space-y-1 text-sm text-green-800 dark:text-green-200">
-                      {recategorization.map((message, index) => (
-                        <li key={index}>{message}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
 
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Changes'}
