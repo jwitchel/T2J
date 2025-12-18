@@ -89,19 +89,6 @@ export function TypedNameSettings() {
     }
   }
 
-  const handleTestRegex = () => {
-    if (!preferences.removalRegex) return
-
-    try {
-      const regex = new RegExp(preferences.removalRegex, 'gmi')
-      const testText = 'Thanks for your help!\n\n-John'
-      const result = testText.replace(regex, '').trim()
-      success(`Test result: "${result}"`)
-    } catch {
-      error('Invalid regular expression')
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-4">
@@ -125,14 +112,6 @@ export function TypedNameSettings() {
           Searches from bottom to top and removes only the first match found. Leave empty to disable
           removal.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleTestRegex}
-          disabled={!preferences.removalRegex}
-        >
-          Test Regex
-        </Button>
       </div>
 
       <div className="space-y-2">

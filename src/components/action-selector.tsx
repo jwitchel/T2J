@@ -200,7 +200,7 @@ export function ActionSelector({
           </RadioGroup>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={isLoading}>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isLoading}>
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={isLoading}>

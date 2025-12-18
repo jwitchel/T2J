@@ -130,6 +130,7 @@ export default function LLMProvidersPage() {
   const [selectedProvider, setSelectedProvider] = useState<LLMProvider | null>(null)
   const [isTesting, setIsTesting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [connectionTested, setConnectionTested] = useState(false)
   const [formData, setFormData] = useState<ProviderFormData>({
     provider_name: '',
@@ -264,12 +265,11 @@ export default function LLMProvidersPage() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!selectedProvider) return
-
+  const handleDelete = async (providerId: string) => {
+    setDeletingId(providerId)
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${selectedProvider.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${providerId}`,
         {
           method: 'DELETE',
           credentials: 'include',
@@ -278,7 +278,6 @@ export default function LLMProvidersPage() {
 
       if (response.ok) {
         success('LLM provider deleted successfully')
-        setSelectedProvider(null)
         mutate(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`)
       } else {
         const data = await response.json()
@@ -286,6 +285,8 @@ export default function LLMProvidersPage() {
       }
     } catch {
       showError('Network error. Please try again.')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -357,7 +358,6 @@ export default function LLMProvidersPage() {
                   <TableHead>Provider Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Model</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Default</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -375,11 +375,6 @@ export default function LLMProvidersPage() {
                       <span className="text-sm">{provider.model_name}</span>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={provider.is_active ? 'default' : 'secondary'}>
-                        {provider.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
                       {provider.is_default && <Badge variant="default">Default</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
@@ -393,26 +388,29 @@ export default function LLMProvidersPage() {
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="destructive" className="h-7 px-2 text-xs">
-                              Delete
+                            <Button
+                              variant="destructive"
+                              className="h-7 px-2 text-xs"
+                              disabled={deletingId === provider.id}
+                            >
+                              {deletingId === provider.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Delete'
+                              )}
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete LLM Provider</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete &quot;{provider.provider_name}
-                                &quot;? This action cannot be undone.
+                                Are you sure you want to delete {provider.provider_name}? This
+                                action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => {
-                                  setSelectedProvider(provider)
-                                  handleDelete()
-                                }}
-                              >
+                              <AlertDialogAction onClick={() => handleDelete(provider.id)}>
                                 Delete
                               </AlertDialogAction>
                             </AlertDialogFooter>

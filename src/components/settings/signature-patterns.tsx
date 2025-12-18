@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Plus, Trash2, AlertCircle, CheckCircle } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 
 export function SignaturePatterns() {
   const [patterns, setPatterns] = useState<string[]>([])
@@ -178,8 +178,8 @@ export function SignaturePatterns() {
                 <code className="bg-muted flex-1 rounded p-2 font-mono text-sm">{pattern}</code>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      <Trash2 className="h-4 w-4" />
+                    <Button variant="destructive" size="sm" className="h-7 px-2 text-xs">
+                      Delete
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
@@ -222,7 +222,7 @@ export function SignaturePatterns() {
             }}
           />
           <Button onClick={addPattern} disabled={!newPattern.trim()}>
-            <Plus className="h-4 w-4" />
+            Add
           </Button>
         </div>
         <p className="text-muted-foreground text-xs">

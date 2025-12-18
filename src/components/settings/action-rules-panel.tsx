@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
-import { Trash2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle } from 'lucide-react'
 import { EmailActionType } from '../../../server/src/types/email-action-tracking'
 import { ActionRuleConditionType } from '../../../server/src/types/action-rules'
 import { RelationshipType } from '../../../server/src/lib/relationships/types'
@@ -124,14 +124,16 @@ export function ActionRulesPanel() {
       : rule.conditionValue
 
     return (
-      <div className="flex items-center justify-between gap-2 rounded-md border p-3">
+      <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5">
         <div className="flex items-center gap-2">
           {isRelationship ? (
             <Badge className={`${relationshipColor} px-1.5 py-0 text-xs text-white`}>
               {conditionLabel}
             </Badge>
           ) : (
-            <span className="text-sm">{conditionLabel}</span>
+            <Badge variant="secondary" className="px-1.5 py-0 text-xs font-normal">
+              {conditionLabel}
+            </Badge>
           )}
           <span className="text-muted-foreground">→</span>
           <Badge
@@ -144,11 +146,16 @@ export function ActionRulesPanel() {
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
-              variant="ghost"
+              variant="destructive"
               size="sm"
+              className="h-7 px-2 text-xs"
               disabled={deletingId === rule.id}
             >
-              <Trash2 className="h-4 w-4" />
+              {deletingId === rule.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Delete'
+              )}
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
