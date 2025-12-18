@@ -1,10 +1,12 @@
 import { betterAuth } from 'better-auth';
+import { bearer } from 'better-auth/plugins';
 import { pool } from './db';
 import { sharedConnection } from './redis-connection';
 import crypto from 'crypto';
 import { preferencesService } from './preferences-service';
 
 const auth = betterAuth({
+  plugins: [bearer()],
   database: pool,
   baseURL: process.env.BACKEND_URL!,
   secondaryStorage: {
