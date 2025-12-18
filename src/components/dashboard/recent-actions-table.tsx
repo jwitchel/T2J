@@ -2,14 +2,18 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import useSWR from 'swr'
 import { formatDistanceToNow } from 'date-fns'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { EmailActionType } from '../../../server/src/types/email-action-tracking'
 import { RelationshipType } from '../../../server/src/lib/relationships/types'
 import { RelationshipSelector } from '@/components/relationship-selector'
 import { ActionSelector } from '@/components/action-selector'
+
+const PAGE_SIZE = 20
 
 interface RecentAction {
   id: string
@@ -81,13 +85,20 @@ interface RecentActionsTableProps {
 }
 
 export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps) {
+  const [page, setPage] = useState(0)
+  const offset = page * PAGE_SIZE
+
   const { data, error, isLoading } = useSWR<RecentActionsData>(
-    '/api/dashboard/recent-actions?limit=20',
+    `/api/dashboard/recent-actions?limit=${PAGE_SIZE}&offset=${offset}`,
     {
       refreshInterval: 30000,
       revalidateOnFocus: true,
     }
   )
+
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
+  const canGoPrev = page > 0
+  const canGoNext = data ? (page + 1) * PAGE_SIZE < data.total : false
 
   // Get unique email accounts for legend (must be before conditionals)
   const uniqueEmails = useMemo(() => {
@@ -241,9 +252,34 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
             </tbody>
           </table>
         </div>
-        {data.total > 20 && (
-          <div className="text-muted-foreground mt-4 text-center text-xs">
-            Showing 20 of {data.total} total actions
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between border-t pt-4">
+            <div className="text-muted-foreground text-xs">
+              Showing {offset + 1}-{Math.min(offset + PAGE_SIZE, data.total)} of {data.total}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => p - 1)}
+                disabled={!canGoPrev}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm">
+                Page {page + 1} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => p + 1)}
+                disabled={!canGoNext}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
         </CardContent>

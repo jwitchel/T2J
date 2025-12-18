@@ -92,14 +92,16 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
   const batchSize = parseInt(process.env.NEXT_PUBLIC_INBOX_BATCH_SIZE!, 10);
 
   // Process batch
+  // When using Look Back (since date provided), force re-processing of already-processed emails
+  const sinceDate = since ? new Date(since) : undefined;
   const result = await inboxProcessor.processBatch({
     accountId: accountId!,
     userId,
     providerId,
     batchSize,
     offset: 0,
-    force: false,
-    since: since ? new Date(since) : undefined  // Convert ISO string to Date
+    force: !!sinceDate,  // Force re-process when doing Look Back
+    since: sinceDate
   });
 
   // Log completion

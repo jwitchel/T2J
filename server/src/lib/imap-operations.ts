@@ -339,17 +339,10 @@ export class ImapOperations {
 
       // Build search criteria based on options
       if (options.since) {
-        // Look Back mode: Use SINCE date filter
-        const searchCriteria: any[] = [['SINCE', options.since]];
-
-        // Also filter by UID if we have a last processed UID
-        const lastUid = await this._getLastProcessedUid(folderName);
-        if (lastUid > 0) {
-          searchCriteria.push(['UID', `${lastUid + 1}:*`]);
-        }
-
-        uids = await conn.search(searchCriteria);
-        console.log(`[ImapOperations] SINCE search returned ${uids.length} UIDs from ${this._account.email} ${folderName}`);
+        // Look Back mode: Use SINCE date filter only (no UID filtering)
+        // This allows re-processing historical emails regardless of last processed UID
+        uids = await conn.search([['SINCE', options.since]]);
+        console.log(`[ImapOperations] Look Back SINCE ${options.since.toISOString()} returned ${uids.length} UIDs from ${this._account.email} ${folderName}`);
       } else {
         // Standard mode: Use UID tracking for efficiency
         const lastUid = await this._getLastProcessedUid(folderName);

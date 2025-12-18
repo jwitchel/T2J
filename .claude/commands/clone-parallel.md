@@ -44,14 +44,27 @@ cd {parent-directory}
 git clone {remote-url} {clone-name}
 ```
 
-### 4. Install dependencies
+### 4. Set up git branch and tracking
+
+Create a dedicated branch for this clone and set up tracking to origin/main:
+
+```bash
+cd {clone-path}
+git checkout -b clone{number}
+git branch --set-upstream-to=origin/main
+git config pull.rebase false
+```
+
+This allows the clone to pull updates from main while keeping local changes on a separate branch.
+
+### 5. Install dependencies
 
 ```bash
 cd {clone-path}
 npm install
 ```
 
-### 5. Create the .env file
+### 6. Create the .env file
 
 Read the current repo's `.env` file and create a modified version for the clone:
 
@@ -72,14 +85,14 @@ Read the current repo's `.env` file and create a modified version for the clone:
 - OAuth client IDs and secrets
 - SERVICE_TOKEN
 
-### 6. Create .env.local
+### 7. Create .env.local
 
 Create `{clone-path}/.env.local` with:
 ```
 NEXT_PUBLIC_API_URL=http://localhost:{backend-port}
 ```
 
-### 7. Report completion
+### 8. Report completion
 
 Tell the user:
 
