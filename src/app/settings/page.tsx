@@ -10,6 +10,7 @@ import { SignaturePatterns } from '@/components/settings/signature-patterns'
 import { TypedNameSettings } from '@/components/settings/typed-name-settings'
 import { ActionRulesPanel } from '@/components/settings/action-rules-panel'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet, apiPost } from '@/lib/api'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,9 +24,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { PageHeader, SectionCard } from '@/components/patterns'
+import { Loader2 } from 'lucide-react'
 
 export default function SettingsPage() {
-  const { user } = useAuth()
+  const { user, signOut, changePassword } = useAuth()
+  const router = useRouter()
   const { success, error } = useToast()
   const [name, setName] = useState('')
   const [nicknames, setNicknames] = useState('')
@@ -71,6 +74,13 @@ export default function SettingsPage() {
       error?: string
     }>
   } | null>(null)
+
+  // Change password state
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
 
   // Load user preferences on mount
   useEffect(() => {
@@ -387,6 +397,32 @@ export default function SettingsPage() {
       console.error(err)
     } finally {
       setIsSavingActionPreferences(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      error('New passwords do not match')
+      return
+    }
+
+    if (newPassword.length < 8) {
+      error('Password must be at least 8 characters')
+      return
+    }
+
+    setIsChangingPassword(true)
+    try {
+      await changePassword(currentPassword, newPassword)
+      success('Password changed successfully. Please sign in again.')
+      setPasswordDialogOpen(false)
+      await signOut()
+      router.push('/signin')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to change password'
+      error(message)
+    } finally {
+      setIsChangingPassword(false)
     }
   }
 
@@ -805,7 +841,9 @@ export default function SettingsPage() {
                 description="Manage your password and security settings"
                 contentClassName="space-y-4"
               >
-                <Button variant="outline">Change Password</Button>
+                <Button variant="outline" onClick={() => setPasswordDialogOpen(true)}>
+                  Change Password
+                </Button>
               </SectionCard>
 
               <SectionCard title="Danger Zone" description="Irreversible actions">
@@ -887,6 +925,76 @@ export default function SettingsPage() {
                 {isCreatingFolders ? 'Creating...' : 'Create Missing Folders'}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new one.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+                disabled={isChangingPassword}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                disabled={isChangingPassword}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm New Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                disabled={isChangingPassword}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPasswordDialogOpen(false)
+                setCurrentPassword('')
+                setNewPassword('')
+                setConfirmPassword('')
+              }}
+              disabled={isChangingPassword}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleChangePassword}
+              disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+            >
+              {isChangingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isChangingPassword ? 'Changing...' : 'Change Password'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

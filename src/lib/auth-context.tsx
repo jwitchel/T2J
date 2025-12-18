@@ -20,6 +20,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, name?: string) => Promise<void>
   signOut: () => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   clearError: () => void
 }
 
@@ -81,6 +82,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function changePassword(currentPassword: string, newPassword: string) {
+    if (currentPassword === newPassword) {
+      const message = 'New password must be different from current password'
+      setError(message)
+      throw new Error(message)
+    }
+
+    try {
+      setError(null)
+      const { error } = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: false,
+      })
+
+      if (error) {
+        throw new Error(error.message || 'Failed to change password')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to change password'
+      setError(message)
+      throw err
+    }
+  }
+
   function clearError() {
     setError(null)
   }
@@ -94,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
+        changePassword,
         clearError,
       }}
     >
