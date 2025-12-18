@@ -196,7 +196,7 @@ export class JobSchedulerManager {
     const statuses = [];
 
     // Import pool here to avoid circular dependencies
-    const { pool } = await import('../server');
+    const { pool } = await import('./db');
 
     // Get all email accounts for this user
     const result = await pool.query(
@@ -239,7 +239,7 @@ export class JobSchedulerManager {
     const summary = [];
 
     // Import pool here to avoid circular dependencies
-    const { pool } = await import('../server');
+    const { pool } = await import('./db');
 
     // Get all monitored accounts for this user
     const result = await pool.query(
@@ -284,7 +284,7 @@ export class JobSchedulerManager {
    */
   async enableSchedulerGlobally(schedulerId: string, userId: string): Promise<number> {
     // Import pool here to avoid circular dependencies
-    const { pool } = await import('../server');
+    const { pool } = await import('./db');
 
     // Get all monitored accounts
     const result = await pool.query(
@@ -311,7 +311,7 @@ export class JobSchedulerManager {
    */
   async disableSchedulerGlobally(schedulerId: string, userId: string): Promise<number> {
     // Import pool here to avoid circular dependencies
-    const { pool } = await import('../server');
+    const { pool } = await import('./db');
 
     // Get all accounts (not just monitored - we want to disable any that have it enabled)
     const result = await pool.query(
@@ -347,7 +347,7 @@ export class JobSchedulerManager {
    */
   async initializeUserSchedulers(userId: string): Promise<void> {
     // Import pool here to avoid circular dependencies
-    const { pool } = await import('../server');
+    const { pool } = await import('./db');
 
     // Get user's name for logging (user exists - validated by auth)
     const userResult = await pool.query('SELECT name FROM "user" WHERE id = $1', [userId]);

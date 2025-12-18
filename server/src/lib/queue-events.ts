@@ -33,7 +33,7 @@ async function broadcastJobEvent(eventType: string, jobId: string, queueName: st
     let emailAddress: string | undefined;
     if (job.data?.accountId) {
       try {
-        const { pool } = await import('../server');
+        const { pool } = await import('./db');
         const result = await pool.query(
           'SELECT email_address FROM email_accounts WHERE id = $1',
           [job.data.accountId]

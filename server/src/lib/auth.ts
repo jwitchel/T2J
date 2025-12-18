@@ -1,14 +1,12 @@
 import { betterAuth } from 'better-auth';
-import { bearer } from 'better-auth/plugins';
 import { pool } from './db';
 import { sharedConnection } from './redis-connection';
 import crypto from 'crypto';
 import { preferencesService } from './preferences-service';
 
 const auth = betterAuth({
-  plugins: [bearer()],
   database: pool,
-  baseURL: process.env.BACKEND_URL!,
+  baseURL: process.env.APP_URL!,
   secondaryStorage: {
     get: async (key) => {
       return sharedConnection.get(key);
@@ -32,7 +30,7 @@ const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      redirectURI: `${process.env.BACKEND_URL!}/api/auth/callback/google`,
+      redirectURI: `${process.env.APP_URL!}/api/auth/callback/google`,
       scope: ['openid', 'email', 'profile', 'https://mail.google.com/'],
       accessType: 'offline',
       prompt: 'consent',
@@ -51,11 +49,11 @@ const auth = betterAuth({
       generateId: () => crypto.randomUUID(),
     },
     crossSubDomainCookies: {
-      enabled: process.env.NODE_ENV === 'production',
+      enabled: false,
     },
     defaultCookieAttributes: {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      sameSite: 'lax',
       httpOnly: true,
     },
   },

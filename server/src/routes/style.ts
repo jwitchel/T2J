@@ -9,7 +9,7 @@ const router = Router();
 router.use(requireAuth);
 
 // Get user's aggregated style for a relationship type
-router.get('/api/style/aggregated/:relationshipType', async (req: Request, res: Response) => {
+router.get('/aggregated/:relationshipType', async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     const { relationshipType } = req.params;
@@ -28,7 +28,7 @@ router.get('/api/style/aggregated/:relationshipType', async (req: Request, res: 
 });
 
 // Get enhanced profile for a recipient
-router.get('/api/style/profile/:recipientEmail', async (req: Request, res: Response) => {
+router.get('/profile/:recipientEmail', async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     const { recipientEmail } = req.params;
@@ -47,7 +47,7 @@ router.get('/api/style/profile/:recipientEmail', async (req: Request, res: Respo
 });
 
 // Manually trigger aggregation for user's relationship type
-router.post('/api/style/aggregate/:relationshipType', async (req: Request, res: Response) => {
+router.post('/aggregate/:relationshipType', async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     const { relationshipType } = req.params;
@@ -86,7 +86,7 @@ router.post('/api/style/aggregate/:relationshipType', async (req: Request, res: 
 });
 
 // Get all relationship types with aggregated styles for the user
-router.get('/api/style/relationships', async (req: Request, res: Response) => {
+router.get('/relationships', async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
     

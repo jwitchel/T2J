@@ -53,27 +53,20 @@ interface LLMProvider {
   is_active: boolean
 }
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
-
 export default function DashboardPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const { success, error } = useToast()
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL!
   const [lookBackOption, setLookBackOption] = useState<string>('15min')
 
   const {
     data: emailAccounts,
     isLoading: accountsLoading,
     mutate: mutateAccounts,
-  } = useSWR<EmailAccount[]>(
-    user ? `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts` : null,
-    fetcher
-  )
+  } = useSWR<EmailAccount[]>(user ? '/api/email-accounts' : null)
 
   const { data: providers, isLoading: providersLoading } = useSWR<LLMProvider[]>(
-    user ? `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers` : null,
-    fetcher
+    user ? '/api/llm-providers' : null
   )
 
   const defaultProvider = providers?.find((p) => p.is_default) || null
@@ -129,7 +122,7 @@ export default function DashboardPage() {
 
   const handleToggleMonitoring = async (account: EmailAccount, enabled: boolean) => {
     try {
-      const response = await fetch(`${apiUrl}/api/email-accounts/${account.id}/monitoring`, {
+      const response = await fetch(`/api/email-accounts/${account.id}/monitoring`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -153,7 +146,7 @@ export default function DashboardPage() {
     try {
       const sinceDate = getLookBackDate(lookBackOption)
 
-      const response = await fetch(`${apiUrl}/api/jobs/queue`, {
+      const response = await fetch('/api/jobs/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

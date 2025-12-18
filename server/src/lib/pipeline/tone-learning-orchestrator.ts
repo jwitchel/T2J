@@ -191,7 +191,7 @@ Email Details:
     exampleUsage: Map<string, { used: number; rating: number }>;
   }> {
     // Query PostgreSQL for email statistics
-    const { pool } = await import('../../server');
+    const { pool } = await import('../db');
 
     // Get total emails count
     const totalResult = await pool.query(

@@ -69,9 +69,8 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 - **Docker Ports** (non-standard to avoid conflicts):
   - PostgreSQL: 5434 (instead of 5432)
   - Redis: 6380 (instead of 6379)
-- **Application Ports**:
-  - Next.js frontend: 3001 (instead of 3000)
-  - Express backend: 3002
+- **Application Port**:
+  - Unified server (Next.js + Express): 3001
 - Project structure: Next.js app at repository root (not in subdirectory)
 - Express server in `/server` directory
 
@@ -84,8 +83,7 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 ## Key Architecture Decisions
 
 ### Technology Stack
-- **Frontend**: Next.js (port 3001) with shadcn/ui
-- **Backend**: Express (port 3002) with better-auth
+- **Unified Server**: Next.js + Express combined (port 3001) with shadcn/ui and better-auth
 - **Database**: PostgreSQL (port 5434) - includes vector columns
 - **Cache/Queue**: Redis (port 6380) - sessions + BullMQ
 - **Vector Search**: Vectra in-memory
@@ -94,9 +92,8 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 
 ### Development Setup
 - Docker runs PostgreSQL, Redis, and the test mail server (node-imap) only
-- Next.js and Express run locally (not in Docker) 
-- Authentication is centralized in Express API
-- Frontend and backend communicate via CORS-enabled API
+- Unified server (Next.js + Express) runs locally (not in Docker)
+- Same-origin architecture eliminates CORS complexity
 
 ### Important Architecture Notes
 1. **Authentication**: better-auth with scrypt password hashing, httpOnly cookies, OAuth support
@@ -769,14 +766,14 @@ source ~/.zshrc && PGPASSWORD=aiemailpass psql -U aiemailuser -h localhost -p 54
 ### Authentication Issues
 1. **Password hashing**: better-auth uses scrypt from @noble/hashes, not bcrypt
 2. **Session table**: Must have all required columns (see Architecture Notes)
-3. **CORS errors**: Ensure trustedOrigins includes both localhost:3001 and localhost:3002
+3. **Cookie issues**: Ensure APP_URL and TRUSTED_ORIGINS match the server URL (http://localhost:3001)
 
 ### Database Issues
 1. **Connection refused**: Check Docker is running and using port 5434
 2. **Missing tables**: better-auth auto-creates tables on first use
 
 ### Development Tips
-1. Use `npm run dev:all` to start both servers
+1. Use `npm run dev` to start unified server + workers
 2. Check server logs in terminal for debugging
 3. Browser DevTools Network tab helps debug auth issues
 4. Clear cookies if session problems persist

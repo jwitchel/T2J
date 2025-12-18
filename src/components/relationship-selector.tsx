@@ -41,18 +41,15 @@ export function RelationshipSelector({
 
     setIsLoading(true)
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/relationships/by-email`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            emailAddress,
-            relationshipType: newValue,
-          }),
-        }
-      )
+      const response = await fetch('/api/relationships/by-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          emailAddress,
+          relationshipType: newValue,
+        }),
+      })
 
       if (!response.ok) {
         const data = await response.json()

@@ -30,16 +30,6 @@ interface RecentActionsData {
   total: number
 }
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url, {
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    throw new Error('Failed to fetch recent actions')
-  }
-  return res.json()
-}
-
 // Map actions to display info (label and color)
 function getActionInfo(actionTaken: string): { label: string; color: string } {
   const label = EmailActionType.LABELS[actionTaken] || actionTaken
@@ -92,10 +82,9 @@ interface RecentActionsTableProps {
 
 export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps) {
   const { data, error, isLoading } = useSWR<RecentActionsData>(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/dashboard/recent-actions?limit=20`,
-    fetcher,
+    '/api/dashboard/recent-actions?limit=20',
     {
-      refreshInterval: 30000, // Auto-refresh every 30 seconds
+      refreshInterval: 30000,
       revalidateOnFocus: true,
     }
   )

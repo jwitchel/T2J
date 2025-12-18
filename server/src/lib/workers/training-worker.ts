@@ -19,7 +19,7 @@ async function buildToneProfile(job: Job<BuildToneProfileJobData>) {
 
     try {
       // Import here to avoid circular dependencies
-      const { pool } = await import('../../server');
+      const { pool } = await import('../db');
       const { addTrainingJob } = await import('../queue');
       const { JobPriority } = await import('../queue');
 

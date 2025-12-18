@@ -185,7 +185,6 @@ export default function TonePage() {
   } | null>(null)
 
   const { success, error } = useToast()
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL!
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -196,7 +195,7 @@ export default function TonePage() {
   const fetchToneData = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${apiUrl}/api/tone-profile`, {
+      const response = await fetch('/api/tone-profile', {
         credentials: 'include',
       })
 
@@ -216,11 +215,11 @@ export default function TonePage() {
     } finally {
       setLoading(false)
     }
-  }, [apiUrl])
+  }, [])
 
   const fetchEmailAccounts = useCallback(async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/email-accounts`, {
+      const response = await fetch('/api/email-accounts', {
         credentials: 'include',
       })
       const accounts = await response.json()
@@ -231,11 +230,11 @@ export default function TonePage() {
     } catch (err) {
       console.error('Error fetching email accounts:', err)
     }
-  }, [apiUrl])
+  }, [])
 
   const fetchUserPreferences = useCallback(async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/settings/profile`, {
+      const response = await fetch('/api/settings/profile', {
         credentials: 'include',
       })
       if (response.ok) {
@@ -245,7 +244,7 @@ export default function TonePage() {
     } catch (err) {
       console.error('Error fetching user preferences:', err)
     }
-  }, [apiUrl])
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -264,7 +263,7 @@ export default function TonePage() {
     setIsLoadingEmails(true)
     success(`Loading ${emailCount} emails...`)
     try {
-      const response = await fetch(`${apiUrl}/api/training/load-sent-emails`, {
+      const response = await fetch('/api/training/load-sent-emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -293,7 +292,7 @@ export default function TonePage() {
   const handleWipeData = async () => {
     setIsWiping(true)
     try {
-      const response = await fetch(`${apiUrl}/api/training/wipe`, {
+      const response = await fetch('/api/training/wipe', {
         method: 'POST',
         credentials: 'include',
       })
@@ -316,7 +315,7 @@ export default function TonePage() {
     setIsAnalyzing(true)
     success('Analyzing email patterns...')
     try {
-      const response = await fetch(`${apiUrl}/api/training/analyze-patterns`, {
+      const response = await fetch('/api/training/analyze-patterns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

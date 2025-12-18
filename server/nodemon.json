@@ -2,7 +2,7 @@
   "watch": ["server/src"],
   "ext": "ts,js",
   "ignore": ["server/src/**/*.spec.ts", "server/src/**/*.test.ts"],
-  "exec": "ts-node -r tsconfig-paths/register --project server/tsconfig.json server/src/server.ts",
+  "exec": "ts-node -r tsconfig-paths/register --project server/tsconfig.json server/src/unified-server.ts",
   "env": {
     "NODE_ENV": "development"
   },

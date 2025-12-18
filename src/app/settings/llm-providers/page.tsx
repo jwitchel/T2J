@@ -116,14 +116,12 @@ const PROVIDER_INFO = {
   },
 }
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
-
 export default function LLMProvidersPage() {
   const {
     data: providers,
     error,
     isLoading,
-  } = useSWR<LLMProvider[]>(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`, fetcher)
+  } = useSWR<LLMProvider[]>('/api/llm-providers')
   const { success, error: showError } = useToast()
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -161,7 +159,7 @@ export default function LLMProvidersPage() {
   const testConnection = async () => {
     setIsTesting(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/test`, {
+      const response = await fetch('/api/llm-providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -193,7 +191,7 @@ export default function LLMProvidersPage() {
 
     setIsSaving(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`, {
+      const response = await fetch('/api/llm-providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -206,7 +204,7 @@ export default function LLMProvidersPage() {
         success('LLM provider added successfully')
         setIsAddDialogOpen(false)
         resetForm()
-        mutate(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`)
+        mutate('/api/llm-providers')
       } else {
         showError(data.error || 'Failed to add provider')
       }
@@ -237,15 +235,12 @@ export default function LLMProvidersPage() {
         updateData.api_endpoint = formData.api_endpoint
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${selectedProvider.id}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(updateData),
-        }
-      )
+      const response = await fetch(`/api/llm-providers/${selectedProvider.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updateData),
+      })
 
       const data = await response.json()
 
@@ -254,7 +249,7 @@ export default function LLMProvidersPage() {
         setIsEditDialogOpen(false)
         setSelectedProvider(null)
         resetForm()
-        mutate(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`)
+        mutate('/api/llm-providers')
       } else {
         showError(data.error || 'Failed to update provider')
       }
@@ -268,17 +263,14 @@ export default function LLMProvidersPage() {
   const handleDelete = async (providerId: string) => {
     setDeletingId(providerId)
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers/${providerId}`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
-      )
+      const response = await fetch(`/api/llm-providers/${providerId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
 
       if (response.ok) {
         success('LLM provider deleted successfully')
-        mutate(`${process.env.NEXT_PUBLIC_API_URL!}/api/llm-providers`)
+        mutate('/api/llm-providers')
       } else {
         const data = await response.json()
         showError(data.error || 'Failed to delete provider')
