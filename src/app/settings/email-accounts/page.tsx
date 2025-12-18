@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, Suspense } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -8,7 +8,8 @@ import * as z from 'zod'
 import useSWR from 'swr'
 import { ProtectedRoute } from '@/components/auth/protected-route'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   Form,
   FormControl,
@@ -42,9 +43,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
@@ -218,33 +219,37 @@ function EmailAccountsContent() {
           className="mb-8"
         />
 
-        {!isAddingAccount && !editingAccount ? (
-          <AccountList
-            accounts={accounts || []}
-            isLoading={!accounts}
-            onAdd={() => setIsAddingAccount(true)}
-            onEdit={(account) => setEditingAccount(account)}
-            onDelete={handleDelete}
-            onTest={handleTest}
-            onToggleMonitoring={handleToggleMonitoring}
-            deletingId={deletingId}
-          />
-        ) : editingAccount ? (
-          <EditAccountForm
+        <AccountList
+          accounts={accounts || []}
+          isLoading={!accounts}
+          onAdd={() => setIsAddingAccount(true)}
+          onEdit={(account) => setEditingAccount(account)}
+          onDelete={handleDelete}
+          onTest={handleTest}
+          onToggleMonitoring={handleToggleMonitoring}
+          deletingId={deletingId}
+        />
+
+        {/* Add Account Dialog */}
+        <AddAccountDialog
+          open={isAddingAccount}
+          onOpenChange={setIsAddingAccount}
+          onSuccess={() => {
+            setIsAddingAccount(false)
+            mutate()
+          }}
+        />
+
+        {/* Edit Account Dialog */}
+        {editingAccount && (
+          <EditAccountDialog
             account={editingAccount}
+            open={!!editingAccount}
+            onOpenChange={(open) => !open && setEditingAccount(null)}
             onSuccess={() => {
               setEditingAccount(null)
               mutate()
             }}
-            onCancel={() => setEditingAccount(null)}
-          />
-        ) : (
-          <AddAccountForm
-            onSuccess={() => {
-              setIsAddingAccount(false)
-              mutate()
-            }}
-            onCancel={() => setIsAddingAccount(false)}
           />
         )}
       </div>
@@ -350,7 +355,7 @@ function AccountList({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    {account.oauth_provider && (
+                    {account.oauth_provider ? (
                       <Button
                         variant="outline"
                         className="h-7 px-2 text-xs"
@@ -377,23 +382,26 @@ function AccountList({
                           }
                         }}
                       >
-                        Reconnect OAuth
+                        Reconnect
                       </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => onTest(account)}
+                        >
+                          Test
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => onEdit(account)}
+                        >
+                          Edit
+                        </Button>
+                      </>
                     )}
-                    <Button
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onTest(account)}
-                    >
-                      Test
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => onEdit(account)}
-                    >
-                      Edit
-                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -435,7 +443,15 @@ function AccountList({
   )
 }
 
-function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel: () => void }) {
+function AddAccountDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+}) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [connectionTested, setConnectionTested] = useState(false)
@@ -452,6 +468,14 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
       imap_secure: false,
     },
   })
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      form.reset()
+      setConnectionTested(false)
+    }
+  }, [open, form])
 
   // Auto-detect provider settings
   const handleEmailChange = (email: string) => {
@@ -551,29 +575,28 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add Email Account</CardTitle>
-        <CardDescription>
-          Connect your email account to enable AI-powered assistance. Your credentials are securely
-          encrypted.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-6">
-          <div className="mb-4 text-center">
-            <h4 className="mb-2 text-lg font-semibold">Connect with OAuth (Recommended)</h4>
-            <p className="text-muted-foreground mb-4 text-sm">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Add Email Account</DialogTitle>
+          <DialogDescription>
+            Connect your email account to enable AI-powered assistance
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {/* OAuth Section */}
+          <div className="text-center">
+            <h4 className="mb-2 text-sm font-semibold">Connect with OAuth (Recommended)</h4>
+            <p className="text-muted-foreground mb-4 text-xs">
               The most secure way to connect your email account
             </p>
             <Button
               type="button"
               variant="outline"
-              size="lg"
-              className="w-full max-w-sm"
+              className="w-full"
               onClick={async () => {
                 try {
-                  // Request OAuth URL from our dedicated email OAuth endpoint
                   const response = await fetch(
                     `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
                     {
@@ -591,8 +614,6 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
                   }
 
                   const { authUrl } = await response.json()
-
-                  // Redirect to Google OAuth
                   window.location.href = authUrl
                 } catch (error) {
                   console.error('OAuth error:', error)
@@ -605,7 +626,7 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
             </Button>
           </div>
 
-          <div className="relative my-8">
+          <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
@@ -613,191 +634,177 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
               <span className="bg-background text-muted-foreground px-2">Or connect manually</span>
             </div>
           </div>
-        </div>
 
-        <div className="mb-6 flex justify-center">
-          <Dialog>
-            <DialogTrigger asChild>
-              <button className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400">
+          {/* Manual Connection Help - using Collapsible to avoid nested Dialog issues */}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <button className="mx-auto flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400">
                 <Info className="h-4 w-4" />
                 Manual connection settings
               </button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Manual Connection Settings</DialogTitle>
-                <DialogDescription>
-                  IMAP server settings for common email providers
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <span className="font-medium">Gmail:</span>
-                  <span className="text-muted-foreground">
-                    {' '}
-                    Server: imap.gmail.com, Port: 993, Secure: Yes
-                  </span>
-                  <span className="mt-1 block text-xs text-blue-600 dark:text-blue-400">
-                    Requires app-specific password.{' '}
-                    <a
-                      href="https://support.google.com/mail/answer/185833"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      Learn how
-                    </a>
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium">Outlook/Hotmail:</span>
-                  <span className="text-muted-foreground">
-                    {' '}
-                    Server: outlook.office365.com, Port: 993, Secure: Yes
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium">Yahoo:</span>
-                  <span className="text-muted-foreground">
-                    {' '}
-                    Server: imap.mail.yahoo.com, Port: 993, Secure: Yes
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium">iCloud:</span>
-                  <span className="text-muted-foreground">
-                    {' '}
-                    Server: imap.mail.me.com, Port: 993, Secure: Yes
-                  </span>
-                </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-4 space-y-2 rounded-md border p-4 text-sm">
+              <div>
+                <span className="font-medium">Gmail:</span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  imap.gmail.com:993 (SSL)
+                </span>
+                <span className="mt-1 block text-xs text-blue-600 dark:text-blue-400">
+                  Requires app-specific password.{' '}
+                  <a
+                    href="https://support.google.com/mail/answer/185833"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    Learn how
+                  </a>
+                </span>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+              <div>
+                <span className="font-medium">Outlook/Hotmail:</span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  outlook.office365.com:993 (SSL)
+                </span>
+              </div>
+              <div>
+                <span className="font-medium">Yahoo:</span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  imap.mail.yahoo.com:993 (SSL)
+                </span>
+              </div>
+              <div>
+                <span className="font-medium">iCloud:</span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  imap.mail.me.com:993 (SSL)
+                </span>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="email_address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email Address</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="user@example.com"
-                      {...field}
-                      onChange={(e) => {
-                        field.onChange(e)
-                        handleEmailChange(e.target.value)
-                      }}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    For testing, use: user1@testmail.local, user2@testmail.local, or
-                    user3@testmail.local
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="imap_username"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>IMAP Username</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Usually your email address" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    This is typically the same as your email address
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="imap_password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="Your email password" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    For Gmail, use an app-specific password. Test accounts use: testpass123
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
+          {/* Manual Form */}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="imap_host"
+                name="email_address"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>IMAP Server</FormLabel>
-                    <FormControl>
-                      <Input placeholder="imap.gmail.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="imap_port"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>IMAP Port</FormLabel>
+                    <FormLabel>Email Address</FormLabel>
                     <FormControl>
                       <Input
-                        type="number"
-                        placeholder="993"
+                        type="email"
+                        placeholder="user@example.com"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        onChange={(e) => {
+                          field.onChange(e)
+                          handleEmailChange(e.target.value)
+                        }}
                       />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      For testing: user1@testmail.local
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="imap_username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>IMAP Username</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Usually your email address" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
 
-            <div className="flex justify-between">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={testConnection}
-                disabled={isTesting || isSubmitting}
-              >
-                {isTesting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  'Test Connection'
+              <FormField
+                control={form.control}
+                name="imap_password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Your email password" {...field} />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      For Gmail, use an app-specific password
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </Button>
+              />
 
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={onCancel}>
-                  Cancel
-                </Button>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="imap_host"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>IMAP Server</FormLabel>
+                      <FormControl>
+                        <Input placeholder="imap.gmail.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="imap_port"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>IMAP Port</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="993"
+                          {...field}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {connectionTested && (
+                <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
+                  <AlertDescription className="text-green-800 dark:text-green-200">
+                    Connection test successful! You can now save the account.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <DialogFooter className="gap-2 pt-4 sm:gap-0">
                 <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  variant={connectionTested ? 'default' : 'outline'}
+                  type="button"
+                  variant="outline"
+                  onClick={testConnection}
+                  disabled={isTesting || isSubmitting}
                 >
+                  {isTesting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    'Test Connection'
+                  )}
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -807,23 +814,25 @@ function AddAccountForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
                     'Add Account'
                   )}
                 </Button>
-              </div>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+              </DialogFooter>
+            </form>
+          </Form>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
-function EditAccountForm({
+function EditAccountDialog({
   account,
+  open,
+  onOpenChange,
   onSuccess,
-  onCancel,
 }: {
   account: EmailAccountResponse
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onSuccess: () => void
-  onCancel: () => void
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
@@ -841,6 +850,21 @@ function EditAccountForm({
       imap_secure: account.imap_secure,
     },
   })
+
+  // Reset form when account changes
+  useEffect(() => {
+    if (open && account) {
+      form.reset({
+        email_address: account.email_address,
+        imap_username: account.imap_username,
+        imap_password: '',
+        imap_host: account.imap_host,
+        imap_port: account.imap_port,
+        imap_secure: account.imap_secure,
+      })
+      setConnectionTested(false)
+    }
+  }, [open, account, form])
 
   const testConnection = async () => {
     const isValid = await form.trigger()
@@ -906,16 +930,17 @@ function EditAccountForm({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Edit Email Account</CardTitle>
-        <CardDescription>
-          Update your email account settings. You&apos;ll need to re-enter your password.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Edit Email Account</DialogTitle>
+          <DialogDescription>
+            Update your email account settings. You&apos;ll need to re-enter your password.
+          </DialogDescription>
+        </DialogHeader>
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
             <FormField
               control={form.control}
               name="email_address"
@@ -923,13 +948,11 @@ function EditAccountForm({
                 <FormItem>
                   <FormLabel>Email Address</FormLabel>
                   <FormControl>
-                    <Input
-                      type="email"
-                      {...field}
-                      disabled // Email address cannot be changed
-                    />
+                    <Input type="email" {...field} disabled className="bg-muted" />
                   </FormControl>
-                  <FormDescription>Email address cannot be changed</FormDescription>
+                  <FormDescription className="text-xs">
+                    Email address cannot be changed
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -958,7 +981,9 @@ function EditAccountForm({
                   <FormControl>
                     <Input type="password" placeholder="Enter new password" {...field} />
                   </FormControl>
-                  <FormDescription>Re-enter your password to save changes</FormDescription>
+                  <FormDescription className="text-xs">
+                    Re-enter your password to save changes
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -998,10 +1023,18 @@ function EditAccountForm({
               />
             </div>
 
-            <div className="flex justify-between">
+            {connectionTested && (
+              <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
+                <AlertDescription className="text-green-800 dark:text-green-200">
+                  Connection test successful! You can now save the account.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter className="gap-2 pt-4 sm:gap-0">
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 onClick={testConnection}
                 disabled={isTesting || isSubmitting}
               >
@@ -1014,48 +1047,39 @@ function EditAccountForm({
                   'Test Connection'
                 )}
               </Button>
-
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={onCancel}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  variant={connectionTested ? 'default' : 'outline'}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Updating...
-                    </>
-                  ) : (
-                    'Update Account'
-                  )}
-                </Button>
-              </div>
-            </div>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Account'
+                )}
+              </Button>
+            </DialogFooter>
           </form>
         </Form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 // Loading fallback component
 function EmailAccountsLoading() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Email Accounts</CardTitle>
-        <CardDescription>Loading email accounts...</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <PageHeader
+        title="Email Accounts"
+        description="Connect your email accounts to enable AI-powered email assistance"
+        className="mb-8"
+      />
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
