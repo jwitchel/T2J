@@ -56,6 +56,7 @@ npm install
 Read the current repo's `.env` file and create a modified version for the clone:
 
 **Values to CHANGE (use calculated ports):**
+- `FRONTEND_PORT={frontend-port}` (for Next.js dev server)
 - `FRONTEND_URL=http://localhost:{frontend-port}`
 - `BACKEND_URL=http://localhost:{backend-port}`
 - `PORT={backend-port}`
@@ -87,14 +88,15 @@ Tell the user:
 3. Shared: Database and Redis with main instance
 4. Workers: Paused (main instance handles jobs)
 
-To start servers:
+To start servers (uses `dev:clone` which skips Redis reset since Redis is shared):
 ```bash
 cd {clone-path}
-PORT={frontend-port} npm run dev:all
+npm run dev:clone
 ```
 
 Or separately:
 ```bash
-PORT={frontend-port} npm run dev &
-npm run server
+npm run dev &
+npm run server &
+npm run workers
 ```

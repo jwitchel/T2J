@@ -34,9 +34,13 @@ export function Navbar() {
   const { user, loading, signOut } = useAuth()
   const [displayName, setDisplayName] = useState<string>('')
   const [isLocalhost, setIsLocalhost] = useState(false)
+  const [isClone, setIsClone] = useState(false)
 
   useEffect(() => {
-    setIsLocalhost(window.location.hostname === 'localhost')
+    const hostname = window.location.hostname
+    const port = window.location.port
+    setIsLocalhost(hostname === 'localhost')
+    setIsClone(hostname === 'localhost' && port !== '' && port !== '3001')
   }, [])
 
   useEffect(() => {
@@ -78,6 +82,7 @@ export function Navbar() {
   return (
     <>
       {isLocalhost && <div className="bg-red-500" style={{ height: '3px' }} />}
+      {isClone && <div style={{ height: '3px', backgroundColor: '#38bdf8' }} />}
       <nav className="border-b border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
