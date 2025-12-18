@@ -83,9 +83,6 @@ export default function JobsPage() {
   })
   const { success, error } = useToast()
 
-  // API URL used throughout the component
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL!
-
   // Shared method for consistent API request handling
   const handleApiRequest = useCallback(
     async (config: {
@@ -124,7 +121,7 @@ export default function JobsPage() {
           requestOptions.body = JSON.stringify(body)
         }
 
-        const response = await fetch(`${apiUrl}${endpoint}`, requestOptions)
+        const response = await fetch(endpoint, requestOptions)
 
         if (response.ok) {
           const data = await response.json()
@@ -152,7 +149,7 @@ export default function JobsPage() {
         if (loadingStateSetter) loadingStateSetter(false)
       }
     },
-    [apiUrl, success, error, setRefreshKey]
+    [success, error, setRefreshKey]
   )
 
   const queueJob = async (jobConfig: {
@@ -167,7 +164,7 @@ export default function JobsPage() {
       // If no accountId provided and not a fan-out job, get the first email account
       let jobData = jobConfig.data
       if (!jobConfig.data.accountId && !jobConfig.data.fanOut) {
-        const accountsResponse = await fetch(`${apiUrl}/api/email-accounts`, {
+        const accountsResponse = await fetch('/api/email-accounts', {
           credentials: 'include',
         })
 
@@ -187,7 +184,7 @@ export default function JobsPage() {
       }
 
       // Queue the job
-      const response = await fetch(`${apiUrl}/api/jobs/queue`, {
+      const response = await fetch('/api/jobs/queue', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

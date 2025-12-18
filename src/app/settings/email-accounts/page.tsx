@@ -55,8 +55,6 @@ import { FcGoogle } from 'react-icons/fc'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { PageHeader } from '@/components/patterns'
 
-const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
-
 const emailAccountSchema = z.object({
   email_address: z.string().email('Invalid email address'),
   imap_username: z.string().min(1, 'Username is required'),
@@ -76,10 +74,7 @@ function EmailAccountsContent() {
     data: accounts,
     error,
     mutate,
-  } = useSWR<EmailAccountResponse[]>(
-    `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts`,
-    fetcher
-  )
+  } = useSWR<EmailAccountResponse[]>('/api/email-accounts')
   const { success, error: showError } = useToast()
 
   const reauthAccount = useMemo(
@@ -90,13 +85,10 @@ function EmailAccountsContent() {
   const handleDelete = async (accountId: string) => {
     setDeletingId(accountId)
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${accountId}`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
-      )
+      const response = await fetch(`/api/email-accounts/${accountId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
 
       if (response.ok) {
         success('Email account deleted successfully')
@@ -114,13 +106,10 @@ function EmailAccountsContent() {
 
   const handleTest = async (account: EmailAccountResponse) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/test`,
-        {
-          method: 'POST',
-          credentials: 'include',
-        }
-      )
+      const response = await fetch(`/api/email-accounts/${account.id}/test`, {
+        method: 'POST',
+        credentials: 'include',
+      })
 
       if (response.ok) {
         const result = await response.json()
@@ -136,15 +125,12 @@ function EmailAccountsContent() {
 
   const handleToggleMonitoring = async (account: EmailAccountResponse, enabled: boolean) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/monitoring`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ enabled }),
-        }
-      )
+      const response = await fetch(`/api/email-accounts/${account.id}/monitoring`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled }),
+      })
 
       if (response.ok) {
         success(enabled ? 'Monitoring enabled' : 'Monitoring disabled')
@@ -184,17 +170,14 @@ function EmailAccountsContent() {
                   className="h-7 px-2 text-xs"
                   onClick={async () => {
                     try {
-                      const response = await fetch(
-                        `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({
-                            provider: reauthAccount.oauth_provider || 'google',
-                          }),
-                        }
-                      )
+                      const response = await fetch('/api/oauth-direct/authorize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                          provider: reauthAccount.oauth_provider || 'google',
+                        }),
+                      })
                       if (!response.ok) {
                         const err = await response.json()
                         showError(err.error || 'Failed to start OAuth flow')
@@ -361,15 +344,12 @@ function AccountList({
                         className="h-7 px-2 text-xs"
                         onClick={async () => {
                           try {
-                            const response = await fetch(
-                              `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
-                              {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                credentials: 'include',
-                                body: JSON.stringify({ provider: account.oauth_provider }),
-                              }
-                            )
+                            const response = await fetch('/api/oauth-direct/authorize', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              credentials: 'include',
+                              body: JSON.stringify({ provider: account.oauth_provider }),
+                            })
                             if (!response.ok) {
                               const err = await response.json()
                               showError(err.error || 'Failed to start OAuth flow')
@@ -517,7 +497,7 @@ function AddAccountDialog({
     setIsTesting(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/test`, {
+      const response = await fetch('/api/email-accounts/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -543,7 +523,7 @@ function AddAccountDialog({
   const onSubmit = async (data: z.infer<typeof emailAccountSchema>) => {
     setIsSubmitting(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts`, {
+      const response = await fetch('/api/email-accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -597,15 +577,12 @@ function AddAccountDialog({
               className="w-full"
               onClick={async () => {
                 try {
-                  const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/authorize`,
-                    {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      credentials: 'include',
-                      body: JSON.stringify({ provider: 'google' }),
-                    }
-                  )
+                  const response = await fetch('/api/oauth-direct/authorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ provider: 'google' }),
+                  })
 
                   if (!response.ok) {
                     const error = await response.json()
@@ -874,7 +851,7 @@ function EditAccountDialog({
     setIsTesting(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/test`, {
+      const response = await fetch('/api/email-accounts/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -900,20 +877,17 @@ function EditAccountDialog({
   const onSubmit = async (data: z.infer<typeof emailAccountSchema>) => {
     setIsSubmitting(true)
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts/${account.id}/update-credentials`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            imap_host: data.imap_host,
-            imap_port: data.imap_port,
-            imap_username: data.imap_username,
-            imap_password: data.imap_password,
-          }),
-        }
-      )
+      const response = await fetch(`/api/email-accounts/${account.id}/update-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          imap_host: data.imap_host,
+          imap_port: data.imap_port,
+          imap_username: data.imap_username,
+          imap_password: data.imap_password,
+        }),
+      })
 
       if (response.ok) {
         success('Email account credentials updated successfully!')

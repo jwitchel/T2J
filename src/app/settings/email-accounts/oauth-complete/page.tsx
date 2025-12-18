@@ -65,15 +65,12 @@ function OAuthCompleteContent() {
 
       try {
         // Complete the OAuth flow
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL!}/api/oauth-direct/complete`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ sessionToken }),
-          }
-        )
+        const response = await fetch('/api/oauth-direct/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ sessionToken }),
+        })
 
         if (!response.ok) {
           const errorData = await response.json()

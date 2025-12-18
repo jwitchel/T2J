@@ -28,7 +28,7 @@ export default function LLMDemoPage() {
     setGeneratedText('')
 
     try {
-      const response = await fetch('http://localhost:3002/api/generate', {
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
