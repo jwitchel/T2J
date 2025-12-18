@@ -27,16 +27,6 @@ interface ActionsSummaryData {
   }
 }
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url, {
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    throw new Error('Failed to fetch actions summary')
-  }
-  return res.json()
-}
-
 // Aggregate raw actions into display categories
 function aggregateActions(raw: RawActionCounts): ActionCounts {
   const result: ActionCounts = {
@@ -63,10 +53,9 @@ function aggregateActions(raw: RawActionCounts): ActionCounts {
 
 export function ActionsSummaryChart() {
   const { data, error, isLoading } = useSWR<ActionsSummaryData>(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/dashboard/actions-summary`,
-    fetcher,
+    '/api/dashboard/actions-summary',
     {
-      refreshInterval: 30000, // Auto-refresh every 30 seconds
+      refreshInterval: 30000,
       revalidateOnFocus: true,
     }
   )

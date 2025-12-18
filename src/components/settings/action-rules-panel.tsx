@@ -46,7 +46,7 @@ export function ActionRulesPanel() {
 
   const loadRules = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/action-rules`, {
+      const response = await fetch('/api/action-rules', {
         credentials: 'include',
       })
 
@@ -65,7 +65,7 @@ export function ActionRulesPanel() {
   const deleteRule = async (ruleId: string) => {
     setDeletingId(ruleId)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/action-rules/${ruleId}`, {
+      const response = await fetch(`/api/action-rules/${ruleId}`, {
         method: 'DELETE',
         credentials: 'include',
       })

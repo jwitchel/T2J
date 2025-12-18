@@ -81,7 +81,7 @@ export function TrainingPanel({
   useEffect(() => {
     const fetchEmailAccounts = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/email-accounts`, {
+        const response = await fetch('/api/email-accounts', {
           credentials: 'include',
         })
         if (response.ok) {
@@ -109,8 +109,7 @@ export function TrainingPanel({
   // Listen for WebSocket progress updates
   const connectWebSocket = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = process.env.NEXT_PUBLIC_API_URL!.replace(/^https?:\/\//, '')
-    const ws = new WebSocket(`${protocol}//${host}/ws`)
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`)
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ userId }))
@@ -164,21 +163,18 @@ export function TrainingPanel({
     const ws = connectWebSocket()
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/training/load-sent-emails`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            emailAccountId: selectedAccountId,
-            limit: parseInt(emailCount),
-            startDate: new Date(startDate).toISOString(),
-          }),
-        }
-      )
+      const response = await fetch('/api/training/load-sent-emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          emailAccountId: selectedAccountId,
+          limit: parseInt(emailCount),
+          startDate: new Date(startDate).toISOString(),
+        }),
+      })
 
       if (!response.ok) {
         const data = await response.json()
@@ -199,7 +195,7 @@ export function TrainingPanel({
     setIsWiping(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/training/wipe`, {
+      const response = await fetch('/api/training/wipe', {
         method: 'DELETE',
         credentials: 'include',
       })
@@ -221,19 +217,16 @@ export function TrainingPanel({
     setIsAnalyzingPatterns(true)
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL!}/api/training/analyze-patterns`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            force: true, // Force re-analysis even if patterns exist
-          }),
-        }
-      )
+      const response = await fetch('/api/training/analyze-patterns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          force: true, // Force re-analysis even if patterns exist
+        }),
+      })
 
       if (!response.ok) {
         const data = await response.json()

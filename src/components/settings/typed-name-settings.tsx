@@ -32,7 +32,7 @@ export function TypedNameSettings() {
   const fetchPreferences = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/settings/typed-name`, {
+      const response = await fetch('/api/settings/typed-name', {
         credentials: 'include',
       })
 
@@ -71,7 +71,7 @@ export function TypedNameSettings() {
         }
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL!}/api/settings/typed-name`, {
+      const response = await fetch('/api/settings/typed-name', {
         method: 'POST',
         credentials: 'include',
         headers: {

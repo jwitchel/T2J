@@ -78,19 +78,16 @@ export function ActionSelector({
 
     setIsLoading(true)
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/action-rules`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            conditionType: ruleType,
-            conditionValue,
-            targetAction: selectedAction,
-          }),
-        }
-      )
+      const response = await fetch('/api/action-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          conditionType: ruleType,
+          conditionValue,
+          targetAction: selectedAction,
+        }),
+      })
 
       if (response.status === 409) {
         const data = await response.json()
