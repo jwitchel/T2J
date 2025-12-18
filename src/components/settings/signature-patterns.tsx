@@ -108,7 +108,7 @@ export function SignaturePatterns() {
         <div className="flex items-center justify-between">
           <Label>Signature Detection Patterns</Label>
         </div>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-xs">
           Regular expressions to match and remove email signatures. Patterns are tested from the
           bottom of emails upward.
         </p>

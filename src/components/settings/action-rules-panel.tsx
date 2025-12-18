@@ -181,7 +181,7 @@ export function ActionRulesPanel() {
     <div className="space-y-6">
       {senderRules.length > 0 && (
         <div className="space-y-2">
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-xs">
             Sender rules (applied to specific email addresses, processed first):
           </p>
           <div className="space-y-2">
@@ -194,7 +194,7 @@ export function ActionRulesPanel() {
 
       {relationshipRules.length > 0 && (
         <div className="space-y-2">
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-xs">
             Relationship rules (applied to all contacts of a type, processed after sender rules):
           </p>
           <div className="space-y-2">

@@ -467,14 +467,14 @@ export default function SettingsPage() {
                     placeholder="e.g. Jessica, Jess, JW"
                     disabled={isLoading}
                   />
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-xs">
                     Enter common nicknames or variations of your name, separated by commas
                   </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" type="email" defaultValue={user?.email || ''} disabled />
-                  <p className="text-muted-foreground text-sm">Email cannot be changed</p>
+                  <p className="text-muted-foreground text-xs">Email cannot be changed</p>
                 </div>
                 <Button onClick={handleSave} disabled={isSaving || isLoading}>
                   {isSaving ? 'Saving...' : 'Save Changes'}
@@ -503,7 +503,7 @@ export default function SettingsPage() {
                     className="min-h-[120px] font-mono text-sm"
                     disabled={isLoading}
                   />
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-xs">
                     This signature will be added to your email replies before the quoted original
                     message. You can use multiple lines.
                   </p>
@@ -530,7 +530,7 @@ export default function SettingsPage() {
                     placeholder="partner@example.com"
                     disabled={isLoading}
                   />
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-xs">
                     Enter spouse/partner email addresses separated by commas.
                     <br />
                     This person is treated as a special case when drafting emails to only use the
@@ -548,7 +548,7 @@ export default function SettingsPage() {
                     placeholder="dad@example.com, mom@gmail.com"
                     disabled={isLoading}
                   />
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-xs">
                     Enter family email addresses separated by commas. These contacts will be
                     categorized as &quot;family&quot;.
                   </p>
@@ -564,7 +564,7 @@ export default function SettingsPage() {
                     placeholder="company.com, subsidiary.co.uk"
                     disabled={isLoading}
                   />
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-xs">
                     Enter work domains separated by commas. Anyone from these domains will be
                     categorized as &quot;colleague&quot;.
                   </p>
@@ -606,7 +606,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label htmlFor="spamDetection">Spam Detection</Label>
-                      <p className="text-muted-foreground text-sm">
+                      <p className="text-muted-foreground text-xs">
                         Detect and move spam emails to spam folder
                       </p>
                     </div>
@@ -624,7 +624,7 @@ export default function SettingsPage() {
                   <div className="space-y-4">
                     <div className="space-y-0.5">
                       <Label>Organize Your Email</Label>
-                      <p className="text-muted-foreground text-sm">
+                      <p className="text-muted-foreground text-xs">
                         Automatically move emails that do <b>not</b> require a response to a
                         specific folder.
                       </p>
@@ -721,7 +721,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label htmlFor="draftGeneration">Draft Generation</Label>
-                      <p className="text-muted-foreground text-sm">
+                      <p className="text-muted-foreground text-xs">
                         Upload AI-generated reply drafts to your Drafts folder
                       </p>
                     </div>
@@ -759,7 +759,7 @@ export default function SettingsPage() {
                       placeholder="Leave empty for root level"
                       disabled={isLoading}
                     />
-                    <p className="text-muted-foreground text-sm">
+                    <p className="text-muted-foreground text-xs">
                       Leave empty to create folders at the root level
                     </p>
                   </div>
@@ -778,9 +778,8 @@ export default function SettingsPage() {
                       placeholder="e.g., *No Action"
                       disabled={isLoading}
                     />
-                    <p className="text-muted-foreground text-sm">
-                      For: FYI only, large lists, unsubscribe candidates. Names starting with *
-                      appear at top.
+                    <p className="text-muted-foreground text-xs">
+                      FYI only, large lists, unsubscribe candidates.
                     </p>
                   </div>
 
@@ -795,8 +794,8 @@ export default function SettingsPage() {
                       placeholder="e.g., *Spam"
                       disabled={isLoading}
                     />
-                    <p className="text-muted-foreground text-sm">
-                      For: emails identified as spam. Names starting with * appear at top.
+                    <p className="text-muted-foreground text-xs">
+                      Emails identified as spam.
                     </p>
                   </div>
 
@@ -811,9 +810,8 @@ export default function SettingsPage() {
                       placeholder="e.g., *Todo"
                       disabled={isLoading}
                     />
-                    <p className="text-muted-foreground text-sm">
-                      For: action items requiring external action (no email response needed). Names
-                      starting with * appear at top.
+                    <p className="text-muted-foreground text-xs">
+                      Action items requiring you do do something outside of email (no email response needed).
                     </p>
                   </div>
 
