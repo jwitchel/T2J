@@ -1,7 +1,5 @@
 // API utility functions
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL!
-
 interface FetchOptions extends RequestInit {
   requireAuth?: boolean
 }
@@ -9,9 +7,7 @@ interface FetchOptions extends RequestInit {
 export async function apiFetch(endpoint: string, options: FetchOptions = {}): Promise<Response> {
   const { requireAuth = true, ...fetchOptions } = options
 
-  const url = `${API_BASE_URL}${endpoint}`
-
-  const response = await fetch(url, {
+  const response = await fetch(endpoint, {
     ...fetchOptions,
     credentials: 'include',
     headers: {

@@ -43,25 +43,22 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
 
 3. **Set up environment variables**
    
-   Create the required environment files:
+   Create the required environment file:
    ```bash
-   # Create .env for backend (Express server)
    cat > .env << 'EOF'
    DATABASE_URL=postgresql://aiemailuser:aiemailpass@localhost:5434/aiemaildb
    BETTER_AUTH_SECRET=your-secret-key-here
    ENCRYPTION_KEY=your-encryption-key-here
-   PORT=3002
-   FRONTEND_URL=http://localhost:3001
+   APP_URL=http://localhost:3001
+   TRUSTED_ORIGINS=http://localhost:3001
+   PORT=3001
    NODE_ENV=development
    EMAIL_PIPELINE_CONCURRENCY=1
    EOF
-   
-   # Create .env.local for frontend (Next.js)
-   echo "NEXT_PUBLIC_API_URL=http://localhost:3002" > .env.local
    ```
-   
+
    **Note**: Docker services use hardcoded values in docker-compose.yml for consistency.
-   
+
    For production, generate secure keys:
    ```bash
    openssl rand -base64 32  # For BETTER_AUTH_SECRET and ENCRYPTION_KEY
@@ -82,20 +79,17 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
    npm run db:migrate
    ```
 
-6. **Start the development servers**
+6. **Start the development server**
    ```bash
-   npm run dev:all
+   npm run dev
    ```
-   
+
    This runs:
-   - Next.js frontend on http://localhost:3001
-   - Express.js backend on http://localhost:3002
+   - Unified server (Next.js + Express) on http://localhost:3001
    - Background workers for job processing
-   
+
    Alternative commands:
-   - `npm run dev:backend` - Start only backend services (server + workers)
-   - `npm run dev` - Start only Next.js frontend
-   - `npm run server` - Start only Express server
+   - `npm run server` - Start only the unified server (no workers)
    - `npm run workers` - Start only background workers
 
 7. **Seed demo data**
@@ -133,12 +127,9 @@ test-repo/
 
 ```bash
 # Development
-npm run dev              # Start Next.js frontend (port 3001)
-npm run server          # Start Express backend (port 3002)
+npm run dev             # Start unified server + workers (port 3001)
+npm run server          # Start unified server only (port 3001)
 npm run workers         # Start background job workers
-npm run dev:all         # Start frontend, backend, and workers (kills existing processes first)
-npm run dev:backend     # Start backend and workers only
-npm run dev:kill-ports  # Kill processes on ports 3001 and 3002
 
 # Individual Docker Services
 # PostgreSQL Database
@@ -220,7 +211,7 @@ The project uses [better-auth](https://www.better-auth.com/) for authentication 
 - Email/password authentication
 - Secure httpOnly cookie sessions
 - Protected routes with automatic redirects
-- Cross-origin authentication between frontend (3001) and backend (3002)
+- Same-origin architecture (unified server on port 3001)
 
 ### Authentication Flow
 1. User signs up/signs in at `/signup` or `/signin`
@@ -256,8 +247,7 @@ View all components at http://localhost:3001/components-test
 1. **Port conflicts**
    - PostgreSQL uses port 5434 (not standard 5432)
    - Redis uses port 6380 (not standard 6379)
-   - Next.js uses port 3001 (not standard 3000)
-   - Express uses port 3002
+   - Unified server uses port 3001 (Next.js + Express combined)
 
 2. **Database connection errors**
    - Ensure Docker is running: `docker compose ps`
@@ -265,18 +255,18 @@ View all components at http://localhost:3001/components-test
    - Verify connection: `npm run db:test`
 
 3. **Authentication errors**
-   - Ensure both servers are running: `npm run dev:all`
-   - Check NEXT_PUBLIC_API_URL is set to http://localhost:3002
+   - Ensure server is running: `npm run dev`
    - Clear browser cookies if session issues persist
 
 4. **Missing environment variables**
-   - Create `.env` and `.env.local` files as shown in setup instructions
+   - Create `.env` file as shown in setup instructions
    - Generate secure keys for BETTER_AUTH_SECRET and ENCRYPTION_KEY
    - Ensure DATABASE_URL uses port 5434
+   - Ensure APP_URL and TRUSTED_ORIGINS are set
 
 ## 🏗️ Architecture
 
-- Monorepo: Frontend and backend in same repository
+- Unified server: Next.js + Express in single process (same-origin)
 - Auth: better-auth with httpOnly cookies
 - Database: PostgreSQL for all data + vectors
 - Queue: BullMQ with Redis

@@ -50,10 +50,9 @@
 - Key configs: `package.json`, `next.config.ts`, `eslint.config.mjs`, `jest.config.*.js`, `docker-compose*.yml`
 
 ## Build, Test, and Development Commands
-- `npm run dev`: Next.js on port 3001
-- `npm run server`: Express server on port 3002 (nodemon)
+- `npm run dev`: Unified server (Next.js + Express) + workers on port 3001
+- `npm run server`: Unified server only (nodemon)
 - `npm run workers`: Start background job workers
-- `npm run dev:all`: Frontend + server + workers (kills ports 3001/3002)
 - `npm run build` / `npm run server:build`: Build frontend/backend
 - `npm test`: All tests. `test:unit` (no services), `test:integration` (services)
 - Docker services: `docker:up|down|reset|logs` or per service `postgres:*`, `redis:*`, `mail:*`
@@ -63,7 +62,7 @@ Example: initialize stack for local dev
 ```
 npm install
 npm run docker:up && npm run db:migrate && npm run seed
-npm run dev:all
+npm run dev
 ```
 
 ## Coding Style & Naming Conventions
@@ -85,7 +84,7 @@ npm run dev:all
 
 ## Security & Configuration Tips
 - Env files: `.env` (backend secrets) and `.env.local` (frontend); `.env.defaults` has operational config; never commit secrets
-- Local ports: web 3001, API 3002, Postgres 5434, Redis 6380
+- Local ports: unified server 3001, Postgres 5434, Redis 6380
 - Resets: `npm run docker:reset` to wipe services and reseed for a clean slate
 
 ## Agent-Specific Instructions (.claude)
@@ -107,5 +106,5 @@ npm run dev:all
 
 ## Related Docs & Tools
 - Training UI: `http://localhost:3001/tone` (click Training tab for training panel + live logs)
-- WebSocket logs: `ws://localhost:3002/ws/imap-logs`
+- WebSocket logs: `ws://localhost:3001/ws/imap-logs`
 - Deep dives: `server/src/lib/imap/README.md`, `server/src/websocket/README.md`, `server/src/websocket/INTEGRATION.md`, `server/src/lib/pipeline/README.md`, `server/src/lib/pipeline/TONE_LEARNING_E2E.md`, `server/src/lib/vector/README.md`, `server/src/scripts/README.md`

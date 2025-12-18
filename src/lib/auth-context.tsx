@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, ReactNode } from 'react'
-import { authClient, AUTH_TOKEN_KEY } from './auth-client'
+import { authClient } from './auth-client'
 
 interface User {
   id: string
@@ -33,21 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     try {
       setError(null)
-      const { error } = await authClient.signIn.email(
-        {
-          email,
-          password,
-        },
-        {
-          onSuccess: (ctx) => {
-            // Store bearer token for mobile browsers that block third-party cookies
-            const authToken = ctx.response.headers.get('set-auth-token')
-            if (authToken) {
-              localStorage.setItem(AUTH_TOKEN_KEY, authToken)
-            }
-          },
-        }
-      )
+      const { error } = await authClient.signIn.email({
+        email,
+        password,
+      })
 
       if (error) {
         throw new Error(error.message || 'Sign in failed')
@@ -62,22 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signUp(email: string, password: string, name?: string) {
     try {
       setError(null)
-      const { error } = await authClient.signUp.email(
-        {
-          email,
-          password,
-          name: name || '',
-        },
-        {
-          onSuccess: (ctx) => {
-            // Store bearer token for mobile browsers that block third-party cookies
-            const authToken = ctx.response.headers.get('set-auth-token')
-            if (authToken) {
-              localStorage.setItem(AUTH_TOKEN_KEY, authToken)
-            }
-          },
-        }
-      )
+      const { error } = await authClient.signUp.email({
+        email,
+        password,
+        name: name || '',
+      })
 
       if (error) {
         throw new Error(error.message || 'Sign up failed')
@@ -92,8 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     try {
       setError(null)
-      // Clear bearer token from localStorage
-      localStorage.removeItem(AUTH_TOKEN_KEY)
       const { error } = await authClient.signOut()
 
       if (error) {

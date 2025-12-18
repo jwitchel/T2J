@@ -1,30 +1,17 @@
 services:
-  # Frontend (Next.js)
+  # Combined App (Next.js + Express in unified server)
   - type: web
-    name: t2j-frontend
+    name: t2j-app
     runtime: node
     rootDir: ./
-    buildCommand: npm ci --include=dev && npm run build
-    startCommand: npm run start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        value: https://t2j-api.onrender.com
-    healthCheckPath: /
-    autoDeploy: true
-
-  # API (Express)
-  - type: web
-    name: t2j-api
-    runtime: node
-    rootDir: ./
-    buildCommand: npm ci --include=dev && npm run server:build && node server/scripts/download-models.js
-    startCommand: node server/dist/server.js
+    buildCommand: npm ci --include=dev && npm run build && node server/scripts/download-models.js
+    startCommand: npm start
     preDeployCommand: node db/migrate.js
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3000
       - key: DATABASE_URL
         fromDatabase:
           name: t2j-db
@@ -44,24 +31,23 @@ services:
         sync: false
       - key: SERVICE_TOKEN
         sync: false
-      - key: FRONTEND_URL
-        value: https://t2j-frontend.onrender.com
-      - key: BACKEND_URL
-        value: https://t2j-api.onrender.com
+      # Simplified - single URL for everything (same origin)
+      - key: APP_URL
+        value: https://t2j-app.onrender.com
       - key: TRUSTED_ORIGINS
-        value: https://t2j-frontend.onrender.com
+        value: https://t2j-app.onrender.com
       - key: OAUTH_REDIRECT_URI
-        value: https://t2j-api.onrender.com/api/oauth-direct/callback
+        value: https://t2j-app.onrender.com/api/oauth-direct/callback
       - key: OAUTH_COMPLETE_REDIRECT_URI
-        value: https://t2j-frontend.onrender.com/settings/email-accounts/oauth-complete
+        value: https://t2j-app.onrender.com/settings/email-accounts/oauth-complete
       - key: OAUTH_ERROR_REDIRECT_URI
-        value: https://t2j-frontend.onrender.com/settings/email-accounts
+        value: https://t2j-app.onrender.com/settings/email-accounts
       - key: OAUTH_CALLBACK_URI
-        value: https://t2j-frontend.onrender.com/settings/email-accounts/oauth-callback
+        value: https://t2j-app.onrender.com/settings/email-accounts/oauth-callback
     healthCheckPath: /health
     autoDeploy: true
 
-  # BullMQ Workers
+  # BullMQ Workers (unchanged, just updated URL)
   - type: worker
     name: t2j-workers
     runtime: node
@@ -85,7 +71,7 @@ services:
       - key: SERVICE_TOKEN
         sync: false
       - key: BACKEND_URL
-        value: https://t2j-api.onrender.com
+        value: https://t2j-app.onrender.com
     autoDeploy: true
 
   # Redis (for BullMQ)
