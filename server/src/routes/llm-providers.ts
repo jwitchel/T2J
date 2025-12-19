@@ -12,6 +12,8 @@ import {
   getModelInfo
 } from '../types/llm-provider';
 import { LLMClient } from '../lib/llm-client';
+import { userAlertService } from '../lib/user-alert-service';
+import { SourceType } from '../types/user-alerts';
 
 const router = express.Router();
 
@@ -427,7 +429,11 @@ router.delete('/:id', requireAuth, async (req, res): Promise<void> => {
       res.status(404).json({ error: 'LLM provider not found' });
       return;
     }
-    
+
+    // Resolve any active alerts for the deleted provider
+    await userAlertService.resolveAlertsForSource(SourceType.LLM_PROVIDER, providerId);
+    console.log('[llm-providers] Deleted provider %s (user: %s)', providerId, userId);
+
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting LLM provider:', error);

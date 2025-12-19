@@ -3,8 +3,10 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from '@/lib/auth-context'
+import { AlertProvider } from '@/lib/alert-context'
 import { SWRProvider } from '@/components/swr-provider'
 import { Navbar } from '@/components/navbar'
+import { PersistentAlertBanner } from '@/components/persistent-alert-banner'
 import { ThemeProvider } from '@/components/theme-provider'
 
 const geistSans = Geist({
@@ -47,8 +49,11 @@ export default function RootLayout({
         >
           <AuthProvider>
             <SWRProvider>
-              <Navbar />
-              {children}
+              <AlertProvider>
+                <Navbar />
+                <PersistentAlertBanner />
+                {children}
+              </AlertProvider>
             </SWRProvider>
           </AuthProvider>
           <Toaster />

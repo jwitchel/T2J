@@ -8,6 +8,8 @@ import { getActiveContext, hasActiveContextFor, setContextConnection } from './i
 import { sharedConnection as redis } from './redis-connection';
 import { LLMClient } from './llm-client';
 import { normalizeMessageId } from './message-id-utils';
+import { userAlertService } from './user-alert-service';
+import { SourceType } from '../types/user-alerts';
 
 export interface EmailAccountConfig {
   id: string;
@@ -208,6 +210,12 @@ export class ImapOperations {
       this.connection = await imapPool.getConnection(
         config,
         this._account.userId,
+        this._account.id
+      );
+
+      // Connection successful - resolve any active alerts for this account
+      await userAlertService.resolveAlertsForSource(
+        SourceType.EMAIL_ACCOUNT,
         this._account.id
       );
 

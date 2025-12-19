@@ -6,6 +6,18 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { LLMProviderConfig, LLMProviderError, LLMProviderType, getModelInfo } from '../types/llm-provider';
 import { EmailActionType } from '../types/email-action-tracking';
 import { OAuthTokenService, OAuthTokens } from './oauth-token-service';
+import { userAlertService } from './user-alert-service';
+import { AlertType, AlertSeverity, SourceType } from '../types/user-alerts';
+
+/**
+ * Optional context for alert tracking
+ * When provided, LLM errors will create user alerts
+ */
+export interface LLMAlertContext {
+  userId: string;
+  providerId: string;
+  providerName: string;
+}
 
 /**
  * Context flags for email classification
@@ -51,10 +63,12 @@ export interface ActionAnalysisResponse {
 export class LLMClient {
   private model: any;
   private modelName: string;
+  private alertContext?: LLMAlertContext;
 
-  constructor(config: LLMProviderConfig) {
+  constructor(config: LLMProviderConfig, alertContext?: LLMAlertContext) {
     this.model = this._createModel(config);
     this.modelName = config.modelName;
+    this.alertContext = alertContext;
   }
 
   private _createModel(config: LLMProviderConfig): any {
@@ -153,6 +167,15 @@ export class LLMClient {
         });
 
         clearTimeout(timeoutId);
+
+        // Success - resolve any active alerts for this provider
+        if (this.alertContext) {
+          await userAlertService.resolveAlertsForSource(
+            SourceType.LLM_PROVIDER,
+            this.alertContext.providerId
+          );
+        }
+
         return text;
       } catch (error: unknown) {
         clearTimeout(timeoutId);
@@ -178,7 +201,58 @@ export class LLMClient {
       }
     }
 
+    // Create alert for persistent LLM failure
+    if (this.alertContext) {
+      await this._createLLMAlert(lastError);
+    }
+
     throw this._handleError(lastError);
+  }
+
+  /**
+   * Create an alert for LLM provider errors
+   * @private
+   */
+  private async _createLLMAlert(error: unknown): Promise<void> {
+    if (!this.alertContext) return;
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const { userId, providerId, providerName } = this.alertContext;
+
+    // Determine alert type and message based on error
+    let alertType: AlertType = AlertType.SERVICE_UNAVAILABLE;
+    let message = `LLM request failed: ${errorMessage}`;
+    let severity: AlertSeverity = AlertSeverity.WARNING;
+
+    if (errorMessage.includes('API key') || errorMessage.includes('auth')) {
+      alertType = AlertType.INVALID_CREDENTIALS;
+      message = 'Invalid API key. Please check your credentials.';
+      severity = AlertSeverity.ERROR;
+    } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+      alertType = AlertType.RATE_LIMIT;
+      message = 'Rate limited by provider. Requests may be delayed.';
+      severity = AlertSeverity.WARNING;
+    } else if (errorMessage.includes('quota')) {
+      alertType = AlertType.QUOTA_EXCEEDED;
+      message = 'Usage quota exceeded. Please check your plan.';
+      severity = AlertSeverity.ERROR;
+    } else if (errorMessage.includes('connection') || errorMessage.includes('ECONNREFUSED')) {
+      alertType = AlertType.CONNECTION_FAILED;
+      message = 'Cannot connect to LLM provider.';
+      severity = AlertSeverity.ERROR;
+    }
+
+    await userAlertService.createAlert({
+      userId,
+      alertType,
+      severity,
+      sourceType: SourceType.LLM_PROVIDER,
+      sourceId: providerId,
+      sourceName: `${providerName} (${this.modelName})`,
+      message,
+      actionUrl: '/settings/llm-providers',
+      actionLabel: 'View Settings',
+    });
   }
 
   /**

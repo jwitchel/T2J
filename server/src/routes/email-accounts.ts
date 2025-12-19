@@ -13,6 +13,8 @@ import { ImapOperations } from '../lib/imap-operations';
 import { withImapContext } from '../lib/imap-context';
 import { realTimeLogger } from '../lib/real-time-logger';
 import { jobSchedulerManager, SchedulerId } from '../lib/job-scheduler-manager';
+import { userAlertService } from '../lib/user-alert-service';
+import { SourceType } from '../types/user-alerts';
 
 const router = express.Router();
 
@@ -442,9 +444,12 @@ router.delete('/:id', requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
+    // Resolve any active alerts for the deleted account
+    await userAlertService.resolveAlertsForSource(SourceType.EMAIL_ACCOUNT, accountId);
+
     // Disable scheduler for deleted account
     await jobSchedulerManager.disableScheduler(SchedulerId.CHECK_MAIL, userId, accountId);
-    console.log(`[email-accounts] Disabled scheduler for deleted account ${accountId}`);
+    console.log('[email-accounts] Deleted account %s (user: %s)', accountId, userId);
 
     res.status(204).send();
   } catch (error) {

@@ -3,6 +3,8 @@ import { EventEmitter } from 'events';
 import { promisify } from 'util';
 import { realTimeLogger } from './real-time-logger';
 import { normalizeMessageIdArray } from './message-id-utils';
+import { userAlertService } from './user-alert-service';
+import { AlertType, AlertSeverity, SourceType } from '../types/user-alerts';
 
 export interface ImapConfig {
   user: string;
@@ -176,8 +178,22 @@ export class ImapConnection extends EventEmitter {
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const timeout = setTimeout(async () => {
         this.imap.end();
+
+        // Create alert for timeout
+        await userAlertService.createAlert({
+          userId: this.userId,
+          alertType: AlertType.CONNECTION_FAILED,
+          severity: AlertSeverity.ERROR,
+          sourceType: SourceType.EMAIL_ACCOUNT,
+          sourceId: this.emailAccountId,
+          sourceName: this.config.user,
+          message: 'Connection timed out. The email server may be unavailable.',
+          actionUrl: '/settings/email-accounts',
+          actionLabel: 'Fix Connection',
+        });
+
         reject(new ImapConnectionError('Connection timeout', 'ETIMEDOUT'));
       }, this.config.connTimeout || 10000);
 
@@ -186,12 +202,33 @@ export class ImapConnection extends EventEmitter {
         resolve();
       });
 
-      this.imap.once('error', (err: Error) => {
+      this.imap.once('error', async (err: Error & { code?: string; source?: string }) => {
         clearTimeout(timeout);
+
+        // Create alert for connection failure
+        const errorCode = err.code;
+        const isAuthError = errorCode === 'AUTHENTICATIONFAILED' ||
+                           err.message.toLowerCase().includes('auth') ||
+                           err.message.toLowerCase().includes('login');
+
+        await userAlertService.createAlert({
+          userId: this.userId,
+          alertType: isAuthError ? AlertType.INVALID_CREDENTIALS : AlertType.CONNECTION_FAILED,
+          severity: AlertSeverity.ERROR,
+          sourceType: SourceType.EMAIL_ACCOUNT,
+          sourceId: this.emailAccountId,
+          sourceName: this.config.user,
+          message: isAuthError
+            ? 'Authentication failed. Please check your credentials.'
+            : `Connection failed: ${err.message}`,
+          actionUrl: '/settings/email-accounts',
+          actionLabel: isAuthError ? 'Fix Credentials' : 'Fix Connection',
+        });
+
         reject(new ImapConnectionError(
           err.message,
-          (err as any).code,
-          (err as any).source
+          err.code,
+          err.source
         ));
       });
 

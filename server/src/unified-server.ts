@@ -28,6 +28,7 @@ import workersRoutes from './routes/workers';
 import schedulersRoutes from './routes/schedulers';
 import dashboardAnalyticsRoutes from './routes/dashboard-analytics';
 import actionRulesRoutes from './routes/action-rules';
+import alertsRoutes from './routes/alerts';
 
 import { pool } from './lib/db';
 import { auth } from './lib/auth';
@@ -128,6 +129,7 @@ async function main() {
   app.use('/api/schedulers', schedulersRoutes);
   app.use('/api/dashboard', dashboardAnalyticsRoutes);
   app.use('/api/action-rules', actionRulesRoutes);
+  app.use('/api/alerts', alertsRoutes);
 
   await import('./lib/queue-events');
 

@@ -5,6 +5,8 @@ import { withTransaction } from '../lib/db/transaction-utils';
 import { encrypt } from '../lib/crypto';
 import crypto from 'crypto';
 import { detectSentFolder, IMAP_HOSTS } from './email-accounts';
+import { userAlertService } from '../lib/user-alert-service';
+import { SourceType } from '../types/user-alerts';
 
 const router = express.Router();
 
@@ -187,7 +189,7 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    type CompleteResult = { success: true; email: string } | { error: string; status: number };
+    type CompleteResult = { success: true; email: string; accountId: string } | { error: string; status: number };
 
     const result = await withTransaction(pool, async (client): Promise<CompleteResult> => {
       // Retrieve OAuth session
@@ -209,8 +211,11 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
         [userId, session.email]
       );
 
+      let accountId: string;
+
       if (existing.rows.length > 0) {
         // Update existing account with OAuth credentials
+        accountId = existing.rows[0].id;
         await client.query(
           `UPDATE email_accounts
            SET oauth_provider = $1,
@@ -226,17 +231,18 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
             session.access_token,
             expiresAt,
             session.email,
-            existing.rows[0].id
+            accountId
           ]
         );
       } else {
         // Create new email account with OAuth
-        await client.query(
+        const insertResult = await client.query(
           `INSERT INTO email_accounts
            (user_id, email_address, imap_host, imap_port, imap_username,
             oauth_provider, oauth_refresh_token, oauth_access_token,
             oauth_token_expires_at, oauth_user_id, sent_folder)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING id`,
           [
             userId,
             session.email,
@@ -251,13 +257,19 @@ router.post('/complete', requireAuth, async (req, res): Promise<void> => {
             detectSentFolder(IMAP_HOSTS.GMAIL)
           ]
         );
+        accountId = insertResult.rows[0].id;
       }
 
       // Delete the session
       await client.query('DELETE FROM oauth_sessions WHERE token = $1', [sessionToken]);
 
-      return { success: true, email: session.email };
+      return { success: true, email: session.email, accountId };
     });
+
+    // Resolve any active alerts for this email account after successful OAuth
+    if ('success' in result) {
+      await userAlertService.resolveAlertsForSource(SourceType.EMAIL_ACCOUNT, result.accountId);
+    }
 
     if ('error' in result) {
       res.status(result.status).json({ error: result.error });

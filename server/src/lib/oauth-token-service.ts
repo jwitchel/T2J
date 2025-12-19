@@ -1,5 +1,7 @@
 import { pool } from './db';
 import { encrypt, decrypt } from './crypto';
+import { userAlertService } from './user-alert-service';
+import { AlertType, AlertSeverity, SourceType } from '../types/user-alerts';
 
 export interface OAuthTokens {
   accessToken: string;
@@ -136,10 +138,13 @@ export class OAuthTokenService {
 
       // Check for specific error types
       if (errorData.error === 'invalid_grant' || response.status === 400) {
-        // Refresh token is invalid or expired
+        // Refresh token is invalid or expired - create alert
+        await this._createReauthAlert(emailAccountId, AlertType.REAUTH_REQUIRED, 'Your email account requires re-authorization.');
         throw new Error('REFRESH_TOKEN_INVALID: The refresh token is invalid or expired. Please re-authenticate.');
       }
 
+      // Other OAuth errors (server errors, network issues, etc.)
+      await this._createReauthAlert(emailAccountId, AlertType.CONNECTION_FAILED, `OAuth refresh failed: ${errorData.error || response.status}`);
       throw new Error(`Token refresh failed: ${response.status} - ${errorData.error || errorText}`);
     }
 
@@ -155,5 +160,38 @@ export class OAuthTokenService {
     await this.storeTokens(emailAccountId, newTokens, '');
 
     return newTokens;
+  }
+
+  /**
+   * Create an alert for OAuth errors
+   */
+  private static async _createReauthAlert(
+    emailAccountId: string,
+    alertType: AlertType,
+    message: string
+  ): Promise<void> {
+    const result = await pool.query(
+      'SELECT user_id, email_address FROM email_accounts WHERE id = $1',
+      [emailAccountId]
+    );
+
+    if (result.rows.length === 0) {
+      console.error('[OAuthTokenService] Cannot create alert: email account %s not found', emailAccountId);
+      return;
+    }
+
+    const { user_id, email_address } = result.rows[0];
+
+    await userAlertService.createAlert({
+      userId: user_id,
+      alertType,
+      severity: AlertSeverity.ERROR,
+      sourceType: SourceType.EMAIL_ACCOUNT,
+      sourceId: emailAccountId,
+      sourceName: email_address,
+      message,
+      actionUrl: '/settings/email-accounts',
+      actionLabel: 'Reconnect',
+    });
   }
 }
