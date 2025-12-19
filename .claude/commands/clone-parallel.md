@@ -20,9 +20,8 @@ Determine paths dynamically:
 - Clone name: `{repo-name}-{number}` (e.g., "T2J-2")
 - Clone path: `{parent-directory}/{clone-name}`
 
-Calculate ports based on clone number:
-- Frontend port: 3000 + (number * 2) + 1 (e.g., clone 2 = 3003, clone 3 = 3005)
-- Backend port: 3000 + (number * 2) + 2 (e.g., clone 2 = 3004, clone 3 = 3006)
+Calculate port based on clone number (unified server - single port):
+- Port: 3000 + number (e.g., clone 2 = 3002, clone 3 = 3003, clone 4 = 3004)
 
 ### 2. Check if clone already exists
 
@@ -68,14 +67,11 @@ npm install
 
 Read the current repo's `.env` file and create a modified version for the clone:
 
-**Values to CHANGE (use calculated ports):**
-- `FRONTEND_PORT={frontend-port}` (for Next.js dev server)
-- `FRONTEND_URL=http://localhost:{frontend-port}`
-- `BACKEND_URL=http://localhost:{backend-port}`
-- `PORT={backend-port}`
-- `NEXT_PUBLIC_API_URL=http://localhost:{backend-port}`
-- `TRUSTED_ORIGINS=http://localhost:{frontend-port},http://localhost:{backend-port}`
-- Update any OAuth redirect URIs to use the new ports
+**Values to CHANGE (use calculated port):**
+- `APP_URL=http://localhost:{port}` (unified server URL)
+- `PORT={port}`
+- `TRUSTED_ORIGINS=http://localhost:{port}`
+- Update any OAuth redirect URIs to use the new port (all should use `localhost:{port}`)
 - `WORKERS_START_PAUSED=true` (always pause workers in clones)
 
 **Values to KEEP THE SAME:**
@@ -85,31 +81,19 @@ Read the current repo's `.env` file and create a modified version for the clone:
 - OAuth client IDs and secrets
 - SERVICE_TOKEN
 
-### 7. Create .env.local
-
-Create `{clone-path}/.env.local` with:
-```
-NEXT_PUBLIC_API_URL=http://localhost:{backend-port}
-```
-
-### 8. Report completion
+### 7. Report completion
 
 Tell the user:
 
 1. Clone created at: `{clone-path}`
-2. Ports: Frontend {frontend-port}, Backend {backend-port}
+2. Port: {port} (unified server - frontend + API)
 3. Shared: Database and Redis with main instance
 4. Workers: Paused (main instance handles jobs)
 
-To start servers (uses `dev:clone` which skips Redis reset since Redis is shared):
+To start the server (uses `dev:clone` which skips Redis reset since Redis is shared):
 ```bash
 cd {clone-path}
 npm run dev:clone
 ```
 
-Or separately:
-```bash
-npm run dev &
-npm run server &
-npm run workers
-```
+Then access `http://localhost:{port}`
