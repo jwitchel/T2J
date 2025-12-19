@@ -252,22 +252,22 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
+        {data.total > 0 && (
           <div className="mt-4 flex items-center justify-between border-t pt-4">
             <div className="text-muted-foreground text-xs">
               Showing {offset + 1}-{Math.min(offset + PAGE_SIZE, data.total)} of {data.total}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setPage(p => p - 1)}
                 disabled={!canGoPrev}
-                className="h-8 w-8 p-0"
+                className="h-6 w-6 p-0"
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-3 w-3" />
               </Button>
-              <span className="text-sm">
+              <span className="text-muted-foreground text-xs">
                 Page {page + 1} of {totalPages}
               </span>
               <Button
@@ -275,9 +275,9 @@ export function RecentActionsTable({ lookBackControls }: RecentActionsTableProps
                 size="sm"
                 onClick={() => setPage(p => p + 1)}
                 disabled={!canGoNext}
-                className="h-8 w-8 p-0"
+                className="h-6 w-6 p-0"
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-3 w-3" />
               </Button>
             </div>
           </div>
