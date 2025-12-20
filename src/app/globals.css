@@ -25,6 +25,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -109,7 +112,10 @@
   --muted-foreground: oklch(0.552 0.016 285.938);
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.936 0.032 27.325);
+  --destructive-foreground: oklch(0.444 0.177 26.899);
+  --warning: oklch(0.962 0.059 95.617);
+  --warning-foreground: oklch(0.473 0.137 46.201);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.479 0.18 264.532);
@@ -145,7 +151,10 @@
   --muted-foreground: oklch(0.705 0.015 286.067);
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: oklch(0.258 0.092 26.042);
+  --destructive-foreground: oklch(0.868 0.05 24.526);
+  --warning: oklch(0.293 0.066 53.813);
+  --warning-foreground: oklch(0.887 0.094 84.093);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.611 0.19 264.108);
@@ -173,6 +182,31 @@
   }
 }
 
+
+/* Alert variant styles */
+[data-slot="alert"][data-variant="destructive"] {
+  @apply !border-red-200 !bg-red-50 !text-red-800 dark:!border-red-800 dark:!bg-red-950/50 dark:!text-red-200;
+}
+
+[data-slot="alert"][data-variant="destructive"] [data-slot="alert-title"] {
+  @apply !text-red-800 dark:!text-red-200;
+}
+
+[data-slot="alert"][data-variant="destructive"] [data-slot="alert-description"] {
+  @apply !text-red-700 dark:!text-red-300;
+}
+
+[data-slot="alert"][data-variant="warning"] {
+  @apply !border-amber-200 !bg-amber-50 !text-amber-900 dark:!border-amber-800 dark:!bg-amber-950/50 dark:!text-amber-200;
+}
+
+[data-slot="alert"][data-variant="warning"] [data-slot="alert-title"] {
+  @apply !text-amber-900 dark:!text-amber-200;
+}
+
+[data-slot="alert"][data-variant="warning"] [data-slot="alert-description"] {
+  @apply !text-amber-800 dark:!text-amber-300;
+}
 
 /* Sonner toast styles */
 [data-sonner-toast][data-type='success'] {

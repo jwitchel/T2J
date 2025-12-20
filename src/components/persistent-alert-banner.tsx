@@ -33,22 +33,14 @@ export function PersistentAlertBanner() {
     <div className="space-y-2 px-4 py-2">
       {sortedAlerts.map((alert) => {
         const isError = alert.severity === AlertSeverity.ERROR
-        const variant = isError ? 'destructive' : 'default'
+        const variant = isError ? 'destructive' : 'warning'
 
         return (
-          <Alert
-            key={alert.id}
-            variant={variant}
-            className={
-              !isError
-                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200'
-                : ''
-            }
-          >
+          <Alert key={alert.id} variant={variant}>
             {isError ? (
               <AlertCircle className="h-4 w-4" />
             ) : (
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertTriangle className="h-4 w-4" />
             )}
             <div className="flex flex-1 items-start justify-between gap-4">
               <div className="flex-1">
