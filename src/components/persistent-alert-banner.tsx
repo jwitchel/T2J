@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { AlertCircle, AlertTriangle, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Info, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useAlerts } from '@/lib/alert-context'
@@ -33,23 +33,18 @@ export function PersistentAlertBanner() {
     <div className="space-y-2 px-4 py-2">
       {sortedAlerts.map((alert) => {
         const isError = alert.severity === AlertSeverity.ERROR
-        const variant = isError ? 'destructive' : 'default'
+        const variantMap = {
+          [AlertSeverity.ERROR]: 'destructive',
+          [AlertSeverity.WARNING]: 'warning',
+          [AlertSeverity.INFO]: 'info',
+        } as const
+        const variant = variantMap[alert.severity] ?? 'warning'
 
         return (
-          <Alert
-            key={alert.id}
-            variant={variant}
-            className={
-              !isError
-                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200'
-                : ''
-            }
-          >
-            {isError ? (
-              <AlertCircle className="h-4 w-4" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            )}
+          <Alert key={alert.id} variant={variant}>
+            {alert.severity === AlertSeverity.ERROR && <AlertCircle className="h-4 w-4" />}
+            {alert.severity === AlertSeverity.WARNING && <AlertTriangle className="h-4 w-4" />}
+            {alert.severity === AlertSeverity.INFO && <Info className="h-4 w-4" />}
             <div className="flex flex-1 items-start justify-between gap-4">
               <div className="flex-1">
                 <AlertTitle className="flex items-center gap-2">
@@ -65,7 +60,13 @@ export function PersistentAlertBanner() {
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  variant={isError ? 'destructive' : 'outline'}
+                  variant={
+                    alert.severity === AlertSeverity.ERROR
+                      ? 'destructive'
+                      : alert.severity === AlertSeverity.WARNING
+                        ? 'warning'
+                        : 'info'
+                  }
                   onClick={() => router.push(alert.actionUrl)}
                 >
                   {alert.actionLabel}
