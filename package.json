@@ -1,6 +1,6 @@
 {
   "name": "time-to-just",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "npm run postgres:up && npm run redis:reset && concurrently -n \"SERVER,WORKERS\" -c \"green,yellow\" \"npm run server\" \"npm run workers\"",
