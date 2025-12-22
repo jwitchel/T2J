@@ -41,10 +41,10 @@
     "workers": "cd server && npx ts-node src/scripts/start-workers.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.0",
-    "@ai-sdk/google": "^3.0.0",
-    "@ai-sdk/openai": "^3.0.0",
-    "@ai-sdk/openai-compatible": "^2.0.0",
+    "@ai-sdk/anthropic": "^2.0.56",
+    "@ai-sdk/google": "^2.0.51",
+    "@ai-sdk/openai": "^2.0.88",
+    "@ai-sdk/openai-compatible": "^1.0.29",
     "@hookform/resolvers": "^5.1.1",
     "@noble/hashes": "^1.8.0",
     "@radix-ui/react-accordion": "^1.2.11",
