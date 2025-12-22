@@ -34,7 +34,7 @@ const pool = new Pool({
 const embeddingService = new EmbeddingService();
 const styleEmbeddingService = new StyleEmbeddingService();
 const vectorSearchService = new VectorSearchService(pool);
-const testStyleClusteringService = new StyleClusteringService(pool, styleEmbeddingService);
+const testStyleClusteringService = new StyleClusteringService(pool);
 
 // Test configuration
 const TEST_USER_ID = 'test-vector-user-id';

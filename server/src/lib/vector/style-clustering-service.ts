@@ -14,7 +14,7 @@
 
 import { Pool } from 'pg';
 import { withTransaction } from '../db/transaction-utils';
-import { StyleEmbeddingService, styleEmbeddingService } from './style-embedding-service';
+import { styleEmbeddingService } from './style-embedding-service';
 import {
   StyleClusterParams,
   StyleCluster,
@@ -27,11 +27,7 @@ export class StyleClusteringService {
   private readonly defaultClusterCount = 3;  // formal, neutral, casual
   private readonly defaultClusterNames = ['formal', 'neutral', 'casual'];
 
-  constructor(
-    private pool: Pool,
-    // @ts-expect-error - Will be used for future style vector generation
-    private _styleEmbeddingService: StyleEmbeddingService
-  ) {}
+  constructor(private pool: Pool) {}
 
   // ============================================================================
   // Public API Methods
