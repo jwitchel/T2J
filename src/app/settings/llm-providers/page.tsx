@@ -69,23 +69,29 @@ interface ProviderFormData {
 
 const PROVIDER_MODELS = {
   openai: [
-    { value: 'gpt-4-turbo-preview', label: 'GPT-4 Turbo' },
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
     { value: 'gpt-4', label: 'GPT-4' },
     { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
   ],
   anthropic: [
+    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
     { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
     { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet' },
     { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
   ],
   google: [
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
     { value: 'gemini-pro', label: 'Gemini Pro' },
-    { value: 'gemini-pro-vision', label: 'Gemini Pro Vision' },
   ],
   local: [
-    { value: 'llama-2-7b', label: 'Llama 2 7B' },
-    { value: 'llama-2-13b', label: 'Llama 2 13B' },
-    { value: 'mixtral-8x7b', label: 'Mixtral 8x7B' },
+    { value: 'llama3.2', label: 'Llama 3.2' },
+    { value: 'llama3.1', label: 'Llama 3.1' },
+    { value: 'mistral', label: 'Mistral' },
+    { value: 'mixtral', label: 'Mixtral' },
+    { value: 'qwen2.5-coder', label: 'Qwen 2.5 Coder' },
   ],
 }
 

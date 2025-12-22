@@ -114,8 +114,9 @@ export interface ModelInfo {
 export function getModelInfo(modelName: string): ModelInfo {
   // Model info based on provider and model name
   const modelInfo: Record<string, { contextWindow: number; maxOutput: number }> = {
-    // OpenAI
-    'gpt-4-turbo-preview': { contextWindow: 128000, maxOutput: 4096 },
+    // OpenAI (AI SDK v5 compatible - v2 spec models only)
+    'gpt-4o': { contextWindow: 128000, maxOutput: 16384 },
+    'gpt-4o-mini': { contextWindow: 128000, maxOutput: 16384 },
     'gpt-4-turbo': { contextWindow: 128000, maxOutput: 4096 },
     'gpt-4': { contextWindow: 8192, maxOutput: 4096 },
     'gpt-3.5-turbo': { contextWindow: 16384, maxOutput: 4096 },
