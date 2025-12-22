@@ -29,7 +29,7 @@ export class StyleClusteringService {
 
   constructor(
     private pool: Pool,
-    // @ts-ignore - Will be used for future style vector generation
+    // @ts-expect-error - Will be used for future style vector generation
     private _styleEmbeddingService: StyleEmbeddingService
   ) {}
 

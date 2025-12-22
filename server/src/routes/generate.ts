@@ -21,7 +21,7 @@ async function getProviderConfig(userId: string, providerId?: string): Promise<L
   if (providerId) {
     // Get specific provider
     query = `
-      SELECT id, provider_type, api_key_encrypted, api_endpoint, model_name
+      SELECT id, provider_name, provider_type, api_key_encrypted, api_endpoint, model_name
       FROM llm_providers
       WHERE user_id = $1 AND id = $2 AND is_active = true
     `;
@@ -29,7 +29,7 @@ async function getProviderConfig(userId: string, providerId?: string): Promise<L
   } else {
     // Get default provider
     query = `
-      SELECT id, provider_type, api_key_encrypted, api_endpoint, model_name
+      SELECT id, provider_name, provider_type, api_key_encrypted, api_endpoint, model_name
       FROM llm_providers
       WHERE user_id = $1 AND is_default = true AND is_active = true
       LIMIT 1
@@ -47,6 +47,7 @@ async function getProviderConfig(userId: string, providerId?: string): Promise<L
   
   return {
     id: provider.id,
+    name: provider.provider_name,
     type: provider.provider_type,
     apiKey: decryptPassword(provider.api_key_encrypted),
     apiEndpoint: provider.api_endpoint,
@@ -79,8 +80,12 @@ router.post('/', requireAuth, async (req, res): Promise<void> => {
       return;
     }
     
-    // Create LLM client
-    const client = new LLMClient(providerConfig);
+    // Create LLM client with alert context
+    const client = new LLMClient(providerConfig, {
+      userId,
+      providerId: providerConfig.id,
+      providerName: providerConfig.name
+    });
 
     // Generate response
     const reply = await client.generate(data.prompt, {

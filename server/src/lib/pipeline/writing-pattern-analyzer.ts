@@ -5,6 +5,7 @@ import { realTimeLogger } from '../real-time-logger';
 import { TemplateManager } from './template-manager';
 import { decryptPassword } from '../crypto';
 import { nameRedactor } from '../name-redactor';
+import { LLMProviderType } from '../../types/llm-provider';
 import nlp from 'compromise';
 import sentencesPlugin from 'compromise-sentences';
 import * as ss from 'simple-statistics';
@@ -538,8 +539,10 @@ export class WritingPatternAnalyzer {
 
   /**
    * Initialize with LLM configuration
+   * @param userId - User ID for alert context
+   * @param llmProviderId - Optional specific LLM provider ID
    */
-  public async initialize(llmProviderId?: string): Promise<void> {
+  public async initialize(userId: string, llmProviderId?: string): Promise<void> {
     // Initialize template manager
     await this.templateManager.initialize();
     // Get LLM provider configuration using raw SQL
@@ -568,10 +571,15 @@ export class WritingPatternAnalyzer {
     this.modelName = provider.model_name;
     this.llmClient = new LLMClient({
       id: provider.id,
-      type: provider.provider_type as any,
+      name: provider.provider_name,
+      type: provider.provider_type as LLMProviderType,
       apiKey: decryptedApiKey,
       apiEndpoint: provider.api_endpoint,
       modelName: provider.model_name
+    }, {
+      userId,
+      providerId: provider.id,
+      providerName: provider.provider_name
     });
   }
 

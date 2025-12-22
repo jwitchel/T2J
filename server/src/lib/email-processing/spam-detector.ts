@@ -35,11 +35,12 @@ export class SpamDetector {
   /**
    * Initialize the spam detector with an LLM provider
    * @param providerId - LLM provider ID to use for spam detection
+   * @param userId - User ID for alert context
    */
-  async initialize(providerId: string): Promise<void> {
+  async initialize(providerId: string, userId: string): Promise<void> {
     // Load LLM provider config from database
     const result = await pool.query(
-      `SELECT id, provider_type, api_key_encrypted as api_key, api_endpoint, model_name
+      `SELECT id, provider_name, provider_type, api_key_encrypted as api_key, api_endpoint, model_name
        FROM llm_providers
        WHERE id = $1 AND is_active = true`,
       [providerId]
@@ -58,13 +59,18 @@ export class SpamDetector {
     // Build LLMProviderConfig object
     const config = {
       id: provider.id,
+      name: provider.provider_name,
       type: provider.provider_type,
       apiKey: decryptedApiKey,
       apiEndpoint: provider.api_endpoint,
       modelName: provider.model_name
     };
 
-    this.llmClient = new LLMClient(config);
+    this.llmClient = new LLMClient(config, {
+      userId,
+      providerId: provider.id,
+      providerName: provider.provider_name
+    });
   }
 
   /**
@@ -172,14 +178,15 @@ const spamDetectorCache = new Map<string, SpamDetector>();
 /**
  * Get or create a SpamDetector instance for a given provider
  * @param providerId - LLM provider ID
+ * @param userId - User ID for alert context
  * @returns Initialized SpamDetector instance
  */
-export async function getSpamDetector(providerId: string): Promise<SpamDetector> {
+export async function getSpamDetector(providerId: string, userId: string): Promise<SpamDetector> {
   let detector = spamDetectorCache.get(providerId);
 
   if (!detector) {
     detector = new SpamDetector();
-    await detector.initialize(providerId);
+    await detector.initialize(providerId, userId);
     spamDetectorCache.set(providerId, detector);
   }
 

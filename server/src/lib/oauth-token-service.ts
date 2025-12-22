@@ -159,6 +159,9 @@ export class OAuthTokenService {
     // Store the new tokens
     await this.storeTokens(emailAccountId, newTokens, '');
 
+    // Success - resolve any OAuth-related alerts for this account
+    await userAlertService.resolveAlertsForSource(SourceType.EMAIL_ACCOUNT, emailAccountId);
+
     return newTokens;
   }
 

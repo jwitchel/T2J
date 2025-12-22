@@ -1,7 +1,7 @@
 import { vectorSearchService } from '../vector';
 import { EmbeddingService } from '../vector/embedding-service';
 import { StyleEmbeddingService } from '../vector/style-embedding-service';
-import { ExampleSelector } from './example-selector';
+import { ExampleSelector, ExampleSelectionResult } from './example-selector';
 import { PromptFormatterV2 } from './prompt-formatter-v2';
 import { EmailIngestPipeline } from './email-ingest-pipeline';
 import { ProcessedEmail } from './types';
@@ -24,15 +24,12 @@ export interface ToneLearningConfig {
 export class ToneLearningOrchestrator {
   private embeddingService: EmbeddingService;
   private styleEmbeddingService: StyleEmbeddingService;
-  // relationshipService no longer needed - ExampleSelector uses VectorSearchService internally
-  // private relationshipService: RelationshipService;
   private relationshipDetector: RelationshipDetector;
   private styleAggregationService: StyleAggregationService;
   private patternAnalyzer: WritingPatternAnalyzer;
-  // @ts-ignore - Used via bracket notation in DraftGenerator
-  private exampleSelector: ExampleSelector;
   private promptFormatter: PromptFormatterV2;
   private ingestionPipeline: EmailIngestPipeline;
+  private exampleSelector: ExampleSelector;
 
   constructor(
     embeddingService?: EmbeddingService,
@@ -40,17 +37,17 @@ export class ToneLearningOrchestrator {
     relationshipDetector?: RelationshipDetector,
     styleAggregationService?: StyleAggregationService,
     patternAnalyzer?: WritingPatternAnalyzer,
-    exampleSelector?: ExampleSelector,
     promptFormatter?: PromptFormatterV2,
-    ingestionPipeline?: EmailIngestPipeline
+    ingestionPipeline?: EmailIngestPipeline,
+    exampleSelector?: ExampleSelector
   ) {
     this.embeddingService = embeddingService || new EmbeddingService();
     this.styleEmbeddingService = styleEmbeddingService || new StyleEmbeddingService();
     this.relationshipDetector = relationshipDetector || new RelationshipDetector();
     this.styleAggregationService = styleAggregationService || new StyleAggregationService();
     this.patternAnalyzer = patternAnalyzer || new WritingPatternAnalyzer();
-    this.exampleSelector = exampleSelector || new ExampleSelector(this.relationshipDetector);
     this.promptFormatter = promptFormatter || new PromptFormatterV2();
+    this.exampleSelector = exampleSelector || new ExampleSelector(this.relationshipDetector);
     this.ingestionPipeline = ingestionPipeline || new EmailIngestPipeline(
       this.embeddingService,
       this.styleEmbeddingService,
@@ -64,14 +61,27 @@ export class ToneLearningOrchestrator {
     );
   }
 
-  async initialize(): Promise<void> {
+  async initialize(userId: string): Promise<void> {
     await vectorSearchService.initialize();
     await this.embeddingService.initialize();
     await this.styleEmbeddingService.initialize();
     await this.promptFormatter.initialize();
-    await this.patternAnalyzer.initialize();
+    await this.patternAnalyzer.initialize(userId);
+    await this.exampleSelector.initialize();
   }
-  
+
+  /**
+   * Select examples for email draft generation
+   */
+  async selectExamples(params: {
+    userId: string;
+    incomingEmail: string;
+    recipientEmail: string;
+    desiredCount?: number;
+  }): Promise<ExampleSelectionResult> {
+    return this.exampleSelector.selectExamples(params);
+  }
+
   /**
    * Ingest a batch of historical emails
    */
@@ -147,31 +157,6 @@ Email Details:
         console.error(`Style aggregation failed for ${relationshipType}:`, error);
       }
     }
-  }
-  
-  /**
-   * Process feedback on a generated draft
-   */
-  async processDraftFeedback(
-    _draftId: string,
-    _feedback: {
-      edited: boolean;
-      editDistance?: number;
-      accepted: boolean;
-      userRating?: number;
-    }
-  ): Promise<void> {
-    // Future: Implement feedback processing to update draft quality metrics
-    // Would track: acceptance rate, edit distance, user ratings
-    console.log(chalk.yellow('📝 Feedback processing not yet implemented'));
-  }
-  
-  /**
-   * Load test data (John's emails)
-   * @deprecated Use seed-demo.ts instead
-   */
-  async loadTestData(_userId: string = 'john-test-user'): Promise<void> {
-    console.log('loadTestData is deprecated. Use npm run seed instead.');
   }
   
   /**

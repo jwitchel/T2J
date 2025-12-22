@@ -7,6 +7,7 @@
  */
 
 import { pool } from './db';
+import { sharedConnection as redis } from './redis-connection';
 import {
   CreateAlertParams,
   UserAlert,
@@ -14,7 +15,24 @@ import {
   PERSISTENT_ERROR_THRESHOLD,
 } from '../types/user-alerts';
 
+const ALERT_VERSION_PREFIX = 'alerts:version:';
+
 class UserAlertService {
+  /**
+   * Get alert version for a user (for efficient polling)
+   */
+  async getAlertVersion(userId: string): Promise<number> {
+    const version = await redis.get(`${ALERT_VERSION_PREFIX}${userId}`);
+    return version ? parseInt(version, 10) : 0;
+  }
+
+  /**
+   * Increment alert version when alerts change
+   */
+  private async _incrementVersion(userId: string): Promise<void> {
+    await redis.incr(`${ALERT_VERSION_PREFIX}${userId}`);
+  }
+
   /**
    * Enqueue: Create alert or increment error_count if exists
    * Uses INSERT ... ON CONFLICT to atomically upsert
@@ -60,6 +78,9 @@ class UserAlertService {
       );
       await this._maybeSendNotification(id, params);
     }
+
+    // Notify frontend of change
+    await this._incrementVersion(params.userId);
   }
 
   /**
@@ -78,6 +99,7 @@ class UserAlertService {
         '[UserAlertService] Resolved alert %s: %s for %s (user: %s)',
         alertId, alert_type, source_name, user_id
       );
+      await this._incrementVersion(user_id);
     }
   }
 
@@ -103,6 +125,32 @@ class UserAlertService {
         '[UserAlertService] Auto-resolved %d alert(s) for %s (user: %s)',
         result.rowCount, firstRow.source_name, firstRow.user_id
       );
+      await this._incrementVersion(firstRow.user_id);
+    }
+  }
+
+  /**
+   * Resolve ALL alerts of a source type for a user
+   * Called when any provider of that type succeeds (e.g., any LLM works = clear all LLM alerts)
+   */
+  async resolveAllAlertsForSourceType(
+    userId: string,
+    sourceType: SourceType
+  ): Promise<void> {
+    const result = await pool.query(
+      `UPDATE user_alerts
+       SET resolved_at = NOW()
+       WHERE user_id = $1 AND source_type = $2 AND resolved_at IS NULL
+       RETURNING id, source_name, alert_type`,
+      [userId, sourceType]
+    );
+
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(
+        '[UserAlertService] Auto-resolved %d %s alert(s) (user: %s)',
+        result.rowCount, sourceType, userId
+      );
+      await this._incrementVersion(userId);
     }
   }
 

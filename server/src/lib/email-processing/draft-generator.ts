@@ -72,13 +72,12 @@ function extractSingleAddress(field: Address | undefined): EmailAddress | undefi
 // Provider-keyed cache to avoid race conditions when processing emails concurrently
 const orchestratorCache = new Map<string, ToneLearningOrchestrator>();
 
-async function getOrchestrator(providerId: string): Promise<ToneLearningOrchestrator> {
+async function getOrchestrator(providerId: string, userId: string): Promise<ToneLearningOrchestrator> {
   let orchestrator = orchestratorCache.get(providerId);
 
   if (!orchestrator) {
     orchestrator = new ToneLearningOrchestrator();
-    await orchestrator.initialize();
-    await orchestrator['patternAnalyzer'].initialize(providerId);
+    await orchestrator.initialize(userId);
     orchestratorCache.set(providerId, orchestrator);
   }
 
@@ -100,7 +99,7 @@ export class DraftGenerator {
     const { processedEmail } = parsedData;
     const recipientEmail = processedEmail.from[0].address;
 
-    const orchestrator = await getOrchestrator(providerId);
+    const orchestrator = await getOrchestrator(providerId, userId);
 
     const incomingEmailMetadata = {
       from: processedEmail.from,
@@ -153,7 +152,7 @@ export class DraftGenerator {
     const recipientEmail = processedEmail.from[0].address;
     const maxExamples = parseInt(process.env.EXAMPLE_COUNT!);
 
-    const orchestrator = await getOrchestrator(providerId);
+    const orchestrator = await getOrchestrator(providerId, userId);
 
     const incomingEmailMetadata = {
       from: processedEmail.from,
@@ -258,7 +257,7 @@ export class DraftGenerator {
     const llmClient = orchestrator['patternAnalyzer']['llmClient']!;
 
     // Step 1: Select relevant examples
-    const exampleSelection = await orchestrator['exampleSelector'].selectExamples({
+    const exampleSelection = await orchestrator.selectExamples({
       userId,
       incomingEmail: processedEmail.userReply,
       recipientEmail,

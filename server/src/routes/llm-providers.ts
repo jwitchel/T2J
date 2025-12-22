@@ -49,6 +49,7 @@ router.post('/test', requireAuth, validateLLMProvider, async (req, res): Promise
     // Create temporary config for testing
     const config: LLMProviderConfig = {
       id: 'test',
+      name: data.provider_name,
       type: data.provider_type,
       apiKey: data.api_key,
       apiEndpoint: data.api_endpoint,
@@ -170,6 +171,7 @@ router.post('/', requireAuth, validateLLMProvider, async (req, res): Promise<voi
       // Test the provider connection first
       const config: LLMProviderConfig = {
         id: 'test',
+        name: data.provider_name,
         type: data.provider_type,
         apiKey: data.api_key,
         apiEndpoint: data.api_endpoint,
@@ -300,6 +302,7 @@ router.put('/:id', requireAuth, async (req, res): Promise<void> => {
       if (updates.api_key) {
         const config: LLMProviderConfig = {
           id: providerId,
+          name: updates.provider_name || currentProvider.provider_name,
           type: currentProvider.provider_type,
           apiKey: updates.api_key,
           apiEndpoint: updates.api_endpoint || currentProvider.api_endpoint,

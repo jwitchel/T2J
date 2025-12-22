@@ -13,6 +13,16 @@ import { UserAlertsResponse } from '../types/user-alerts';
 const router = Router();
 
 /**
+ * GET /api/alerts/version
+ * Returns alert version number for efficient polling
+ * Frontend polls this frequently, only fetches full alerts when version changes
+ */
+router.get('/version', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const version = await userAlertService.getAlertVersion(req.user.id);
+  res.json({ version });
+});
+
+/**
  * GET /api/alerts
  * Returns all active alerts for the authenticated user
  */

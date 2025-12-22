@@ -168,11 +168,11 @@ export class LLMClient {
 
         clearTimeout(timeoutId);
 
-        // Success - resolve any active alerts for this provider
+        // Success - resolve ALL LLM alerts for this user
         if (this.alertContext) {
-          await userAlertService.resolveAlertsForSource(
-            SourceType.LLM_PROVIDER,
-            this.alertContext.providerId
+          await userAlertService.resolveAllAlertsForSourceType(
+            this.alertContext.userId,
+            SourceType.LLM_PROVIDER
           );
         }
 

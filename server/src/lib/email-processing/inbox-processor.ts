@@ -375,7 +375,7 @@ export class InboxProcessor {
 
     const replyTo = parsedData.processedEmail.replyTo[0]?.address?.toLowerCase();
 
-    const spamDetector = await getSpamDetector(context.providerId);
+    const spamDetector = await getSpamDetector(context.providerId, context.userId);
     return spamDetector.checkSpam({
       senderEmail,
       replyTo,

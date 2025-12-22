@@ -268,7 +268,7 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
   try {
     // Initialize services
     const patternAnalyzer = new WritingPatternAnalyzer();
-    await patternAnalyzer.initialize();
+    await patternAnalyzer.initialize(userId);
 
     // Clear existing patterns to make the operation idempotent
     realTimeLogger.log(userId, {

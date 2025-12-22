@@ -1,3 +1,6 @@
+import type { EmailFeatures, RelationshipDetectorResult } from '../lib/pipeline/types';
+import type { EnhancedRelationshipProfile } from '../lib/pipeline/template-manager';
+
 export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'local';
 
 export interface LLMProvider {
@@ -52,9 +55,9 @@ export interface LLMGenerateRequest {
 
 export interface LLMGenerateFromPipelineRequest {
   llm_prompt: string;
-  nlp_features: any;
-  relationship: any;
-  enhanced_profile: any;
+  nlp_features: EmailFeatures;
+  relationship: RelationshipDetectorResult;
+  enhanced_profile: EnhancedRelationshipProfile;
   provider_id?: string;
   temperature?: number;
 }
@@ -72,6 +75,7 @@ export interface LLMGenerateResponse {
 
 export interface LLMProviderConfig {
   id: string;
+  name: string;
   type: LLMProviderType;
   apiKey: string;
   apiEndpoint?: string;

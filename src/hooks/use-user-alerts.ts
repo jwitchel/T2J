@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useEffect } from 'react'
 import useSWR from 'swr'
 import { useAuth } from '@/lib/auth-context'
 import { apiPost } from '@/lib/api'
@@ -11,17 +12,41 @@ import {
 
 /**
  * Hook for managing persistent user alerts
- * Polls every 30 seconds for new alerts
+ * Polls version key every 3 seconds, only fetches full alerts when version changes
  */
 export function useUserAlerts() {
   const { user } = useAuth()
+  const lastVersionRef = useRef<number>(0)
 
+  // Poll version frequently (cheap Redis read)
+  const { data: versionData } = useSWR<{ version: number }>(
+    user ? '/api/alerts/version' : null,
+    {
+      refreshInterval: 3000, // Poll every 3 seconds
+    }
+  )
+
+  // Fetch full alerts only when version changes
   const { data, mutate, isLoading } = useSWR<UserAlertsResponse>(
     user ? '/api/alerts' : null,
     {
-      refreshInterval: 30000, // Poll every 30 seconds
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
     }
   )
+
+  // Reset version tracking when user changes
+  useEffect(() => {
+    lastVersionRef.current = 0
+  }, [user?.id])
+
+  // Refetch alerts when version changes
+  useEffect(() => {
+    if (versionData?.version !== undefined && versionData.version !== lastVersionRef.current) {
+      lastVersionRef.current = versionData.version
+      mutate()
+    }
+  }, [versionData?.version, mutate])
 
   const alerts = data?.alerts ?? []
 
