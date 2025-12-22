@@ -74,7 +74,7 @@ app.use(cors({
 // Request logging middleware (suppress frequently polled endpoints)
 app.use((req, _res, next) => {
   // Skip logging for polling endpoints to reduce console noise
-  const skipPaths = ['/api/jobs/stats', '/health'];
+  const skipPaths = ['/api/jobs/stats', '/health', '/api/alerts/version'];
   if (!skipPaths.includes(req.path)) {
     console.log(`${new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })} - ${req.method} ${req.path}`);
   }
