@@ -14,14 +14,14 @@ import { resolve } from 'path';
 dotenv.config({ path: resolve(__dirname, '../../../.env') });
 
 import { Pool } from 'pg';
-// Import classes directly (avoid index.ts which loads singletons which load server.ts)
+// Import classes directly (avoid index.ts which loads singletons)
 import { EmbeddingService } from '../../lib/vector/embedding-service';
 import { StyleEmbeddingService } from '../../lib/vector/style-embedding-service';
 import { VectorSearchService } from '../../lib/vector/vector-search-service';
 import { StyleClusteringService } from '../../lib/vector/style-clustering-service';
 import chalk from 'chalk';
 
-// Create test database pool (avoid importing server.ts which loads auth)
+// Create test database pool (avoid importing unified-server which loads auth)
 const pool = new Pool({
   user: process.env.PGUSER || 'aiemailuser',
   host: process.env.PGHOST || 'localhost',
@@ -30,7 +30,7 @@ const pool = new Pool({
   port: parseInt(process.env.PGPORT || '5434')
 });
 
-// Create test instances (avoid singleton exports that import from server.ts)
+// Create test instances (avoid singleton exports)
 const embeddingService = new EmbeddingService();
 const styleEmbeddingService = new StyleEmbeddingService();
 const vectorSearchService = new VectorSearchService(pool);

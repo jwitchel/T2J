@@ -15,7 +15,6 @@ import {
 import {
   ChevronDown,
   Mail,
-  Database,
   Sparkles,
   Settings,
   LogOut,
@@ -154,12 +153,6 @@ export function Navbar() {
                     <Link href="/dashboard/jobs" className="flex cursor-pointer items-center gap-2">
                       <Briefcase className="h-4 w-4" />
                       Jobs
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/db-browser" className="flex cursor-pointer items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      Database Browser
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

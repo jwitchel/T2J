@@ -4,7 +4,7 @@ export { StyleEmbeddingService, styleEmbeddingService } from './style-embedding-
 export { VectorSearchService } from './vector-search-service';
 export { StyleClusteringService } from './style-clustering-service';
 
-// Create singletons (requires pool from server.ts)
+// Create singletons (requires pool from db)
 import { pool } from '../db';
 import { VectorSearchService } from './vector-search-service';
 import { StyleClusteringService } from './style-clustering-service';

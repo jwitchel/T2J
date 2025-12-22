@@ -83,7 +83,7 @@ async function main() {
   const app = express();
 
   app.use((req, _res, next) => {
-    const skipPaths = ['/api/jobs/stats', '/health', '/_next', '/__nextjs'];
+    const skipPaths = ['/api/jobs/stats', '/health', '/_next', '/__nextjs', '/api/alerts/version'];
     if (!skipPaths.some(path => req.path.startsWith(path))) {
       console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
     }
