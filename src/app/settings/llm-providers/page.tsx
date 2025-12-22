@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Plus, Check } from 'lucide-react'
+import { Loader2, Plus } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import { PageHeader } from '@/components/patterns'
 
@@ -531,14 +531,6 @@ export default function LLMProvidersPage() {
               </Label>
             </div>
 
-            {connectionTested && (
-              <Alert className="border-green-200 bg-green-50">
-                <Check className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                  Connection test successful! You can now save the provider.
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
           <DialogFooter>
             <Button
