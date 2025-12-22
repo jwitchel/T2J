@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "npm run postgres:up && npm run redis:reset && concurrently -n \"SERVER,WORKERS\" -c \"green,yellow\" \"npm run server\" \"npm run workers\"",
+    "dev": "lsof -ti:3001 | xargs kill 2>/dev/null; npm run postgres:up && npm run redis:reset && sleep 2 && concurrently -n \"SERVER,WORKERS\" -c \"green,yellow\" \"npm run server\" \"npm run workers\"",
     "build": "npm run server:build && next build",
     "start": "NODE_ENV=production node server/dist/unified-server.js",
     "lint": "next lint",
