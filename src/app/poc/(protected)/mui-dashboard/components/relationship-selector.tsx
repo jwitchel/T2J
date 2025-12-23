@@ -9,7 +9,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import { RelationshipType } from '../../../../../server/src/lib/relationships/types';
+import { RelationshipType } from '../../../../../../server/src/lib/relationships/types';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 
 interface RelationshipSelectorProps {

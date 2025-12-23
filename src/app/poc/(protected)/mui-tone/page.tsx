@@ -327,8 +327,11 @@ export default function MuiTonePage() {
   const patterns = currentProfile as WritingPatterns | null;
   const userPreferences = userPreferencesData?.preferences;
 
+  // Show nothing while loading auth - protected layout handles redirect
+  if (!user) return null;
+
   return (
-    <MuiAuthenticatedLayout>
+    <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Tone Analysis</Typography>

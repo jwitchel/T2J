@@ -25,6 +25,8 @@ import {
 } from '@mui/material';
 import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useAuth } from '@/lib/auth-context';
+import { MuiAuthenticatedLayout } from '@/components/mui';
 
 // Types
 interface UserPreferences {
@@ -1657,10 +1659,14 @@ function SecurityTab() {
 
 // Main Component
 export default function MuiSettingsPage() {
+  const { user, signOut } = useAuth();
   const [tabValue, setTabValue] = useState(0);
 
+  // Show nothing while loading auth - protected layout handles redirect
+  if (!user) return null;
+
   return (
-    <>
+    <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box mb={3}>
         <Typography variant="h4">Settings</Typography>
@@ -1686,6 +1692,6 @@ export default function MuiSettingsPage() {
       {tabValue === 2 && <ServicesTab />}
       {tabValue === 3 && <SignaturesTab />}
       {tabValue === 4 && <SecurityTab />}
-    </>
+    </MuiAuthenticatedLayout>
   );
 }

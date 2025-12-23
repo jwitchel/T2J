@@ -34,6 +34,8 @@ import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useAuth } from '@/lib/auth-context';
+import { MuiAuthenticatedLayout } from '@/components/mui';
 
 // Types
 interface LLMProvider {
@@ -377,6 +379,7 @@ function ProviderDialog({ open, onClose, provider, onSuccess }: ProviderDialogPr
 }
 
 export default function MuiLLMProvidersPage() {
+  const { user, signOut } = useAuth();
   // Responsive - DataGrid needs conditional render, not CSS hide
   const isMobile = useMediaQuery('(max-width:899px)');
 
@@ -427,13 +430,15 @@ export default function MuiLLMProvidersPage() {
     }
   };
 
-  // Render
+  // Show nothing while loading auth - protected layout handles redirect
+  if (!user) return null;
+
   if (error) {
     return <Alert severity="error">Failed to load LLM providers. Please try again later.</Alert>;
   }
 
   return (
-    <>
+    <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <div>
@@ -525,6 +530,6 @@ export default function MuiLLMProvidersPage() {
         provider={selectedProvider}
         onSuccess={() => mutate('/api/llm-providers')}
       />
-    </>
+    </MuiAuthenticatedLayout>
   );
 }

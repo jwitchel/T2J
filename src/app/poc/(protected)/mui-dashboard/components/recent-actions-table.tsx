@@ -18,8 +18,8 @@ import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { formatDistanceToNow } from 'date-fns';
-import { EmailActionType } from '../../../../../server/src/types/email-action-tracking';
-import { RelationshipType } from '../../../../../server/src/lib/relationships/types';
+import { EmailActionType } from '../../../../../../server/src/types/email-action-tracking';
+import { RelationshipType } from '../../../../../../server/src/lib/relationships/types';
 import { RelationshipSelector } from './relationship-selector';
 import { ActionSelector } from './action-selector';
 
@@ -180,7 +180,7 @@ const getColumns = (): GridColDef<RecentAction>[] => [
     renderCell: (params: GridRenderCellParams<RecentAction>) => (
       <MuiLink
         component={Link}
-        href={`/inbox?emailAccountId=${params.row.emailAccountId}&messageId=${encodeURIComponent(params.row.messageId)}`}
+        href={`/poc/mui-inbox?emailAccountId=${params.row.emailAccountId}&messageId=${encodeURIComponent(params.row.messageId)}`}
         underline="hover"
       >
         View
@@ -331,7 +331,7 @@ export function RecentActionsTable() {
                     />
                     <MuiLink
                       component={Link}
-                      href={`/inbox?emailAccountId=${action.emailAccountId}&messageId=${encodeURIComponent(action.messageId)}`}
+                      href={`/poc/mui-inbox?emailAccountId=${action.emailAccountId}&messageId=${encodeURIComponent(action.messageId)}`}
                       underline="hover"
                       variant="caption"
                     >

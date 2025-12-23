@@ -42,6 +42,8 @@ import { FcGoogle } from 'react-icons/fc';
 import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { EmailAccountResponse } from '@/types/email-account';
+import { useAuth } from '@/lib/auth-context';
+import { MuiAuthenticatedLayout } from '@/components/mui';
 
 // Form data interface
 interface AccountFormData {
@@ -543,6 +545,7 @@ function EditCredentialsDialog({ open, onClose, account, onSuccess }: EditCreden
 }
 
 export default function MuiEmailAccountsPage() {
+  const { user, signOut } = useAuth();
   // Responsive - DataGrid needs conditional render, not CSS hide
   const isMobile = useMediaQuery('(max-width:899px)');
 
@@ -656,13 +659,15 @@ export default function MuiEmailAccountsPage() {
     }
   };
 
-  // Render
+  // Show nothing while loading auth - protected layout handles redirect
+  if (!user) return null;
+
   if (error) {
     return <Alert severity="error">Failed to load email accounts. Please try again later.</Alert>;
   }
 
   return (
-    <>
+    <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <div>
@@ -797,6 +802,6 @@ export default function MuiEmailAccountsPage() {
         account={selectedAccount}
         onSuccess={() => mutate('/api/email-accounts')}
       />
-    </>
+    </MuiAuthenticatedLayout>
   );
 }

@@ -28,6 +28,8 @@ import {
 import MailIcon from '@mui/icons-material/Mail';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useAuth } from '@/lib/auth-context';
+import { MuiAuthenticatedLayout } from '@/components/mui';
 import { ActionsSummaryChart } from './components/actions-summary-chart';
 import { RecentActionsTable } from './components/recent-actions-table';
 
@@ -99,6 +101,7 @@ const getLookBackLabel = (option: string): string => {
 };
 
 export default function MuiDashboardPage() {
+  const { user, signOut } = useAuth();
   const isMobile = useMediaQuery('(max-width:899px)');
   const { success, error: showError } = useMuiToast();
   const [lookBackOption, setLookBackOption] = useState<string>('15min');
@@ -172,8 +175,11 @@ export default function MuiDashboardPage() {
     }
   };
 
+  // Show nothing while loading auth - protected layout handles redirect
+  if (!user) return null;
+
   return (
-    <>
+    <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Typography variant="h4" sx={{ mb: 4 }}>Dashboard</Typography>
 
@@ -290,6 +296,6 @@ export default function MuiDashboardPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </MuiAuthenticatedLayout>
   );
 }

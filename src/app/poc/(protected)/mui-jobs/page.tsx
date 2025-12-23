@@ -755,6 +755,7 @@ export default function MuiJobsPage() {
     });
   }, [jobs]);
 
+  // Show nothing while loading auth - protected layout handles redirect
   if (!user) return null;
 
   return (

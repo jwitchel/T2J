@@ -18,13 +18,13 @@ import {
   RadioGroup,
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import { EmailActionType } from '../../../../../server/src/types/email-action-tracking';
+import { EmailActionType } from '../../../../../../server/src/types/email-action-tracking';
 import {
   ActionRuleConditionType,
   USER_ACTION_VALUES,
   UserActionType,
-} from '../../../../../server/src/types/action-rules';
-import { RelationshipType } from '../../../../../server/src/lib/relationships/types';
+} from '../../../../../../server/src/types/action-rules';
+import { RelationshipType } from '../../../../../../server/src/lib/relationships/types';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 
 interface ActionSelectorProps {

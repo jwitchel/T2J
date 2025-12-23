@@ -3,7 +3,7 @@
 import { Box, Paper, Typography, Skeleton, Alert } from '@mui/material';
 import useSWR from 'swr';
 import ReactECharts from 'echarts-for-react';
-import { EmailActionType } from '../../../../../server/src/types/email-action-tracking';
+import { EmailActionType } from '../../../../../../server/src/types/email-action-tracking';
 
 // Raw action counts from API (all possible actions)
 interface RawActionCounts {

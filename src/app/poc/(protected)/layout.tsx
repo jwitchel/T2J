@@ -1,0 +1,46 @@
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+
+interface ProtectedLayoutProps {
+  children: React.ReactNode;
+}
+
+/**
+ * Protected layout that validates sessions for all child pages.
+ * This is the single point of authentication for all protected POC pages.
+ *
+ * Security model:
+ * - Layer 1: Middleware checks cookie existence (fast, optimistic)
+ * - Layer 2: This layout validates session via API (secure, database-backed)
+ * - Layer 3: API routes use requireAuth middleware (data protection)
+ */
+export default async function ProtectedLayout({ children }: ProtectedLayoutProps) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('better-auth.session_token');
+
+  if (!sessionCookie?.value) {
+    redirect('/poc/mui-signin');
+  }
+
+  // Validate session server-side by calling the Express API
+  const baseUrl = process.env.APP_URL || 'http://localhost:3001';
+  const response = await fetch(`${baseUrl}/api/auth/get-session`, {
+    headers: {
+      Cookie: `better-auth.session_token=${sessionCookie.value}`,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    redirect('/poc/mui-signin');
+  }
+
+  const session = await response.json();
+  if (!session?.user) {
+    redirect('/poc/mui-signin');
+  }
+
+  // Session is valid - render children
+  // Children use useAuth() hook to access user data client-side
+  return children;
+}
