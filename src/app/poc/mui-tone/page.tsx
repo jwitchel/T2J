@@ -26,6 +26,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useAuth } from '@/lib/auth-context';
+import { MuiAuthenticatedLayout, MuiLogViewer } from '@/components/mui';
 
 // Types
 interface WritingPatterns {
@@ -177,6 +179,7 @@ function PatternRow({ label, value, showProgress = true }: PatternRowProps) {
 }
 
 export default function MuiTonePage() {
+  const { user, signOut } = useAuth();
   // Tab state
   const [tabValue, setTabValue] = useState(0);
 
@@ -325,7 +328,7 @@ export default function MuiTonePage() {
   const userPreferences = userPreferencesData?.preferences;
 
   return (
-    <>
+    <MuiAuthenticatedLayout>
       {/* Page Header */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Tone Analysis</Typography>
@@ -426,12 +429,8 @@ export default function MuiTonePage() {
               </Button>
             </Box>
 
-            {/* Placeholder for logs */}
-            <Box sx={{ p: 4, bgcolor: 'action.hover', borderRadius: 1, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Training logs will appear here
-              </Typography>
-            </Box>
+            {/* Real-time training logs */}
+            <MuiLogViewer height={300} autoConnect={false} />
           </Stack>
         </Paper>
       )}
@@ -916,6 +915,6 @@ export default function MuiTonePage() {
           )}
         </>
       )}
-    </>
+    </MuiAuthenticatedLayout>
   );
 }

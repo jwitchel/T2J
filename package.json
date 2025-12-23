@@ -48,6 +48,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@hookform/resolvers": "^5.1.1",
+    "@melloware/react-logviewer": "^6.3.4",
     "@mui/icons-material": "^7.3.6",
     "@mui/x-data-grid": "^8.22.1",
     "@noble/hashes": "^1.8.0",

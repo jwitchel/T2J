@@ -9,6 +9,7 @@ interface AuthenticatedWebSocket extends WebSocket {
   sessionId?: string;
   isAlive?: boolean;
   subscribedChannels?: Set<string>;
+  textMode?: boolean;
 }
 
 export type EventType =
@@ -72,6 +73,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
   private _setupEventHandlers(): void {
     this.wss.on('connection', async (ws: AuthenticatedWebSocket, request) => {
       try {
+        // Check for text mode from query string
+        const requestUrl = new URL(request.url!, `http://${request.headers.host}`);
+        ws.textMode = requestUrl.searchParams.get('format') === 'text';
+
         // Create headers object for better-auth
         const headers = new Headers();
         Object.entries(request.headers).forEach(([key, value]) => {
@@ -188,17 +193,25 @@ export class UnifiedWebSocketServer extends EventEmitter {
   private _sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
     try {
       const logs = realTimeLogger.getLogs(userId, 100);
-      ws.send(JSON.stringify({
-        type: 'initial-logs',
-        logs,
-        timestamp: new Date().toISOString()
-      }));
+      if (ws.textMode) {
+        // Send formatted text lines for log viewer
+        const textLogs = logs.map(log => this._formatLogEntry(log)).join('');
+        ws.send(textLogs);
+      } else {
+        ws.send(JSON.stringify({
+          type: 'initial-logs',
+          logs,
+          timestamp: new Date().toISOString()
+        }));
+      }
     } catch (error) {
       console.error('Error sending initial logs:', error);
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: 'Failed to load initial logs'
-      }));
+      if (!ws.textMode) {
+        ws.send(JSON.stringify({
+          type: 'error',
+          error: 'Failed to load initial logs'
+        }));
+      }
     }
   }
 
@@ -248,6 +261,13 @@ export class UnifiedWebSocketServer extends EventEmitter {
     }
   }
 
+  private _formatLogEntry(entry: RealTimeLogEntry): string {
+    const time = entry.timestamp.slice(11, 19); // HH:MM:SS
+    const level = entry.level.toUpperCase().padEnd(5);
+    const msg = entry.data.raw || entry.data.response || entry.command;
+    return `[${time}] ${level} ${entry.command}: ${msg}\n`;
+  }
+
   private _broadcastToUser(userId: string, message: WebSocketMessage): void {
     const userClients = this.clients.get(userId);
     if (!userClients) return;
@@ -261,7 +281,15 @@ export class UnifiedWebSocketServer extends EventEmitter {
             return; // Skip if not subscribed
           }
         }
-        client.send(JSON.stringify(message));
+        // Text mode clients only receive log entries as formatted text
+        if (client.textMode) {
+          if (message.type === 'log' && message.log) {
+            client.send(this._formatLogEntry(message.log));
+          }
+          // Skip other message types for text mode clients
+        } else {
+          client.send(JSON.stringify(message));
+        }
       }
     });
   }
