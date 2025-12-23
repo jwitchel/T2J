@@ -1,6 +1,5 @@
 'use client';
 
-import { Container } from '@mui/material';
 import { MuiThemeProvider } from '@/components/mui-theme-provider';
 import { MuiSnackbarProvider } from '@/components/mui-snackbar-provider';
 import { ConfirmProvider } from 'material-ui-confirm';
@@ -14,9 +13,7 @@ export default function MuiPocLayout({ children }: LayoutProps) {
     <MuiThemeProvider>
       <MuiSnackbarProvider>
         <ConfirmProvider defaultOptions={{ dialogProps: { disableRestoreFocus: true } }}>
-          <Container maxWidth="lg" sx={{ py: 3 }}>
-            {children}
-          </Container>
+          {children}
         </ConfirmProvider>
       </MuiSnackbarProvider>
     </MuiThemeProvider>
