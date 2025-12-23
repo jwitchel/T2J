@@ -298,7 +298,7 @@ function ProviderDialog({ open, onClose, provider, onSuccess }: ProviderDialogPr
     >
       <DialogTitle>{isEdit ? 'Edit' : 'Add'} LLM Provider</DialogTitle>
       <DialogContent>
-        <DialogContentText paragraph>
+        <DialogContentText mb={2}>
           {isEdit ? 'Update provider configuration' : 'Configure a new AI provider for generating email replies'}
         </DialogContentText>
         <Stack>
@@ -461,7 +461,7 @@ export default function MuiLLMProvidersPage() {
         <Card>
           <CardContent sx={{ py: 4, textAlign: 'center' }}>
             <AddIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography color="text.secondary" paragraph>
+            <Typography color="text.secondary" mb={2}>
               No LLM providers configured yet
             </Typography>
             <Button variant="contained" onClick={openAddDialog}>
