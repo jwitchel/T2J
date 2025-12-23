@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AppBar,
   Toolbar,
@@ -28,6 +28,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import PersonIcon from '@mui/icons-material/Person';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { MuiThemeToggle } from './theme-toggle';
+import { useMuiToast } from '@/hooks/use-mui-toast';
 
 interface NavLink {
   href: string;
@@ -40,7 +41,7 @@ interface MuiNavbarProps {
     name?: string;
     email: string;
   };
-  onSignOut?: () => void;
+  onSignOut?: () => Promise<void>;
 }
 
 const publicNavLinks: NavLink[] = [
@@ -61,7 +62,9 @@ const authenticatedMenuItems = [
 
 export function MuiNavbar({ variant, user, onSignOut }: MuiNavbarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const theme = useTheme();
+  const { success } = useMuiToast();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [isLocalhost, setIsLocalhost] = useState(false);
@@ -79,9 +82,15 @@ export function MuiNavbar({ variant, user, onSignOut }: MuiNavbarProps) {
     setAnchorEl(null);
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     handleMenuClose();
-    onSignOut?.();
+    try {
+      await onSignOut?.();
+      success('You have been signed out');
+      router.push('/signin');
+    } catch {
+      // Error already handled by auth context
+    }
   };
 
   const displayName = user?.name || user?.email || '';
