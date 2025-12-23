@@ -1,13 +1,13 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from '@/lib/auth-context'
 import { AlertProvider } from '@/lib/alert-context'
 import { SWRProvider } from '@/components/swr-provider'
-import { Navbar } from '@/components/navbar'
-import { PersistentAlertBanner } from '@/components/persistent-alert-banner'
 import { ThemeProvider } from '@/components/theme-provider'
+import { MuiThemeProvider } from '@/components/mui-theme-provider'
+import { MuiSnackbarProvider } from '@/components/mui-snackbar-provider'
+import { ConfirmProvider } from 'material-ui-confirm'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -47,16 +47,19 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <SWRProvider>
-              <AlertProvider>
-                <Navbar />
-                <PersistentAlertBanner />
-                {children}
-              </AlertProvider>
-            </SWRProvider>
-          </AuthProvider>
-          <Toaster />
+          <MuiThemeProvider>
+            <MuiSnackbarProvider>
+              <ConfirmProvider defaultOptions={{ dialogProps: { disableRestoreFocus: true } }}>
+                <AuthProvider>
+                  <SWRProvider>
+                    <AlertProvider>
+                      {children}
+                    </AlertProvider>
+                  </SWRProvider>
+                </AuthProvider>
+              </ConfirmProvider>
+            </MuiSnackbarProvider>
+          </MuiThemeProvider>
         </ThemeProvider>
       </body>
     </html>

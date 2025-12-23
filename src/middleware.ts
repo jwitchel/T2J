@@ -10,6 +10,7 @@ const protectedRoutes = [
   '/poc/mui-jobs',
   '/poc/mui-tone',
   '/poc/mui-inbox',
+  '/poc/mui-email-accounts/oauth-complete',
 ];
 
 export function middleware(request: NextRequest) {
