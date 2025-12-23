@@ -755,8 +755,10 @@ export default function MuiJobsPage() {
     });
   }, [jobs]);
 
+  if (!user) return null;
+
   return (
-    <MuiAuthenticatedLayout>
+    <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box mb={3}>
         <Typography variant="h4">Background Jobs</Typography>
