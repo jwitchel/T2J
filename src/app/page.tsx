@@ -1,87 +1,104 @@
-'use client'
+'use client';
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { useAuth } from '@/lib/auth-context'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PublicNavbar } from '@/components/public-navbar'
-import { Footer } from '@/components/footer'
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Container,
+  Typography,
+  Stack,
+  CircularProgress,
+} from '@mui/material';
+import { useAuth } from '@/lib/auth-context';
+import { MuiPublicLayout } from '@/components/mui';
 
-export default function Home() {
-  const { user, loading } = useAuth()
-  const router = useRouter()
+export default function MuiHomePage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (!loading && user) {
-      router.push('/dashboard')
+      router.push('/dashboard');
     }
-  }, [user, loading, router])
+  }, [user, loading, router]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
-    )
+      <Box sx={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
-    <div className="bg-background flex min-h-screen flex-col">
-      <PublicNavbar />
-
-      <main className="container mx-auto flex-1 px-4 py-16">
-        <div className="mx-auto mb-16 max-w-4xl text-center">
-          <h2 className="mb-6 text-5xl font-bold">AI-Powered Email Reply Drafts</h2>
-          <p className="text-muted-foreground mb-8 text-xl">
+    <MuiPublicLayout>
+      <Container maxWidth="lg" sx={{ py: 8 }}>
+        {/* Hero Section */}
+        <Box sx={{ textAlign: 'center', mb: 8 }}>
+          <Typography variant="h2" component="h1" fontWeight="bold" gutterBottom>
+            AI-Powered Email Reply Drafts
+          </Typography>
+          <Typography variant="h6" color="text.secondary" sx={{ mb: 4, maxWidth: 600, mx: 'auto' }}>
             Generate email responses that match your unique writing tone and style
-          </p>
-          <Button asChild size="lg">
-            <Link href="/signup">Get Started</Link>
+          </Typography>
+          <Button
+            component={Link}
+            href="/signup"
+            variant="contained"
+            size="large"
+            sx={{ px: 4, py: 1.5 }}
+          >
+            Get Started
           </Button>
-        </div>
+        </Box>
 
-        <div className="mx-auto grid max-w-5xl gap-8 md:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tone Analysis</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
+        {/* Feature Cards */}
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={3}
+          sx={{ maxWidth: 1000, mx: 'auto' }}
+        >
+          <Card sx={{ flex: 1 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" fontWeight="medium" gutterBottom>
+                Tone Analysis
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
                 Our AI analyzes your email history to learn your unique writing style, ensuring
                 replies sound authentically like you.
-              </CardDescription>
+              </Typography>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Smart Drafts</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
+          <Card sx={{ flex: 1 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" fontWeight="medium" gutterBottom>
+                Smart Drafts
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
                 Generate contextually appropriate email replies in seconds, maintaining
                 professionalism while saving time.
-              </CardDescription>
+              </Typography>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Email Integration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
+          <Card sx={{ flex: 1 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" fontWeight="medium" gutterBottom>
+                Email Integration
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
                 Connect your email accounts securely and manage all your correspondence from one
                 unified interface.
-              </CardDescription>
+              </Typography>
             </CardContent>
           </Card>
-        </div>
-      </main>
-
-      <Footer />
-    </div>
-  )
+        </Stack>
+      </Container>
+    </MuiPublicLayout>
+  );
 }

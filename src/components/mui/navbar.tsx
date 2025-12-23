@@ -44,19 +44,19 @@ interface MuiNavbarProps {
 }
 
 const publicNavLinks: NavLink[] = [
-  { href: '/poc/mui-about', label: 'About' },
-  { href: '/poc/mui-demo', label: 'Demo' },
-  { href: '/poc/mui-faq', label: 'FAQ' },
+  { href: '/about', label: 'About' },
+  { href: '/demo', label: 'Demo' },
+  { href: '/faq', label: 'FAQ' },
 ];
 
 const authenticatedMenuItems = [
-  { href: '/poc/mui-tone', label: 'Tone Analysis', icon: TuneIcon },
+  { href: '/tone', label: 'Tone Analysis', icon: TuneIcon },
   { divider: true },
-  { href: '/poc/mui-settings', label: 'Settings', icon: SettingsIcon },
-  { href: '/poc/mui-email-accounts', label: 'Email Accounts', icon: MailIcon },
-  { href: '/poc/mui-llm-providers', label: 'LLM Providers', icon: SmartToyIcon },
+  { href: '/settings', label: 'Settings', icon: SettingsIcon },
+  { href: '/settings/email-accounts', label: 'Email Accounts', icon: MailIcon },
+  { href: '/settings/llm-providers', label: 'LLM Providers', icon: SmartToyIcon },
   { divider: true, label: 'Development Tools' },
-  { href: '/poc/mui-jobs', label: 'Jobs', icon: WorkIcon },
+  { href: '/dashboard/jobs', label: 'Jobs', icon: WorkIcon },
 ];
 
 export function MuiNavbar({ variant, user, onSignOut }: MuiNavbarProps) {
@@ -85,7 +85,7 @@ export function MuiNavbar({ variant, user, onSignOut }: MuiNavbarProps) {
   };
 
   const displayName = user?.name || user?.email || '';
-  const homeHref = variant === 'public' ? '/poc' : '/poc/mui-dashboard';
+  const homeHref = variant === 'public' ? '/' : '/dashboard';
 
   return (
     <>
@@ -129,10 +129,10 @@ export function MuiNavbar({ variant, user, onSignOut }: MuiNavbarProps) {
               {variant === 'public' ? (
                 /* Public: Sign In / Sign Up buttons */
                 <>
-                  <Button component={Link} href="/poc/mui-signin" color="inherit">
+                  <Button component={Link} href="/signin" color="inherit">
                     Sign In
                   </Button>
-                  <Button component={Link} href="/poc/mui-signup" variant="contained">
+                  <Button component={Link} href="/signup" variant="contained">
                     Sign Up
                   </Button>
                 </>

@@ -3,14 +3,14 @@ import type { NextRequest } from 'next/server';
 
 // Routes that require authentication
 const protectedRoutes = [
-  '/poc/mui-dashboard',
-  '/poc/mui-settings',
-  '/poc/mui-email-accounts',
-  '/poc/mui-llm-providers',
-  '/poc/mui-jobs',
-  '/poc/mui-tone',
-  '/poc/mui-inbox',
-  '/poc/mui-email-accounts/oauth-complete',
+  '/dashboard',
+  '/settings',
+  '/settings/email-accounts',
+  '/settings/llm-providers',
+  '/dashboard/jobs',
+  '/tone',
+  '/inbox',
+  '/settings/email-accounts/oauth-complete',
 ];
 
 export function middleware(request: NextRequest) {
@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
   // Protect authenticated routes
   const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
   if (isProtectedRoute && !isAuthenticated) {
-    const signinUrl = new URL('/poc/mui-signin', request.url);
+    const signinUrl = new URL('/signin', request.url);
     signinUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(signinUrl);
   }
@@ -38,5 +38,12 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/poc/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/settings/:path*',
+    '/tone/:path*',
+    '/inbox/:path*',
+    '/signin',
+    '/signup',
+  ],
 };

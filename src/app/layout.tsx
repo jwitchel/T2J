@@ -1,13 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-import { AuthProvider } from '@/lib/auth-context'
-import { AlertProvider } from '@/lib/alert-context'
-import { SWRProvider } from '@/components/swr-provider'
-import { ThemeProvider } from '@/components/theme-provider'
-import { MuiThemeProvider } from '@/components/mui-theme-provider'
-import { MuiSnackbarProvider } from '@/components/mui-snackbar-provider'
-import { ConfirmProvider } from 'material-ui-confirm'
+import { Providers } from '@/components/providers'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -41,26 +35,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <MuiThemeProvider>
-            <MuiSnackbarProvider>
-              <ConfirmProvider defaultOptions={{ dialogProps: { disableRestoreFocus: true } }}>
-                <AuthProvider>
-                  <SWRProvider>
-                    <AlertProvider>
-                      {children}
-                    </AlertProvider>
-                  </SWRProvider>
-                </AuthProvider>
-              </ConfirmProvider>
-            </MuiSnackbarProvider>
-          </MuiThemeProvider>
-        </ThemeProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   )

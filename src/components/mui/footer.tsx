@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { Box, Container, Stack, Link as MuiLink } from '@mui/material';
 
 const footerLinks = [
-  { href: '/poc/mui-about', label: 'About' },
-  { href: '/poc/mui-contact', label: 'Contact Us' },
-  { href: '/poc/mui-legal', label: 'Legal' },
+  { href: '/about', label: 'About' },
+  { href: '/contact', label: 'Contact Us' },
+  { href: '/legal', label: 'Legal' },
 ];
 
 export function MuiFooter() {
