@@ -3,7 +3,8 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "lsof -ti:3001 | xargs kill 2>/dev/null; npm run postgres:up && npm run redis:reset && sleep 2 && concurrently -n \"SERVER,WORKERS\" -c \"green,yellow\" \"npm run server\" \"npm run workers\"",
+    "dev": "lsof -ti:3001 | xargs kill 2>/dev/null; concurrently -n \"SERVER,WORKERS\" -c \"green,yellow\" \"npm run server\" \"npm run workers\"",
+    "dev:fresh": "lsof -ti:3001 | xargs kill 2>/dev/null; npm run postgres:up && npm run redis:reset && sleep 2 && concurrently -n \"SERVER,WORKERS\" -c \"green,yellow\" \"npm run server\" \"npm run workers\"",
     "build": "npm run server:build && next build",
     "start": "NODE_ENV=production node server/dist/unified-server.js",
     "lint": "next lint",
@@ -37,6 +38,8 @@
     "@ai-sdk/openai-compatible": "^1.0.29",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/playfair-display": "^5.2.8",
     "@hookform/resolvers": "^5.1.1",
     "@melloware/react-logviewer": "^6.3.4",
     "@mui/icons-material": "^7.3.6",
