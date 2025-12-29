@@ -136,7 +136,7 @@ export interface DraftEmail {
     exampleCount: number;
     directCorrespondence?: number;
     timestamp: string;
-    spamAnalysis: SpamCheckResult;
+    spamAnalysis?: SpamCheckResult;
   };
 }
 
