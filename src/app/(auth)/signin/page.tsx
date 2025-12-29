@@ -14,6 +14,7 @@ import {
   Stack,
   Container,
   TextField,
+  CircularProgress,
 } from '@mui/material';
 import { useAuth } from '@/lib/auth-context';
 import { useMuiToast } from '@/hooks/use-mui-toast';
@@ -52,7 +53,19 @@ export default function MuiSignInPage() {
     }
   }, [user, loading, router]);
 
-  if (loading || user) {
+  if (loading) {
+    return (
+      <MuiPublicLayout>
+        <Container maxWidth="sm" sx={{ py: 8 }}>
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight={300}>
+            <CircularProgress />
+          </Box>
+        </Container>
+      </MuiPublicLayout>
+    );
+  }
+
+  if (user) {
     return null;
   }
 
