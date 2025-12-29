@@ -14,7 +14,6 @@ import {
   Stack,
   Container,
   TextField,
-  CircularProgress,
 } from '@mui/material';
 import { useAuth } from '@/lib/auth-context';
 import { useMuiToast } from '@/hooks/use-mui-toast';
@@ -38,7 +37,7 @@ type SignUpFormData = z.infer<typeof signUpSchema>;
 export default function MuiSignUpPage() {
   usePageTitle('Sign Up');
   const router = useRouter();
-  const { user, loading, signUp } = useAuth();
+  const { user, signUp } = useAuth();
   const { success, error: showError } = useMuiToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -57,26 +56,10 @@ export default function MuiSignUpPage() {
   });
 
   useEffect(() => {
-    if (!loading && user) {
+    if (user) {
       router.replace('/dashboard');
     }
-  }, [user, loading, router]);
-
-  if (loading) {
-    return (
-      <MuiPublicLayout>
-        <Container maxWidth="sm" sx={{ py: 8 }}>
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight={300}>
-            <CircularProgress />
-          </Box>
-        </Container>
-      </MuiPublicLayout>
-    );
-  }
-
-  if (user) {
-    return null;
-  }
+  }, [user, router]);
 
   const onSubmit = async (data: SignUpFormData) => {
     setIsSubmitting(true);

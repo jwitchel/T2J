@@ -14,7 +14,6 @@ import {
   Stack,
   Container,
   TextField,
-  CircularProgress,
 } from '@mui/material';
 import { useAuth } from '@/lib/auth-context';
 import { useMuiToast } from '@/hooks/use-mui-toast';
@@ -31,7 +30,7 @@ type SignInFormData = z.infer<typeof signInSchema>;
 export default function MuiSignInPage() {
   usePageTitle('Sign In');
   const router = useRouter();
-  const { user, loading, signIn } = useAuth();
+  const { user, signIn } = useAuth();
   const { success, error: showError } = useMuiToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,26 +47,10 @@ export default function MuiSignInPage() {
   });
 
   useEffect(() => {
-    if (!loading && user) {
+    if (user) {
       router.replace('/dashboard');
     }
-  }, [user, loading, router]);
-
-  if (loading) {
-    return (
-      <MuiPublicLayout>
-        <Container maxWidth="sm" sx={{ py: 8 }}>
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight={300}>
-            <CircularProgress />
-          </Box>
-        </Container>
-      </MuiPublicLayout>
-    );
-  }
-
-  if (user) {
-    return null;
-  }
+  }, [user, router]);
 
   const onSubmit = async (data: SignInFormData) => {
     setIsSubmitting(true);
