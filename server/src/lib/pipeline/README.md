@@ -18,36 +18,12 @@ Processes historical emails and stores them in the vector database.
 
 ## Testing
 
-### Quick Test (No Dependencies)
-Run the mock test to verify basic functionality:
-
-```bash
-npm run test:pipeline:mock
-```
-
-This test uses mock implementations and doesn't require any services to be running.
-
 ### Template Tests
-To run only the template manager unit tests:
+Run template manager unit tests (no external services required):
 
 ```bash
 npm test -- server/src/lib/pipeline/__tests__/template-manager.test.ts
 ```
-
-These tests don't require any external services.
-
-### Full Integration Test
-To test with real services:
-
-1. Start PostgreSQL:
-   ```bash
-   docker compose up -d postgres
-   ```
-
-2. Run the integration test:
-   ```bash
-   npm run test:pipeline
-   ```
 
 ### Manual Testing
 
@@ -73,31 +49,7 @@ const result = await selector.selectExamples({
 });
 ```
 
-## Expected Output
-
-When running `npm run test:pipeline:mock`, you should see:
-
-- ✅ Mock services initialized
-- ✅ Individual email processing with relationship detection
-- ✅ Batch processing with relationship distribution
-- ✅ Example selection with diversity scoring
-
 ## Troubleshooting
 
 ### TypeScript Errors
-If you see import errors, make sure:
-1. The stub implementations exist in `/relationships` and `/pipeline/types.ts`
-2. Run `npm run server:build` to check for compilation errors
-
-### Missing Dependencies
-The pipeline depends on:
-- Task 3.2: NLP Feature Extraction (currently using stub)
-- Task 3.3: Relationship Detection (currently using stub)
-- Task 3.4: Vector Storage (implemented)
-
-## Next Steps
-
-After the dependent tasks are implemented:
-1. Remove stub implementations
-2. Update imports to use real modules
-3. Run full integration tests with `npm run test:pipeline`
+If you see import errors, run `npm run server:build` to check for compilation errors.

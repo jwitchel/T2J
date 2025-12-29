@@ -204,7 +204,7 @@ npm install
 docker compose up -d
 npm run db:migrate
 npm run seed
-npm run dev:all
+npm run dev
 ```
 
 ### Testing

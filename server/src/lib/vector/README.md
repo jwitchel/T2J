@@ -166,9 +166,3 @@ for (const cluster of clusterResult.clusters) {
 
 See `vector-search-service.ts` for query optimization and PostgreSQL index usage. Vectra index rebuilds per query for freshness.
 
-## Testing
-
-```bash
-# Test vector services
-npm run vector:test
-```

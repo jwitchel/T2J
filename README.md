@@ -72,7 +72,6 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
    This starts:
    - PostgreSQL on port 5434 (non-standard to avoid conflicts)
    - Redis on port 6380 (non-standard to avoid conflicts)
-   - Test mail server on ports 1143/1993 (IMAP testing)
 
 5. **Initialize the database**
    ```bash

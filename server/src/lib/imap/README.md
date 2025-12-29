@@ -174,10 +174,9 @@ The implementation has been tested with:
 
 ## Future Enhancements
 
-1. **OAuth2 Support** - For Gmail and Outlook
-2. **Auto-enable IMAP IDLE** - Automatically start IMAP IDLE monitoring for new accounts
-3. **Attachment Handling** - Stream large attachments
-4. **Full-text Search** - Local index for faster searching
-5. **Folder Synchronization** - Efficient delta sync
-6. **Rate Limiting** - Prevent server overload
-7. **Connection Metrics** - Prometheus/Grafana integration
+1. **Auto-enable IMAP IDLE** - Automatically start IMAP IDLE monitoring for new accounts
+2. **Attachment Handling** - Stream large attachments
+3. **Full-text Search** - Local index for faster searching
+4. **Folder Synchronization** - Efficient delta sync
+5. **Rate Limiting** - Prevent server overload
+6. **Connection Metrics** - Prometheus/Grafana integration
