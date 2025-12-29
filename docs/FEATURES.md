@@ -169,7 +169,7 @@ See `RelationshipType` enum in server/src/lib/relationships/relationship-detecto
 ## Real-time Logging
 
 ### WebSocket
-- Endpoint: ws://localhost:3002/ws/imap-logs
+- Endpoint: ws://localhost:3001/ws
 - Authenticated connections
 - Per-user log isolation
 

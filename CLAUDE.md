@@ -16,16 +16,16 @@ gh project list --owner jwitchel
 gh project view PROJECT_NUMBER --owner jwitchel
 
 # List all issues in the repository
-gh issue list --repo jwitchel/test-repo --limit 100
+gh issue list --repo jwitchel/T2J --limit 100
 
 # View specific issue details
-gh issue view ISSUE_NUMBER --repo jwitchel/test-repo
+gh issue view ISSUE_NUMBER --repo jwitchel/T2J
 
 # List all issues with specific label
-gh issue list --repo jwitchel/test-repo --label "bug"
+gh issue list --repo jwitchel/T2J --label "bug"
 
 # Export issues to JSON
-gh issue list --repo jwitchel/test-repo --json number,title,body,labels --limit 100 > issues.json
+gh issue list --repo jwitchel/T2J --json number,title,body,labels --limit 100 > issues.json
 ```
 
 ### Managing Tasks
@@ -83,7 +83,7 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 ## Key Architecture Decisions
 
 ### Technology Stack
-- **Unified Server**: Next.js + Express combined (port 3001) with shadcn/ui and better-auth
+- **Unified Server**: Next.js + Express combined (port 3001) with MUI and better-auth
 - **Database**: PostgreSQL (port 5434) - includes vector columns
 - **Cache/Queue**: Redis (port 6380) - sessions + BullMQ
 - **Vector Search**: Vectra in-memory
@@ -91,7 +91,7 @@ gh project item-archive PROJECT_NUMBER --owner jwitchel --id ITEM_ID
 - **Email**: IMAP with connection pooling, OAuth support, 60s polling
 
 ### Development Setup
-- Docker runs PostgreSQL, Redis, and the test mail server (node-imap) only
+- Docker runs PostgreSQL and Redis only
 - Unified server (Next.js + Express) runs locally (not in Docker)
 - Same-origin architecture eliminates CORS complexity
 
@@ -606,29 +606,35 @@ export interface MySearchParams {
 4. Does the type name clearly describe its purpose?
 5. Are all properties documented with TSDoc comments?
 
-## UI Components (shadcn/ui)
+## UI Components (MUI)
 
-The project uses shadcn/ui with Tailwind CSS v4, Zinc base colors for neutral elements, and Indigo accent colors for primary actions. Components are initialized with oklch color values for better color accuracy.
+The project uses [MUI (Material-UI)](https://mui.com/) with Emotion for styling.
 
 ### Available Components
-- Button, Card, Input, Label, Alert (with success/info variants)
-- Accordion, Badge, Skeleton, Dialog, Form
-- Sonner (for toast notifications - replaces deprecated toast/toaster)
+All standard MUI components plus:
+- **MuiLogViewer** - Real-time WebSocket log display with channel filtering
+- **Confirm dialog** via ConfirmProvider context
+- Custom theme with light/dark mode via next-themes
 
 ### Toast Notifications
-Use the custom hook at `@/hooks/use-toast`:
+Use the custom hook at `@/hooks/use-mui-toast`:
 ```typescript
-const { success, error, info } = useToast()
+const { success, error, info, warning } = useMuiToast()
 ```
 
-### Component Testing
-Visit `/components-test` to see all components in action.
+### Styling Pattern
+All styling uses the MUI `sx` prop:
+```tsx
+<Box sx={{ display: 'flex', gap: 2, p: 2 }}>
+  <Button variant="contained">Action</Button>
+</Box>
+```
 
-### Important Notes
-- Colors use oklch format due to Tailwind v4
-- Zinc color palette for grays/neutrals, Indigo for primary colors
-- Alert component has custom success and info variants
-- Toast notifications use Sonner with custom color overrides for success (green), error (red), and info (blue)
+### Theme Configuration
+- Theme provider wraps app in `src/lib/providers.tsx`
+- Light/dark mode via next-themes integration
+- Responsive font sizes enabled
+- Default component props configured (Button textTransform: none, TextField size: small, etc.)
 
 ## Git Workflow
 
@@ -661,9 +667,9 @@ git checkout -b task-X.X-description
 # Examples:
 # task-1.1-nextjs-init
 # task-1.2-docker-setup
-# task-1.3-shadcn-setup
+# task-1.3-mui-setup
 # task-1.4a-express-api
-# task-1.4b-auth-frontend
+# task-1.4b-auth-flow
 ```
 
 ### Task Workflow
@@ -730,18 +736,7 @@ npm run server:build
 # Tests (if available)
 npm test
 
-# Test IMAP with Docker email server
-npm run test:mail:start  # Start test email server
-npm run test:mail:setup  # Create test accounts
-npm test -- imap         # Run IMAP tests
 ```
-
-## IMAP Testing
-The project includes a Docker test email server for IMAP development:
-- Test accounts: user1@testmail.local, user2@testmail.local, user3@testmail.local
-- Password: testpass123
-- IMAP ports: 1143 (non-SSL), 1993 (SSL)
-- Real IMAP implementation with connection pooling and logging
 
 ## Database Access
 

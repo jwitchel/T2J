@@ -58,12 +58,7 @@ postgres_data/
 redis_data/
 qdrant_storage/
 
-# Test mail server data
-test-mail-data/
-test-mail-config/
-
 # Jest
 jest.config.js.map
 coverage/
 .jest/
-roundcube/db/sqlite.db

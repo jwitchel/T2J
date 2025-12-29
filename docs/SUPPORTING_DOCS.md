@@ -35,13 +35,25 @@ This document provides links to all markdown documentation files located in subd
   - Directory structure and documentation for test utilities, tools, and demo data seeding scripts. Includes information about demo scripts, test scripts, pipeline scripts, and prerequisites.
 
 ### WebSocket
-- **[server/src/websocket/README.md](../server/src/websocket/README.md)**
-  - Documentation for the WebSocket IMAP logs server providing real-time streaming of IMAP operation logs. Covers endpoint, authentication, client/server message types, and usage examples.
 
-- **[server/src/websocket/INTEGRATION.md](../server/src/websocket/INTEGRATION.md)**
-  - Guide for WebSocket integration with email processing. Describes how real-time logging is integrated with the email processing pipeline, including components, log types, testing, and security considerations.
+Real-time log streaming at `ws://localhost:3001/ws`. Requires session auth.
 
-### Middleware
-- **[server/src/middleware/SERVICE_AUTH_USAGE.md](../server/src/middleware/SERVICE_AUTH_USAGE.md)**
-  - Usage guide for service token authentication allowing background workers and scheduled jobs to call protected API endpoints without a user session. Includes configuration, usage examples, and security considerations.
+**Channel filtering**: `ws://localhost:3001/ws?channel=training`
 
+Channels: `training`, `jobs`, `imap`, `system` (omit for all)
+
+**Frontend**: `MuiLogViewer` component (`src/components/mui-log-viewer.tsx`)
+
+**Backend**: `RealTimeLogger` emits logs → `UnifiedWebSocket` broadcasts to user's connections
+
+### Service Token Authentication
+
+Background workers (e.g., training-worker) use `SERVICE_TOKEN` to call protected API endpoints without a user session. The token is passed via `Authorization: Bearer <token>` header, and `userId` must be included in the request body.
+
+```typescript
+import { makeServiceRequest } from '../middleware/service-auth';
+
+await makeServiceRequest('/api/training/analyze-patterns', 'POST', { force: true }, userId);
+```
+
+Set `SERVICE_TOKEN` in `.env` (generate with `openssl rand -base64 32`).

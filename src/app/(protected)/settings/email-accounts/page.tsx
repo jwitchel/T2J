@@ -203,10 +203,6 @@ function AddAccountDialog({ open, onClose, onSuccess }: AddAccountDialogProps) {
       setValue('imap_host', 'imap.mail.me.com');
       setValue('imap_port', 993);
       setValue('imap_secure', true);
-    } else if (email.endsWith('@testmail.local')) {
-      setValue('imap_host', 'localhost');
-      setValue('imap_port', 1143);
-      setValue('imap_secure', false);
     }
     setConnectionTested(false);
   };

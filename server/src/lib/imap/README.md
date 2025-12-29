@@ -144,25 +144,6 @@ try {
 
 ## Testing
 
-### Docker Test Email Server
-The project includes a Docker-based test email server for development:
-
-```bash
-# Start test email server
-npm run test:mail:start
-
-# Create test accounts
-npm run test:mail:setup
-
-# Run IMAP tests
-npm test -- imap-connection.test.ts
-```
-
-Test accounts:
-- user1@testmail.local / testpass123
-- user2@testmail.local / testpass123
-- user3@testmail.local / testpass123
-
 ### Common Email Providers
 
 The implementation has been tested with:
