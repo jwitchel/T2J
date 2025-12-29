@@ -1,4 +1,4 @@
-# AI Email Assistant
+# Time to Just
 
 An AI-powered email assistant that generates email reply drafts matching your personal writing tone. Built with Next.js, Express.js, and better-auth.
 
@@ -32,8 +32,8 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/jwitchel/test-repo.git
-   cd test-repo
+   git clone https://github.com/jwitchel/T2J.git
+   cd T2J
    ```
 
 2. **Install dependencies**
@@ -72,7 +72,6 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
    This starts:
    - PostgreSQL on port 5434 (non-standard to avoid conflicts)
    - Redis on port 6380 (non-standard to avoid conflicts)
-   - Test mail server on ports 1143/1993 (IMAP testing)
 
 5. **Initialize the database**
    ```bash
@@ -106,7 +105,6 @@ All contributors (human and AI) must follow these principles. See [AGENTS.md](AG
 ## 📁 Project Structure
 
 ```
-test-repo/
 ├── src/                    # Next.js frontend source
 │   ├── app/               # App router pages
 │   ├── components/        # React components
@@ -144,15 +142,8 @@ npm run redis:down      # Stop Redis
 npm run redis:reset     # Reset Redis
 npm run redis:logs      # View Redis logs
 
-# Mail Server (IMAP Testing)
-npm run mail:up         # Start test mail server
-npm run mail:down       # Stop test mail server
-npm run mail:reset      # Reset mail server
-npm run mail:logs       # View mail server logs
-npm run mail:seed       # Create test email accounts
-
 # All Docker Services
-npm run docker:up       # Start ALL services (PostgreSQL, Redis, Mail)
+npm run docker:up       # Start ALL services (PostgreSQL, Redis)
 npm run docker:down     # Stop ALL services
 npm run docker:reset    # Reset ALL services
 npm run docker:logs     # View logs for all docker-compose services
@@ -160,7 +151,6 @@ npm run docker:logs     # View logs for all docker-compose services
 # Database Management
 npm run db:migrate      # Run database migrations
 npm run seed            # Seed all demo data (users, emails, styles, etc.)
-npm run vector:test     # Test vector services
 
 # Code Quality
 npm run lint            # Run ESLint
@@ -221,13 +211,13 @@ The project uses [better-auth](https://www.better-auth.com/) for authentication 
 
 ## 🎨 UI Components
 
-The project uses [shadcn/ui](https://ui.shadcn.com/) components with:
-- **Zinc** color palette for neutral elements
-- **Indigo** color palette for primary actions
-- Pre-configured components including Button, Card, Form, Alert, etc.
-- Toast notifications via custom `useToast()` hook
+The project uses [MUI (Material-UI)](https://mui.com/) for the component library:
+- **MUI Material** for core components (Button, Dialog, TextField, DataGrid, etc.)
+- **MUI Icons** for iconography (@mui/icons-material)
+- **notistack** for toast notifications via `useMuiToast()` hook
+- **Emotion** for styling (via MUI's `sx` prop)
 
-View all components at http://localhost:3001/components-test
+Theme switching (light/dark) is handled via `next-themes` integration with MUI's theme system.
 
 ## 📊 Features
 
@@ -252,7 +242,6 @@ View all components at http://localhost:3001/components-test
 2. **Database connection errors**
    - Ensure Docker is running: `docker compose ps`
    - Check logs: `docker compose logs postgres`
-   - Verify connection: `npm run db:test`
 
 3. **Authentication errors**
    - Ensure server is running: `npm run dev`
@@ -291,16 +280,9 @@ To deploy:
 
 ## 🔌 Real-time Features
 
-### WebSocket Integration
-The application includes real-time logging for email processing operations through WebSocket connections. This provides immediate visibility into:
+Real-time log streaming via WebSocket at `ws://localhost:3001/ws` with channel filtering (`?channel=training`).
 
-- IMAP operations (connect, login, fetch, etc.)
-- Email parsing and text extraction
-- Processing metrics and performance data
-
-For detailed information about the WebSocket architecture and integration, see [server/src/websocket/INTEGRATION.md](server/src/websocket/INTEGRATION.md).
-
-**Live Demo**: Visit http://localhost:3001/tone (Training tab) after signing in to see the real-time logging in action.
+**Live Demo**: Visit http://localhost:3001/tone (Training tab) after signing in to see logs in action.
 
 ## 🤝 Contributing
 

@@ -1,13 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-import { Toaster } from '@/components/ui/sonner'
-import { AuthProvider } from '@/lib/auth-context'
-import { AlertProvider } from '@/lib/alert-context'
-import { SWRProvider } from '@/components/swr-provider'
-import { Navbar } from '@/components/navbar'
-import { PersistentAlertBanner } from '@/components/persistent-alert-banner'
-import { ThemeProvider } from '@/components/theme-provider'
+import { Providers } from '@/components/providers'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -20,8 +14,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'AI Email Assistant',
-  description: 'AI-powered email reply drafts matching your writing tone',
+  title: 'Time to Just',
+  description: 'AI-powered email management matching your writing tone',
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -41,23 +35,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AuthProvider>
-            <SWRProvider>
-              <AlertProvider>
-                <Navbar />
-                <PersistentAlertBanner />
-                {children}
-              </AlertProvider>
-            </SWRProvider>
-          </AuthProvider>
-          <Toaster />
-        </ThemeProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   )

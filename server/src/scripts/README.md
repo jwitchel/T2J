@@ -1,6 +1,6 @@
 # Scripts Directory
 
-This directory contains test utilities, tools, and the demo data seed script for the AI Email Assistant project.
+This directory contains test utilities, tools, and the demo data seed script for the Time to Just project.
 
 ## Directory Structure
 

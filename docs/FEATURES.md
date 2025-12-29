@@ -169,7 +169,7 @@ See `RelationshipType` enum in server/src/lib/relationships/relationship-detecto
 ## Real-time Logging
 
 ### WebSocket
-- Endpoint: ws://localhost:3002/ws/imap-logs
+- Endpoint: ws://localhost:3001/ws
 - Authenticated connections
 - Per-user log isolation
 
@@ -204,7 +204,7 @@ npm install
 docker compose up -d
 npm run db:migrate
 npm run seed
-npm run dev:all
+npm run dev
 ```
 
 ### Testing

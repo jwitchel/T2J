@@ -71,10 +71,10 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
     userId,
     emailAccountId: accountId,
     level: 'info',
-    command: 'WORKER_INBOX_START',
+    channel: 'jobs',
+    command: 'INBOX_START',
     data: {
-      raw: `Starting inbox processing for ${emailAddress}`,
-      parsed: { accountId, emailAddress }
+      raw: `Starting inbox processing for ${emailAddress}`
     }
   });
 
@@ -107,16 +107,10 @@ async function processInboxJob(job: Job<ProcessInboxJobData>): Promise<any> {
     userId,
     emailAccountId: accountId,
     level: 'info',
-    command: 'WORKER_INBOX_COMPLETE',
+    channel: 'jobs',
+    command: 'INBOX_COMPLETE',
     data: {
-      raw: `Processed ${result.processed} emails for ${emailAddress} in ${result.elapsed}ms`,
-      parsed: {
-        accountId,
-        emailAddress,
-        processed: result.processed,
-        elapsed: result.elapsed,
-        results: result.results
-      }
+      raw: `Processed ${result.processed} emails for ${emailAddress} in ${result.elapsed}ms`
     }
   });
 
@@ -153,10 +147,10 @@ const inboxWorker = new Worker(
         userId,
         emailAccountId: (job.data as ProcessInboxJobData).accountId || 'unknown',
         level: 'error',
-        command: 'worker.error',
+        channel: 'jobs',
+        command: 'INBOX_ERROR',
         data: {
-          raw: `Job ${job.id} failed${isPermanent ? ' (permanent)' : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          parsed: { jobId: job.id, jobName: job.name, permanent: isPermanent }
+          raw: `Job failed${isPermanent ? ' (permanent)' : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`
         }
       });
 

@@ -55,7 +55,7 @@
 - `npm run workers`: Start background job workers
 - `npm run build` / `npm run server:build`: Build frontend/backend
 - `npm test`: All tests. `test:unit` (no services), `test:integration` (services)
-- Docker services: `docker:up|down|reset|logs` or per service `postgres:*`, `redis:*`, `mail:*`
+- Docker services: `docker:up|down|reset|logs` or per service `postgres:*`, `redis:*`
 - Data setup: `db:migrate`, `seed`
 
 Example: initialize stack for local dev
@@ -106,5 +106,5 @@ npm run dev
 
 ## Related Docs & Tools
 - Training UI: `http://localhost:3001/tone` (click Training tab for training panel + live logs)
-- WebSocket logs: `ws://localhost:3001/ws/imap-logs`
-- Deep dives: `server/src/lib/imap/README.md`, `server/src/websocket/README.md`, `server/src/websocket/INTEGRATION.md`, `server/src/lib/pipeline/README.md`, `server/src/lib/pipeline/TONE_LEARNING_E2E.md`, `server/src/lib/vector/README.md`, `server/src/scripts/README.md`
+- WebSocket logs: `ws://localhost:3001/ws`
+- Deep dives: `server/src/lib/imap/README.md`, `server/src/lib/pipeline/README.md`, `server/src/lib/pipeline/TONE_LEARNING_E2E.md`, `server/src/lib/vector/README.md`, `server/src/scripts/README.md`, `docs/SUPPORTING_DOCS.md`

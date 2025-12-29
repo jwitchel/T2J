@@ -171,6 +171,7 @@ export class ImapConnection extends EventEmitter {
       userId: this.userId,
       emailAccountId: this.emailAccountId,
       level,
+      channel: 'imap',
       command,
       data
     });

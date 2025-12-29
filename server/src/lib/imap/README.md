@@ -144,25 +144,6 @@ try {
 
 ## Testing
 
-### Docker Test Email Server
-The project includes a Docker-based test email server for development:
-
-```bash
-# Start test email server
-npm run test:mail:start
-
-# Create test accounts
-npm run test:mail:setup
-
-# Run IMAP tests
-npm test -- imap-connection.test.ts
-```
-
-Test accounts:
-- user1@testmail.local / testpass123
-- user2@testmail.local / testpass123
-- user3@testmail.local / testpass123
-
 ### Common Email Providers
 
 The implementation has been tested with:
@@ -193,10 +174,9 @@ The implementation has been tested with:
 
 ## Future Enhancements
 
-1. **OAuth2 Support** - For Gmail and Outlook
-2. **Auto-enable IMAP IDLE** - Automatically start IMAP IDLE monitoring for new accounts
-3. **Attachment Handling** - Stream large attachments
-4. **Full-text Search** - Local index for faster searching
-5. **Folder Synchronization** - Efficient delta sync
-6. **Rate Limiting** - Prevent server overload
-7. **Connection Metrics** - Prometheus/Grafana integration
+1. **Auto-enable IMAP IDLE** - Automatically start IMAP IDLE monitoring for new accounts
+2. **Attachment Handling** - Stream large attachments
+3. **Full-text Search** - Local index for faster searching
+4. **Folder Synchronization** - Efficient delta sync
+5. **Rate Limiting** - Prevent server overload
+6. **Connection Metrics** - Prometheus/Grafana integration
