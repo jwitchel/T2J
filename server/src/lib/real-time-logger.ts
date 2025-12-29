@@ -3,6 +3,8 @@ import crypto from 'crypto';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+export type LogChannel = 'training' | 'jobs' | 'imap' | 'system';
+
 export interface RealTimeLogEntry {
   id: string;
   timestamp: string;
@@ -10,6 +12,7 @@ export interface RealTimeLogEntry {
   emailAccountId: string;
   level: LogLevel;
   command: string;
+  channel?: LogChannel;
   data: {
     raw?: string;
     parsed?: any;

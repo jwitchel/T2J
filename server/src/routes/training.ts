@@ -33,13 +33,14 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
 
       // Search for sent emails
       realTimeLogger.log(userId, {
-      userId,
-      emailAccountId,
-      level: 'info',
-      command: 'TRAINING_START',
-      data: { 
-        parsed: { limit, startDate, folder: 'Sent' }
-      }
+        userId,
+        emailAccountId,
+        level: 'info',
+        channel: 'training',
+        command: 'TRAINING_START',
+        data: {
+          raw: `Starting training: loading ${limit} emails${startDate ? ` from ${startDate}` : ''}`
+        }
       });
 
     // Get sent folder from email account (loaded with ImapOperations)
@@ -59,13 +60,14 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       }
 
       realTimeLogger.log(userId, {
-      userId,
-      emailAccountId,
-      level: 'info',
-      command: 'TRAINING_FOUND_EMAILS',
-      data: {
-        parsed: { found: uids.length, folder: sentFolder }
-      }
+        userId,
+        emailAccountId,
+        level: 'info',
+        channel: 'training',
+        command: 'TRAINING_FOUND',
+        data: {
+          raw: `Found ${uids.length} emails in ${sentFolder}`
+        }
       });
 
     // Batch fetch and process using EmailStorageService
@@ -81,7 +83,29 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       console.log(`[Training] ========================================\n`);
       const imapFetchStart = Date.now();
 
+      realTimeLogger.log(userId, {
+        userId,
+        emailAccountId,
+        level: 'info',
+        channel: 'training',
+        command: 'TRAINING_FETCH',
+        data: {
+          raw: `Fetching ${uids.length} emails from IMAP server...`
+        }
+      });
+
       const fullMessages = await imapOps!.getMessagesRaw(sentFolder, uids);
+
+      realTimeLogger.log(userId, {
+        userId,
+        emailAccountId,
+        level: 'info',
+        channel: 'training',
+        command: 'TRAINING_FETCHED',
+        data: {
+          raw: `Fetched ${fullMessages.length} emails in ${((Date.now() - imapFetchStart) / 1000).toFixed(1)}s`
+        }
+      });
 
       const imapFetchDuration = Date.now() - imapFetchStart;
       console.log(`\n[Training] ========================================`);
@@ -91,17 +115,17 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       console.log(`[Training] ========================================\n`);
 
       // Filter out messages missing raw content
-      const validMessages = fullMessages.filter((msg, i) => {
+      const validMessages = fullMessages.filter((msg) => {
         if (!msg.fullMessage) {
           console.error(`[Training] Email ${msg.uid} missing raw message`);
           realTimeLogger.log(userId, {
             userId,
             emailAccountId,
             level: 'error',
-            command: 'TRAINING_EMAIL_ERROR',
+            channel: 'training',
+            command: 'TRAINING_ERROR',
             data: {
-              error: 'Missing raw RFC 5322 message',
-              parsed: { uid: msg.uid, index: i }
+              raw: `Email ${msg.uid} missing raw message content`
             }
           });
           return false;
@@ -144,19 +168,15 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
 
         // Log progress every 100 emails
         if ((i + 1) % 100 === 0 || i === results.length - 1) {
+          const pct = Math.round(((i + 1) / totalMessages) * 100);
           realTimeLogger.log(userId, {
             userId,
             emailAccountId,
             level: 'info',
+            channel: 'training',
             command: 'TRAINING_PROGRESS',
             data: {
-              parsed: {
-                processed: i + 1,
-                total: totalMessages,
-                saved,
-                errors,
-                percentage: Math.round(((i + 1) / totalMessages) * 100)
-              }
+              raw: `Processing: ${i + 1}/${totalMessages} (${pct}%) - ${saved} saved, ${errors} errors`
             }
           });
         }
@@ -164,6 +184,17 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
     
 
     // Aggregate styles after all emails are processed
+      realTimeLogger.log(userId, {
+        userId,
+        emailAccountId,
+        level: 'info',
+        channel: 'training',
+        command: 'TRAINING_AGGREGATE',
+        data: {
+          raw: 'Aggregating writing styles...'
+        }
+      });
+
       const aggregationStart = Date.now();
       await orchestrator.aggregateStyles(userId);
       const aggregationDuration = Date.now() - aggregationStart;
@@ -183,13 +214,14 @@ router.post('/load-sent-emails', requireAuth, async (req, res): Promise<void> =>
       console.log(`[Training] ========================================\n`);
 
       realTimeLogger.log(userId, {
-      userId,
-      emailAccountId,
-      level: 'info',
-      command: 'TRAINING_COMPLETE',
-      data: {
-        parsed: { processed, saved, errors, duration }
-      }
+        userId,
+        emailAccountId,
+        level: 'info',
+        channel: 'training',
+        command: 'TRAINING_COMPLETE',
+        data: {
+          raw: `Training complete: ${saved} emails saved, ${errors} errors in ${(duration / 1000).toFixed(1)}s`
+        }
       });
 
     // Give WebSocket time to send the completion message before responding
@@ -275,9 +307,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       userId,
       emailAccountId: 'pattern-training',
       level: 'info',
-      command: 'patterns.training.clearing',
+      channel: 'training',
+      command: 'PATTERNS_START',
       data: {
-        raw: 'Clearing existing writing patterns...'
+        raw: 'Starting pattern analysis - clearing existing patterns...'
       }
     });
 
@@ -334,13 +367,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       userId,
       emailAccountId: 'pattern-training',
       level: 'info',
-      command: 'patterns.training.corpus_size',
+      channel: 'training',
+      command: 'PATTERNS_CORPUS',
       data: {
-        parsed: {
-          totalEmails: allEmails.length,
-          emailAccounts: new Set(allEmails.map((e: any) => e.metadata.emailAccountId)).size,
-          relationships: new Set(allEmails.map((e: any) => e.metadata.relationship?.type)).size
-        }
+        raw: `Analyzing ${allEmails.length} emails across ${new Set(allEmails.map((e: any) => e.metadata.relationship?.type)).size} relationship types`
       }
     });
 
@@ -394,14 +424,11 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       realTimeLogger.log(userId, {
         userId,
         emailAccountId: 'pattern-training',
-        level: batchResult.failed > 0 ? 'error' : 'info',
-        command: 'patterns.training.vectors_complete',
+        level: batchResult.failed > 0 ? 'warn' : 'info',
+        channel: 'training',
+        command: 'PATTERNS_VECTORS',
         data: {
-          parsed: {
-            indexed: batchResult.indexed,
-            failed: batchResult.failed,
-            errors: batchResult.errors.length
-          }
+          raw: `Style vectors: ${batchResult.indexed} indexed${batchResult.failed > 0 ? `, ${batchResult.failed} failed` : ''}`
         }
       });
     } catch (error) {
@@ -410,9 +437,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         userId,
         emailAccountId: 'pattern-training',
         level: 'error',
-        command: 'patterns.training.vector_error',
+        channel: 'training',
+        command: 'PATTERNS_ERROR',
         data: {
-          raw: `Style vector generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Continuing with pattern analysis...`
+          raw: `Style vector error: ${error instanceof Error ? error.message : 'Unknown error'}`
         }
       });
     }
@@ -490,12 +518,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
             userId,
             emailAccountId: 'pattern-training',
             level: 'info',
-            command: 'patterns.training.skipped',
+            channel: 'training',
+            command: 'PATTERNS_SKIP',
             data: {
-              parsed: {
-                relationship,
-                reason: 'No emails with content to analyze'
-              }
+              raw: `Skipping ${relationship}: no emails with content`
             }
           });
           continue; // Skip to next relationship
@@ -561,9 +587,10 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
         userId,
         emailAccountId: 'pattern-training',
         level: 'error',
-        command: 'patterns.training.error',
+        channel: 'training',
+        command: 'PATTERNS_ERROR',
         data: {
-          error: error instanceof Error ? error.message : 'Unknown error'
+          raw: `Pattern analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`
         }
       });
       throw error;
@@ -582,32 +609,15 @@ router.post('/analyze-patterns', requireAuth, async (req, res): Promise<void> =>
       relationshipBreakdown[rel] = (relationshipBreakdown[rel] || 0) + 1;
     });
     
-    // Get the pattern analyzer's model name
-    const modelUsed = 'gpt-4o-mini'; // Default model name
-    
-    // Create output with analysis results
-    const output = {
-      meta: {
-        analysisDate: new Date().toISOString(),
-        totalEmailsAnalyzed: totalEmailsAnalyzed,
-        totalEmailsInCorpus: allEmails.length,
-        emailAccounts: new Set(allEmails.map((e: any) => e.metadata.emailAccountId)).size,
-        relationshipBreakdown,
-        relationshipsAnalyzed: relationships.length + 1, // +1 for aggregate
-        durationSeconds,
-        modelUsed
-      },
-      patternsByRelationship: allPatterns
-    };
-    
-    // Output consolidated patterns JSON to logs
+    // Output consolidated patterns to logs
     realTimeLogger.log(userId, {
       userId,
       emailAccountId: 'pattern-training',
       level: 'info',
-      command: 'patterns.training.consolidated',
+      channel: 'training',
+      command: 'PATTERNS_COMPLETE',
       data: {
-        raw: JSON.stringify(output, null, 2)
+        raw: `Pattern analysis complete: ${totalEmailsAnalyzed} emails, ${relationships.length + 1} relationships in ${durationSeconds}s`
       }
     });
     

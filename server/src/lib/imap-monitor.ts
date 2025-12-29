@@ -224,8 +224,9 @@ class MonitorInstance {
         userId: this.userId,
         emailAccountId: this.accountId,
         level: 'info',
+        channel: 'imap',
         command: 'MONITOR_CONNECTED',
-        data: { parsed: { status: 'connected' } }
+        data: { raw: 'IMAP monitor connected' }
       });
 
       console.log(`IMAP monitoring started for account ${this.accountId}`);
@@ -244,10 +245,10 @@ class MonitorInstance {
         userId: this.userId,
         emailAccountId: this.accountId,
         level: 'error',
+        channel: 'imap',
         command: 'MONITOR_ERROR',
-        data: { 
-          error: error instanceof Error ? error.message : String(error),
-          parsed: { status: 'error' }
+        data: {
+          raw: `IMAP monitor error: ${error instanceof Error ? error.message : String(error)}`
         }
       });
 
@@ -278,8 +279,9 @@ class MonitorInstance {
           userId: this.userId,
           emailAccountId: this.accountId,
           level: 'info',
-          command: 'NEW_MAIL_DETECTED',
-          data: { parsed: { count: event.count } }
+          channel: 'imap',
+          command: 'NEW_MAIL',
+          data: { raw: `New mail detected: ${event.count} messages` }
         });
       } else if (event.type === 'expunge') {
         console.log(`Message expunged for account ${this.accountId}: seqno ${event.seqno}`);

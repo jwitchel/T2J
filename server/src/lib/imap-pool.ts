@@ -300,6 +300,7 @@ export class ImapConnectionPool extends EventEmitter {
         userId,
         emailAccountId: accountId,
         level: 'debug',
+        channel: 'imap',
         command: `POOL_${event.toUpperCase()}`,
         data: { parsed: data }
       });

@@ -73,9 +73,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
   private _setupEventHandlers(): void {
     this.wss.on('connection', async (ws: AuthenticatedWebSocket, request) => {
       try {
-        // Check for text mode from query string
+        // Check for text mode and channel from query string
         const requestUrl = new URL(request.url!, `http://${request.headers.host}`);
         ws.textMode = requestUrl.searchParams.get('format') === 'text';
+        const channelParam = requestUrl.searchParams.get('channel');
 
         // Create headers object for better-auth
         const headers = new Headers();
@@ -105,7 +106,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
         ws.userId = userId;
         ws.sessionId = sessionId;
         ws.isAlive = true;
-        ws.subscribedChannels = new Set(['all']); // Subscribe to all events by default
+        // Subscribe to specific channel if provided, otherwise all
+        ws.subscribedChannels = channelParam
+          ? new Set([channelParam])
+          : new Set(['all']);
 
         // Add to clients map
         if (!this.clients.has(userId)) {
@@ -176,6 +180,7 @@ export class UnifiedWebSocketServer extends EventEmitter {
     realTimeLogger.on('log', (logEntry: RealTimeLogEntry) => {
       this._broadcastToUser(logEntry.userId, {
         type: 'log',
+        channel: logEntry.channel, // Include channel for filtering
         log: logEntry,
         timestamp: new Date().toISOString()
       });
@@ -192,7 +197,15 @@ export class UnifiedWebSocketServer extends EventEmitter {
 
   private _sendInitialLogs(ws: AuthenticatedWebSocket, userId: string): void {
     try {
-      const logs = realTimeLogger.getLogs(userId, 100);
+      let logs = realTimeLogger.getLogs(userId, 100);
+
+      // Filter by channel if client subscribed to specific channel
+      if (ws.subscribedChannels && !ws.subscribedChannels.has('all')) {
+        logs = logs.filter(log =>
+          log.channel && ws.subscribedChannels!.has(log.channel)
+        );
+      }
+
       if (ws.textMode) {
         // Send formatted text lines for log viewer
         const textLogs = logs.map(log => this._formatLogEntry(log)).join('');
@@ -264,8 +277,9 @@ export class UnifiedWebSocketServer extends EventEmitter {
   private _formatLogEntry(entry: RealTimeLogEntry): string {
     const time = entry.timestamp.slice(11, 19); // HH:MM:SS
     const level = entry.level.toUpperCase().padEnd(5);
+    const channel = entry.channel ? `[${entry.channel}] ` : '';
     const msg = entry.data.raw || entry.data.response || entry.command;
-    return `[${time}] ${level} ${entry.command}: ${msg}\n`;
+    return `[${time}] ${level} ${channel}${entry.command}: ${msg}\n`;
   }
 
   private _broadcastToUser(userId: string, message: WebSocketMessage): void {
@@ -275,10 +289,10 @@ export class UnifiedWebSocketServer extends EventEmitter {
     userClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         // Check if client is subscribed to this type of message
-        if (message.channel && client.subscribedChannels) {
-          if (!client.subscribedChannels.has('all') &&
-              !client.subscribedChannels.has(message.channel)) {
-            return; // Skip if not subscribed
+        if (client.subscribedChannels && !client.subscribedChannels.has('all')) {
+          // Client has specific channel subscription - only send matching messages
+          if (!message.channel || !client.subscribedChannels.has(message.channel)) {
+            return; // Skip messages without channel or not matching subscription
           }
         }
         // Text mode clients only receive log entries as formatted text

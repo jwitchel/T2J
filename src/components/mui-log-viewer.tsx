@@ -83,6 +83,10 @@ export function MuiLogViewer({ height = 400, autoConnect = false, channel }: Mui
             color: `${logColors.color} !important`,
             borderColor: `${isDark ? '#555' : '#ccc'} !important`,
           },
+          // Line hover - override dark theme hover color in light mode
+          '& .react-lazylog [class*="line"]:hover': {
+            backgroundColor: `${isDark ? '#444' : '#e8e8e8'} !important`,
+          },
         }}
       >
         {wsUrl ? (
