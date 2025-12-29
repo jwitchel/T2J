@@ -14,17 +14,15 @@ import {
   Divider,
   FormControlLabel,
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  Delete as DeleteIcon,
-  Pause as PauseIcon,
-  PlayArrow as PlayIcon,
-  Schedule as ScheduleIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  HourglassEmpty as WaitingIcon,
-  Loop as ActiveIcon,
-} from '@mui/icons-material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import DeleteIcon from '@mui/icons-material/Delete';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayIcon from '@mui/icons-material/PlayArrow';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+import WaitingIcon from '@mui/icons-material/HourglassEmpty';
+import ActiveIcon from '@mui/icons-material/Loop';
 import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useAuth } from '@/lib/auth-context';

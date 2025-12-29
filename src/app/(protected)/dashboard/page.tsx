@@ -27,6 +27,8 @@ import {
 } from '@mui/material';
 import MailIcon from '@mui/icons-material/Mail';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AddIcon from '@mui/icons-material/Add';
+import Link from 'next/link';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useAuth } from '@/lib/auth-context';
 import { MuiAuthenticatedLayout } from '@/components/mui';
@@ -226,9 +228,19 @@ export default function MuiDashboardPage() {
                 ))}
               </List>
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                No email accounts configured
-              </Typography>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No email accounts configured
+                </Typography>
+                <Button
+                  component={Link}
+                  href="/settings/email-accounts"
+                  size="small"
+                  startIcon={<AddIcon />}
+                >
+                  Add
+                </Button>
+              </Stack>
             )}
 
             {/* Default LLM Provider Section */}
@@ -242,10 +254,19 @@ export default function MuiDashboardPage() {
               />
               {providersLoading ? (
                 <Skeleton variant="text" width={100} />
-              ) : (
+              ) : defaultProvider ? (
                 <Typography variant="body2" fontWeight="medium">
-                  {defaultProvider?.provider_name || 'Not configured'}
+                  {defaultProvider.provider_name}
                 </Typography>
+              ) : (
+                <Button
+                  component={Link}
+                  href="/settings/llm-providers"
+                  size="small"
+                  startIcon={<AddIcon />}
+                >
+                  Add
+                </Button>
               )}
             </ListItem>
 
