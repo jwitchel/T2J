@@ -319,29 +319,53 @@ function InboxContent() {
 
       {/* Analysis Tab */}
       <TabPanel value={activeTab} index={0}>
-        {llmResponse && emailData ? (
+        {llmResponse && emailData && parsedMessage ? (
           <Paper sx={{ p: 3 }}>
-            {/* Email metadata header */}
-            <Typography variant="h6" gutterBottom>
-              Analysis
-            </Typography>
-            <Box sx={{ color: 'text.secondary', mb: 3 }}>
-              <Typography variant="body2">To: {emailData.to.join(', ')}</Typography>
-              {emailData.cc && emailData.cc.length > 0 && (
-                <Typography variant="body2">CC: {emailData.cc.join(', ')}</Typography>
-              )}
-              <Typography variant="body2">Subject: {emailData.subject}</Typography>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
-                <Typography variant="body2">Relationship:</Typography>
-                <RelationshipSelector
-                  emailAddress={emailData.from}
-                  currentRelationship={llmResponse.relationship.type}
-                />
-                <Typography variant="caption">
-                  ({Math.round(llmResponse.relationship.confidence * 100)}% confidence)
-                </Typography>
-              </Stack>
-            </Box>
+            {/* Email metadata header - consistent with Message tab */}
+            <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 3 }}>
+              <Box sx={{ flex: 1 }}>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <Typography variant="h6">
+                    {parsedMessage.subject || '(No subject)'}
+                  </Typography>
+                  {emailData.actionTaken && emailData.actionTaken !== EmailActionType.PENDING && (
+                    <Chip
+                      label={EmailActionType.LABELS[emailData.actionTaken]}
+                      size="small"
+                      sx={{
+                        bgcolor: EmailActionType.COLORS[emailData.actionTaken],
+                        color: 'white',
+                      }}
+                    />
+                  )}
+                </Stack>
+                <Box sx={{ color: 'text.secondary' }}>
+                  <Typography variant="body2">
+                    From:{' '}
+                    {parsedMessage.from.name
+                      ? `${parsedMessage.from.name} <${parsedMessage.from.address}>`
+                      : parsedMessage.from.address}
+                  </Typography>
+                  <Typography variant="body2">
+                    To:{' '}
+                    {parsedMessage.to
+                      .map((addr) => (addr.name ? `${addr.name} <${addr.address}>` : addr.address))
+                      .join(', ')}
+                  </Typography>
+                  {parsedMessage.cc && parsedMessage.cc.length > 0 && (
+                    <Typography variant="body2">
+                      CC:{' '}
+                      {parsedMessage.cc
+                        .map((addr) => (addr.name ? `${addr.name} <${addr.address}>` : addr.address))
+                        .join(', ')}
+                    </Typography>
+                  )}
+                  <Typography variant="body2">
+                    Date: {new Date(parsedMessage.date).toLocaleString()}
+                  </Typography>
+                </Box>
+              </Box>
+            </Stack>
 
             {/* Draft body */}
             {llmResponse.body ? (
@@ -356,7 +380,7 @@ function InboxContent() {
             ) : (
               <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', bgcolor: 'action.hover' }}>
                 <Typography variant="body2" color="text.secondary">
-                  No draft body - email was filed automatically
+                  No draft was created for this email.
                 </Typography>
               </Paper>
             )}
@@ -364,15 +388,10 @@ function InboxContent() {
             {/* AI Analysis Metadata */}
             {llmResponse.meta && (
               <Box sx={{ mt: 4 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <PsychologyIcon color="action" />
-                    <Typography variant="subtitle1" fontWeight="medium">
-                      AI Analysis
-                    </Typography>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                    Message ID: {emailData.messageId}
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                  <PsychologyIcon color="action" />
+                  <Typography variant="subtitle1" fontWeight="medium">
+                    AI Analysis
                   </Typography>
                 </Stack>
 
@@ -399,9 +418,9 @@ function InboxContent() {
                     )}
 
                     {/* Recommended Action */}
-                    <Box>
+                    <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" color="text.secondary" fontWeight="medium" gutterBottom>
-                        Recommended Action
+                        Action Taken
                       </Typography>
                       <Chip
                         label={EmailActionType.LABELS[llmResponse.meta.recommendedAction]}
@@ -412,65 +431,92 @@ function InboxContent() {
                         }}
                       />
                     </Box>
+
+                    {/* Reasons / Key Considerations */}
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" fontWeight="medium" gutterBottom>
+                        Reasons
+                      </Typography>
+                      {Array.isArray(llmResponse.meta?.keyConsiderations) &&
+                        llmResponse.meta.keyConsiderations.length > 0 ? (
+                          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                            {llmResponse.meta.keyConsiderations.map((consideration, idx) => (
+                              <Typography component="li" variant="body2" color="text.secondary" key={idx}>
+                                {consideration}
+                              </Typography>
+                            ))}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                            No reasons recorded
+                          </Typography>
+                        )
+                      }
+                    </Box>
                   </Box>
 
                   {/* Right Column */}
                   <Box sx={{ flex: 1 }}>
+                    {/* Relationship */}
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" fontWeight="medium" gutterBottom>
+                        Relationship
+                      </Typography>
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        <RelationshipSelector
+                          emailAddress={emailData.from}
+                          currentRelationship={llmResponse.relationship.type}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          ({Math.round(llmResponse.relationship.confidence * 100)}% confidence)
+                        </Typography>
+                      </Stack>
+                    </Box>
+
+                    {/* Context Flags */}
                     <Typography variant="body2" color="text.secondary" fontWeight="medium" gutterBottom>
                       Context Flags
                     </Typography>
                     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                       <Chip
-                        label={`${llmResponse.meta.contextFlags.isThreaded ? '✓' : '✗'} Threaded`}
-                        variant={llmResponse.meta.contextFlags.isThreaded ? 'filled' : 'outlined'}
+                        label={`${llmResponse.meta.contextFlags?.isThreaded ? '✓' : '✗'} Threaded`}
+                        variant={llmResponse.meta.contextFlags?.isThreaded ? 'filled' : 'outlined'}
                         size="small"
                       />
                       <Chip
-                        label={`${llmResponse.meta.contextFlags.hasAttachments ? '✓' : '✗'} Attachments`}
-                        variant={llmResponse.meta.contextFlags.hasAttachments ? 'filled' : 'outlined'}
+                        label={`${llmResponse.meta.contextFlags?.hasAttachments ? '✓' : '✗'} Attachments`}
+                        variant={llmResponse.meta.contextFlags?.hasAttachments ? 'filled' : 'outlined'}
                         size="small"
                       />
                       <Chip
-                        label={`${llmResponse.meta.contextFlags.isGroupEmail ? '✓' : '✗'} Group Email`}
-                        variant={llmResponse.meta.contextFlags.isGroupEmail ? 'filled' : 'outlined'}
+                        label={`${llmResponse.meta.contextFlags?.isGroupEmail ? '✓' : '✗'} Group Email`}
+                        variant={llmResponse.meta.contextFlags?.isGroupEmail ? 'filled' : 'outlined'}
                         size="small"
                       />
                       <Chip
-                        label={`To: ${llmResponse.meta.contextFlags.inboundMsgAddressedTo}`}
+                        label={`To: ${llmResponse.meta.contextFlags?.inboundMsgAddressedTo ?? 'you'}`}
                         variant="outlined"
                         size="small"
                       />
                       <Chip
-                        label={`Urgency: ${llmResponse.meta.contextFlags.urgencyLevel}`}
+                        label={`Urgency: ${llmResponse.meta.contextFlags?.urgencyLevel ?? 'normal'}`}
                         color={
-                          llmResponse.meta.contextFlags.urgencyLevel === 'critical'
+                          llmResponse.meta.contextFlags?.urgencyLevel === 'critical'
                             ? 'error'
-                            : llmResponse.meta.contextFlags.urgencyLevel === 'high'
+                            : llmResponse.meta.contextFlags?.urgencyLevel === 'high'
                               ? 'warning'
                               : 'default'
                         }
                         size="small"
                       />
                     </Stack>
+
+                    {/* Message ID */}
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 2, fontFamily: 'monospace', display: 'block' }}>
+                      Message ID: {emailData.messageId}
+                    </Typography>
                   </Box>
                 </Stack>
-
-                {/* Key Considerations */}
-                {Array.isArray(llmResponse.meta?.keyConsiderations) &&
-                  llmResponse.meta.keyConsiderations.length > 0 && (
-                    <Box sx={{ mt: 3 }}>
-                      <Typography variant="body2" color="text.secondary" fontWeight="medium" gutterBottom>
-                        Key Considerations
-                      </Typography>
-                      <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-                        {llmResponse.meta.keyConsiderations.map((consideration, idx) => (
-                          <Typography component="li" variant="body2" color="text.secondary" key={idx}>
-                            {consideration}
-                          </Typography>
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
               </Box>
             )}
           </Paper>

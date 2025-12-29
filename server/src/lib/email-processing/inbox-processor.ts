@@ -238,10 +238,17 @@ export class InboxProcessor {
   }
 
   /**
-   * Create a minimal draft for spam emails (no LLM needed)
+   * Create a minimal draft to carry metadata without response content
+   * Used for spam and LLM-analyzed silent actions
    * @private
    */
-  private _createSpamDraft(parsedData: ParsedEmailData, userContext: UserContext, spamCheckResult: SpamCheckResult): DraftEmail {
+  private _createMetadataOnlyDraft(
+    parsedData: ParsedEmailData,
+    userContext: UserContext,
+    meta: DraftEmail['meta'],
+    relationship: DraftEmail['relationship'],
+    spamAnalysis?: SpamCheckResult
+  ): DraftEmail {
     const { processedEmail } = parsedData;
 
     return {
@@ -254,31 +261,18 @@ export class InboxProcessor {
       bodyHtml: undefined,
       inReplyTo: processedEmail.messageId || `<${Date.now()}>`,
       references: processedEmail.messageId || `<${Date.now()}>`,
-      meta: {
-        recommendedAction: EmailActionType.SILENT_SPAM,
-        keyConsiderations: spamCheckResult.indicators,
-        contextFlags: {
-          isThreaded: false,
-          hasAttachments: false,
-          isGroupEmail: false,
-          inboundMsgAddressedTo: 'you',
-          urgencyLevel: 'low'
-        }
-      },
-      relationship: {
-        type: RelationshipType.SPAM,
-        confidence: 0.9
-      },
+      meta,
+      relationship,
       draftMetadata: {
         exampleCount: 0,
         timestamp: new Date().toISOString(),
         originalSubject: processedEmail.subject,
         originalFrom: processedEmail.from[0].address,
-        spamAnalysis: {
-          isSpam: spamCheckResult.isSpam,
-          indicators: spamCheckResult.indicators,
-          senderResponseCount: spamCheckResult.senderResponseCount
-        }
+        spamAnalysis: spamAnalysis ? {
+          isSpam: spamAnalysis.isSpam,
+          indicators: spamAnalysis.indicators,
+          senderResponseCount: spamAnalysis.senderResponseCount
+        } : undefined
       }
     };
   }
@@ -725,7 +719,6 @@ export class InboxProcessor {
     }
 
     if (isSpam) {
-      const draft = this._createSpamDraft(parsedData, userContext, spamResult);
       const senderEmail = parsedData.processedEmail.from[0].address;
       const senderName = parsedData.processedEmail.from[0].name ?? senderEmail;
       await personService.findOrCreatePerson({
@@ -735,7 +728,23 @@ export class InboxProcessor {
         relationshipType: RelationshipType.SPAM,
         confidence: 0.9
       });
-      return draft;
+      return this._createMetadataOnlyDraft(
+        parsedData,
+        userContext,
+        {
+          recommendedAction: EmailActionType.SILENT_SPAM,
+          keyConsiderations: spamResult.indicators,
+          contextFlags: {
+            isThreaded: false,
+            hasAttachments: false,
+            isGroupEmail: false,
+            inboundMsgAddressedTo: 'you',
+            urgencyLevel: 'low'
+          }
+        },
+        { type: RelationshipType.SPAM, confidence: 0.9 },
+        spamResult
+      );
     }
 
     if (EmailActionType.isDraftAction(effectiveAction)) {
@@ -760,6 +769,17 @@ export class InboxProcessor {
       return draftResult.draft;
     }
 
+    // Silent action with LLM analysis - carry the metadata
+    if (analysis) {
+      return this._createMetadataOnlyDraft(
+        parsedData,
+        userContext,
+        { ...analysis.meta, recommendedAction: effectiveAction },
+        analysis.relationship
+      );
+    }
+
+    // User rule match - no LLM analysis to preserve
     return null;
   }
 
