@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { MuiPublicLayout, AuthCardHeader, StyledLink } from '@/components/mui';
+import { usePageTitle } from '@/hooks/use-page-title';
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,6 +28,7 @@ const signInSchema = z.object({
 type SignInFormData = z.infer<typeof signInSchema>;
 
 export default function MuiSignInPage() {
+  usePageTitle('Sign In');
   const router = useRouter();
   const { user, loading, signIn } = useAuth();
   const { success, error: showError } = useMuiToast();

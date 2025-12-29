@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'AI Email Assistant',
-  description: 'AI-powered email reply drafts matching your writing tone',
+  title: 'Time to Just',
+  description: 'AI-powered email management matching your writing tone',
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },

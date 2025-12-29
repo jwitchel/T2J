@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { MuiPublicLayout, AuthCardHeader, StyledLink } from '@/components/mui';
+import { usePageTitle } from '@/hooks/use-page-title';
 
 const signUpSchema = z
   .object({
@@ -34,6 +35,7 @@ const signUpSchema = z
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
 export default function MuiSignUpPage() {
+  usePageTitle('Sign Up');
   const router = useRouter();
   const { user, loading, signUp } = useAuth();
   const { success, error: showError } = useMuiToast();

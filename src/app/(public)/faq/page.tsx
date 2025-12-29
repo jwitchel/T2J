@@ -3,6 +3,7 @@
 import { Box, Container, Typography, Accordion, AccordionSummary, AccordionDetails, Stack, Link } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { MuiPublicLayout, PageHeader } from '@/components/mui';
+import { usePageTitle } from '@/hooks/use-page-title';
 
 const faqs = [
   {
@@ -58,31 +59,38 @@ const faqs = [
 ];
 
 export default function MuiFaqPage() {
+  usePageTitle('FAQ');
   return (
     <MuiPublicLayout>
-      <Container maxWidth="md" sx={{ py: 8 }}>
+      <Container maxWidth="md" sx={{ py: { xs: 6, md: 10 } }}>
         <PageHeader
           title="Frequently Asked Questions"
           description="Everything you need to know about Time to Just"
           centered
         />
 
-        <Box>
+        <Box sx={{ maxWidth: 800, mx: 'auto' }}>
           {faqs.map((faq, index) => (
             <Accordion key={index} disableGutters>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1">{faq.question}</Typography>
+                <Typography variant="subtitle1">
+                  {faq.question}
+                </Typography>
               </AccordionSummary>
               <AccordionDetails>
-                <Typography variant="body2">{faq.answer}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                  {faq.answer}
+                </Typography>
               </AccordionDetails>
             </Accordion>
           ))}
         </Box>
 
-        <Stack spacing={1} alignItems="center" sx={{ mt: 6 }}>
-          <Typography variant="h6">Still have questions?</Typography>
-          <Typography variant="body2">
+        <Stack spacing={2} alignItems="center" sx={{ mt: 8 }}>
+          <Typography variant="sectionHeader">
+            Still have questions?
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             Contact us at{' '}
             <Link href="mailto:support@timetojust.com" underline="hover">
               support@timetojust.com

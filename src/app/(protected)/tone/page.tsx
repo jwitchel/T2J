@@ -27,6 +27,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { MuiAuthenticatedLayout, MuiLogViewer } from '@/components/mui';
 
 // Types
@@ -179,6 +180,7 @@ function PatternRow({ label, value, showProgress = true }: PatternRowProps) {
 }
 
 export default function MuiTonePage() {
+  usePageTitle('Tone Analysis');
   const { user, signOut } = useAuth();
   // Tab state
   const [tabValue, setTabValue] = useState(0);
@@ -330,7 +332,9 @@ export default function MuiTonePage() {
     <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4">Tone Analysis</Typography>
+        <Typography variant="h4">
+          Tone Analysis
+        </Typography>
         <Typography variant="body2" color="text.secondary">
           {toneData && toneData.totalEmailsLoaded > 0
             ? `Analyze your writing style from ${toneData.totalEmailsLoaded} emails`
@@ -437,7 +441,7 @@ export default function MuiTonePage() {
       {/* Tuning Tab */}
       {tabValue === 1 && (
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="sectionHeader" gutterBottom>
             Tuning
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -454,7 +458,7 @@ export default function MuiTonePage() {
         <>
           {!hasProfiles ? (
             <Paper sx={{ p: 3, textAlign: 'center' }}>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="sectionHeader" gutterBottom>
                 No Results Yet
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -505,7 +509,7 @@ export default function MuiTonePage() {
               <Stack spacing={3}>
                 {/* Sentence Patterns */}
                 <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="sectionHeader" gutterBottom>
                     Sentence Patterns
                   </Typography>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -584,7 +588,7 @@ export default function MuiTonePage() {
 
                 {/* Opening Patterns */}
                 <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="sectionHeader" gutterBottom>
                     Email Openings
                   </Typography>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -610,7 +614,7 @@ export default function MuiTonePage() {
                 {/* Paragraph Patterns */}
                 {patterns?.paragraphPatterns && patterns.paragraphPatterns.length > 0 && (
                   <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="sectionHeader" gutterBottom>
                       Paragraph Structure
                     </Typography>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -631,7 +635,7 @@ export default function MuiTonePage() {
                 {/* Response Patterns */}
                 {patterns?.responsePatterns && (
                   <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="sectionHeader" gutterBottom>
                       Response Style
                     </Typography>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -711,7 +715,7 @@ export default function MuiTonePage() {
                   }}
                 >
                   <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="sectionHeader" gutterBottom>
                       Valedictions
                     </Typography>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -731,7 +735,7 @@ export default function MuiTonePage() {
                   </Paper>
 
                   <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="sectionHeader" gutterBottom>
                       Name Signature
                     </Typography>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -795,7 +799,7 @@ export default function MuiTonePage() {
 
                 {/* Unique Expressions */}
                 <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="sectionHeader" gutterBottom>
                     Unique Expressions
                   </Typography>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -830,7 +834,7 @@ export default function MuiTonePage() {
 
                 {/* Expressions to Avoid */}
                 <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="sectionHeader" gutterBottom>
                     Expressions to Avoid
                   </Typography>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -875,7 +879,7 @@ export default function MuiTonePage() {
                 {/* Analysis Details */}
                 {currentProfile && (
                   <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="sectionHeader" gutterBottom>
                       Analysis Details
                     </Typography>
                     <Box

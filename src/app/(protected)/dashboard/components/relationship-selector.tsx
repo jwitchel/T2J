@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, MouseEvent } from 'react';
+import { useState, MouseEvent, useMemo } from 'react';
 import {
   Chip,
   Menu,
@@ -8,26 +8,17 @@ import {
   ListItemIcon,
   CircularProgress,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
 import { RelationshipType } from '../../../../../server/src/lib/relationships/types';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { relationshipColors } from '@/lib/theme';
 
 interface RelationshipSelectorProps {
   emailAddress: string;
   currentRelationship: string;
   onRelationshipChange?: (newRelationship: string) => void;
 }
-
-// MUI-friendly hex colors for relationship types
-const RELATIONSHIP_COLORS: Record<string, string> = {
-  [RelationshipType.SPOUSE]: '#ec407a',     // pink[400]
-  [RelationshipType.FAMILY]: '#ab47bc',     // purple[400]
-  [RelationshipType.COLLEAGUE]: '#42a5f5',  // blue[400]
-  [RelationshipType.FRIENDS]: '#66bb6a',    // green[400]
-  [RelationshipType.EXTERNAL]: '#9e9e9e',   // grey[500]
-  [RelationshipType.SPAM]: '#ef5350',       // red[400]
-  unknown: '#78909c',                        // blueGrey[400]
-};
 
 const RELATIONSHIP_OPTIONS = [
   { value: RelationshipType.SPOUSE, label: 'Spouse' },
@@ -43,11 +34,24 @@ export function RelationshipSelector({
   currentRelationship,
   onRelationshipChange,
 }: RelationshipSelectorProps) {
+  const theme = useTheme();
+  const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
+  const relColors = relationshipColors[mode];
   const { success, error } = useMuiToast();
   const [isLoading, setIsLoading] = useState(false);
   const [relationship, setRelationship] = useState(currentRelationship);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
+
+  // Build options with theme-aware colors
+  const optionsWithColors = useMemo(
+    () =>
+      RELATIONSHIP_OPTIONS.map((opt) => ({
+        ...opt,
+        color: relColors[opt.value as keyof typeof relColors] ?? relColors.unknown,
+      })),
+    [relColors]
+  );
 
   const handleClick = (event: MouseEvent<HTMLElement>) => {
     if (!isLoading) {
@@ -91,7 +95,7 @@ export function RelationshipSelector({
     }
   };
 
-  const relationshipColor = RELATIONSHIP_COLORS[relationship] || RELATIONSHIP_COLORS.unknown;
+  const relationshipColor = relColors[relationship as keyof typeof relColors] ?? relColors.unknown;
   const relationshipLabel = RelationshipType.LABELS[relationship] || RelationshipType.LABELS.unknown;
 
   return (
@@ -113,7 +117,7 @@ export function RelationshipSelector({
         onClose={handleClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
-        {RELATIONSHIP_OPTIONS.map((option) => (
+        {optionsWithColors.map((option) => (
           <MenuItem
             key={option.value}
             onClick={() => handleRelationshipChange(option.value)}
@@ -129,7 +133,7 @@ export function RelationshipSelector({
                     width: 10,
                     height: 10,
                     borderRadius: '50%',
-                    backgroundColor: RELATIONSHIP_COLORS[option.value],
+                    backgroundColor: option.color,
                   }}
                 />
               )}

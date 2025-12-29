@@ -31,6 +31,7 @@ import AddIcon from '@mui/icons-material/Add';
 import Link from 'next/link';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 import { ActionsSummaryChart } from './components/actions-summary-chart';
 import { RecentActionsTable } from './components/recent-actions-table';
@@ -103,6 +104,7 @@ const getLookBackLabel = (option: string): string => {
 };
 
 export default function MuiDashboardPage() {
+  usePageTitle('Dashboard');
   const { user, signOut } = useAuth();
   const isMobile = useMediaQuery('(max-width:899px)');
   const { success, error: showError } = useMuiToast();
@@ -183,7 +185,9 @@ export default function MuiDashboardPage() {
   return (
     <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
-      <Typography variant="h4" sx={{ mb: 4 }}>Dashboard</Typography>
+      <Typography variant="h4" sx={{ mb: 4 }}>
+        Dashboard
+      </Typography>
 
       {/* Recent Actions Table - Shows first on mobile */}
       {isMobile && <Box sx={{ mb: 4 }}><RecentActionsTable /></Box>}
@@ -197,7 +201,9 @@ export default function MuiDashboardPage() {
 
         {/* Account Summary */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h6" gutterBottom>Account Summary</Typography>
+          <Typography variant="sectionHeader" gutterBottom>
+            Account Summary
+          </Typography>
           <Paper sx={{ p: 2 }}>
             {/* Email Accounts Section */}
             <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>

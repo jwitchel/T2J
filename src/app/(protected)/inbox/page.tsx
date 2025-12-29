@@ -31,10 +31,12 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import Link from 'next/link';
 import PostalMime from 'postal-mime';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 import { RelationshipSelector } from '../dashboard/components/relationship-selector';
 import { EmailActionType } from '../../../../server/src/types/email-action-tracking';
+import { useActionColors } from '@/hooks/use-action-colors';
 import type { SpamCheckResult } from '../../../../server/src/lib/pipeline/types';
 
 // Types
@@ -170,8 +172,10 @@ function TabPanel({ children, value, index }: TabPanelProps) {
 }
 
 function InboxContent() {
+  usePageTitle('Inbox');
   const { user, signOut } = useAuth();
   const { error: showError } = useMuiToast();
+  const actionColorsMap = useActionColors();
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(false);
@@ -308,12 +312,14 @@ function InboxContent() {
       <Typography variant="h4" sx={{ mb: 3 }}>
         Message Analysis
       </Typography>
-
+      <Typography variant="body2" color="text.secondary">
+        Detailed analysis and actions taken for the selected email message.
+      </Typography>
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-          <Tab label="Analysis" />
-          <Tab label="Message" />
+          <Tab label="Analysis & Action" />
+          <Tab label="Original Message" />
         </Tabs>
       </Box>
 
@@ -333,7 +339,7 @@ function InboxContent() {
                       label={EmailActionType.LABELS[emailData.actionTaken]}
                       size="small"
                       sx={{
-                        bgcolor: EmailActionType.COLORS[emailData.actionTaken],
+                        bgcolor: actionColorsMap[emailData.actionTaken as keyof typeof actionColorsMap] ?? '#71717a',
                         color: 'white',
                       }}
                     />
@@ -391,7 +397,7 @@ function InboxContent() {
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
                   <PsychologyIcon color="action" />
                   <Typography variant="subtitle1" fontWeight="medium">
-                    AI Analysis
+                    Analysis Details
                   </Typography>
                 </Stack>
 
@@ -426,7 +432,7 @@ function InboxContent() {
                         label={EmailActionType.LABELS[llmResponse.meta.recommendedAction]}
                         size="small"
                         sx={{
-                          bgcolor: EmailActionType.COLORS[llmResponse.meta.recommendedAction],
+                          bgcolor: actionColorsMap[llmResponse.meta.recommendedAction as keyof typeof actionColorsMap] ?? '#71717a',
                           color: 'white',
                         }}
                       />
@@ -559,7 +565,7 @@ function InboxContent() {
                       label={EmailActionType.LABELS[emailData.actionTaken]}
                       size="small"
                       sx={{
-                        bgcolor: EmailActionType.COLORS[emailData.actionTaken],
+                        bgcolor: actionColorsMap[emailData.actionTaken as keyof typeof actionColorsMap] ?? '#71717a',
                         color: 'white',
                       }}
                     />

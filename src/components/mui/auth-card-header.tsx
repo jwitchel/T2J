@@ -21,8 +21,10 @@ export function AuthCardHeader({ title, description }: AuthCardHeaderProps) {
       <Typography variant="h5">
         Time to Just
       </Typography>
-      <Typography variant="h6">{title}</Typography>
-      <Typography variant="body2" align="center">
+      <Typography variant="h6" color="text.secondary">
+        {title}
+      </Typography>
+      <Typography variant="body2" align="center" color="text.secondary">
         {description}
       </Typography>
     </Stack>

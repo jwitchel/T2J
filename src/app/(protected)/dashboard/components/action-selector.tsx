@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, MouseEvent } from 'react';
+import { useState, MouseEvent, useMemo } from 'react';
 import {
   Chip,
   Menu,
@@ -17,6 +17,7 @@ import {
   Radio,
   RadioGroup,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
 import { EmailActionType } from '../../../../../server/src/types/email-action-tracking';
 import {
@@ -26,6 +27,8 @@ import {
 } from '../../../../../server/src/types/action-rules';
 import { RelationshipType } from '../../../../../server/src/lib/relationships/types';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useActionColors } from '@/hooks/use-action-colors';
+import { relationshipColors } from '@/lib/theme';
 
 interface ActionSelectorProps {
   emailAddress: string;
@@ -34,30 +37,17 @@ interface ActionSelectorProps {
   onActionRuleCreated?: () => void;
 }
 
-// MUI-friendly hex colors for relationship chips in dialog
-const RELATIONSHIP_COLORS: Record<string, string> = {
-  [RelationshipType.SPOUSE]: '#ec407a',
-  [RelationshipType.FAMILY]: '#ab47bc',
-  [RelationshipType.COLLEAGUE]: '#42a5f5',
-  [RelationshipType.FRIENDS]: '#66bb6a',
-  [RelationshipType.EXTERNAL]: '#9e9e9e',
-  [RelationshipType.SPAM]: '#ef5350',
-  unknown: '#78909c',
-};
-
-// Build options from USER_ACTION_VALUES
-const ACTION_OPTIONS = USER_ACTION_VALUES.map((value) => ({
-  value,
-  label: EmailActionType.LABELS[value],
-  color: EmailActionType.COLORS[value],
-}));
-
 export function ActionSelector({
   emailAddress,
   currentAction,
   relationshipType,
   onActionRuleCreated,
 }: ActionSelectorProps) {
+  const theme = useTheme();
+  const actionColorsMap = useActionColors();
+  const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
+  const relColors = relationshipColors[mode];
+
   const { success, error } = useMuiToast();
   const [isLoading, setIsLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -67,6 +57,17 @@ export function ActionSelector({
   );
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const menuOpen = Boolean(anchorEl);
+
+  // Build action options with theme-aware colors
+  const actionOptions = useMemo(
+    () =>
+      USER_ACTION_VALUES.map((value) => ({
+        value,
+        label: EmailActionType.LABELS[value],
+        color: actionColorsMap[value] ?? '#71717a',
+      })),
+    [actionColorsMap]
+  );
 
   const handleChipClick = (event: MouseEvent<HTMLElement>) => {
     if (!isLoading) {
@@ -140,9 +141,9 @@ export function ActionSelector({
     }
   };
 
-  const actionColor = EmailActionType.COLORS[currentAction] || '#71717a';
+  const actionColor = actionColorsMap[currentAction as keyof typeof actionColorsMap] ?? '#71717a';
   const actionLabel = EmailActionType.LABELS[currentAction] || currentAction;
-  const relationshipColor = relationshipType ? RELATIONSHIP_COLORS[relationshipType] : null;
+  const relationshipColor = relationshipType ? relColors[relationshipType as keyof typeof relColors] : null;
   const relationshipLabel = relationshipType ? RelationshipType.LABELS[relationshipType] : null;
 
   return (
@@ -164,7 +165,7 @@ export function ActionSelector({
         onClose={handleMenuClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
-        {ACTION_OPTIONS.map((option) => (
+        {actionOptions.map((option) => (
           <MenuItem
             key={option.value}
             onClick={() => handleActionSelect(option.value)}
@@ -199,7 +200,7 @@ export function ActionSelector({
       >
         <DialogTitle>Create Action Rule</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+          <DialogContentText component="div" sx={{ mb: 2 }}>
             Choose how to apply the action:{' '}
             {selectedAction && (
               <Chip
@@ -207,7 +208,7 @@ export function ActionSelector({
                 size="small"
                 sx={{
                   ml: 1,
-                  backgroundColor: EmailActionType.COLORS[selectedAction],
+                  backgroundColor: actionColorsMap[selectedAction] ?? '#71717a',
                   color: 'white',
                 }}
               />

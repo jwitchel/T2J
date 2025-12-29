@@ -26,6 +26,7 @@ import ActiveIcon from '@mui/icons-material/Loop';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { MuiAuthenticatedLayout, MuiLogViewer } from '@/components/mui';
 
 // Types
@@ -246,6 +247,7 @@ function QueueStatsDisplay({ label, stats }: { label: string; stats: QueueStats 
 }
 
 export default function MuiJobsPage() {
+  usePageTitle('Jobs');
   const { user, signOut } = useAuth();
   const { success, error: showError } = useMuiToast();
   const showConfirm = useConfirm();
@@ -748,9 +750,8 @@ export default function MuiJobsPage() {
     <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box mb={3}>
-        <Typography variant="h4">Background Jobs</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Monitor and manage background processing tasks
+        <Typography variant="h4">
+          Background Jobs
         </Typography>
       </Box>
 
@@ -898,12 +899,9 @@ export default function MuiJobsPage() {
       <Paper sx={{ mb: 3 }}>
         <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Box>
-              <Typography variant="h6">Background Jobs</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Real-time status of all background processing
-              </Typography>
-            </Box>
+            <Typography variant="sectionHeader">
+              Background Jobs
+            </Typography>
           </Stack>
         </Box>
         <Box sx={{ height: 250, overflow: 'auto' }}>
@@ -925,7 +923,7 @@ export default function MuiJobsPage() {
 
       {/* Real-Time Logs Panel */}
       <Box>
-        <Typography variant="h6" sx={{ mb: 1 }}>
+        <Typography variant="sectionHeader" sx={{ mb: 1 }}>
           Real-Time Logs
         </Typography>
         <MuiLogViewer height={400} autoConnect={true} channel="jobs" />

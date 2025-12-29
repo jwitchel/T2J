@@ -1,7 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { Box, Container, Typography, Paper, Stack, Chip, Button } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { MuiPublicLayout, PageHeader } from '@/components/mui';
+import { usePageTitle } from '@/hooks/use-page-title';
 
 interface StepProps {
   step: number;
@@ -13,8 +17,15 @@ function Step({ step, title, children }: StepProps) {
   return (
     <Box>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-        <Chip label={`Step ${step}`} variant="outlined" />
-        <Typography variant="h5">{title}</Typography>
+        <Chip
+          label={`Step ${step}`}
+          color="primary"
+          variant="outlined"
+          sx={{ fontWeight: 600, borderRadius: 2 }}
+        />
+        <Typography variant="h5">
+          {title}
+        </Typography>
       </Stack>
       <Paper sx={{ p: 3 }}>{children}</Paper>
     </Box>
@@ -22,9 +33,13 @@ function Step({ step, title, children }: StepProps) {
 }
 
 export default function MuiDemoPage() {
+  usePageTitle('How It Works');
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
   return (
     <MuiPublicLayout>
-      <Container maxWidth="md" sx={{ py: 8 }}>
+      <Container maxWidth="md" sx={{ py: { xs: 6, md: 10 } }}>
         <PageHeader
           title="How It Works"
           description="See Time to Just in action"
@@ -128,12 +143,39 @@ export default function MuiDemoPage() {
             </Stack>
           </Step>
 
-          <Stack spacing={1} alignItems="center" sx={{ mt: 4 }}>
-            <Typography variant="h5">Ready to try it yourself?</Typography>
-            <Typography variant="body1">
+          <Stack spacing={2} alignItems="center" sx={{ mt: 4 }}>
+            <Typography variant="h5">
+              Ready to try it yourself?
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
               Sign up for free and experience the future of email management.
             </Typography>
-            <Button variant="contained" size="large" href="/signup" sx={{ mt: 2 }}>
+            <Button
+              component={Link}
+              href="/signup"
+              variant="contained"
+              size="large"
+              endIcon={<ArrowForwardIcon />}
+              sx={{
+                mt: 2,
+                px: 4,
+                py: 1.5,
+                background: isDark
+                  ? 'linear-gradient(135deg, #3b6fb6 0%, #6366f1 100%)'
+                  : 'linear-gradient(135deg, #0B2648 0%, #2d5a9a 100%)',
+                boxShadow: isDark
+                  ? '0 4px 14px rgba(89, 133, 193, 0.35)'
+                  : '0 4px 14px rgba(11, 38, 72, 0.35)',
+                '&:hover': {
+                  background: isDark
+                    ? 'linear-gradient(135deg, #5985c1 0%, #818cf8 100%)'
+                    : 'linear-gradient(135deg, #1e4577 0%, #3b6fb6 100%)',
+                  boxShadow: isDark
+                    ? '0 6px 20px rgba(89, 133, 193, 0.45)'
+                    : '0 6px 20px rgba(11, 38, 72, 0.45)',
+                },
+              }}
+            >
               Get Started
             </Button>
           </Stack>

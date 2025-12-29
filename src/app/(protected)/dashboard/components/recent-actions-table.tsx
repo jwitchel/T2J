@@ -14,6 +14,7 @@ import {
   ListItem,
   ListItemText,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import Link from 'next/link';
 import useSWR from 'swr';
@@ -22,6 +23,8 @@ import { EmailActionType } from '../../../../../server/src/types/email-action-tr
 import { RelationshipType } from '../../../../../server/src/lib/relationships/types';
 import { RelationshipSelector } from './relationship-selector';
 import { ActionSelector } from './action-selector';
+import { useActionColors } from '@/hooks/use-action-colors';
+import { emailAccountColors, relationshipColors, getDataGridStyles } from '@/lib/theme';
 
 interface RecentAction {
   id: string;
@@ -42,156 +45,145 @@ interface RecentActionsData {
   total: number;
 }
 
-// Generate consistent color for email address (MUI-compatible colors)
-const EMAIL_COLORS = [
-  '#ef5350', // red[400]
-  '#ff9800', // orange[500]
-  '#ffca28', // amber[400]
-  '#66bb6a', // green[400]
-  '#26a69a', // teal[400]
-  '#42a5f5', // blue[400]
-  '#5c6bc0', // indigo[400]
-  '#ab47bc', // purple[400]
-  '#ec407a', // pink[400]
-];
-
+// Generate consistent color for email address
 function getEmailColor(email: string): string {
   let hash = 0;
   for (let i = 0; i < email.length; i++) {
     hash = email.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return EMAIL_COLORS[Math.abs(hash) % EMAIL_COLORS.length];
+  return emailAccountColors[Math.abs(hash) % emailAccountColors.length];
 }
 
-// MUI-friendly hex colors for relationship types
-const RELATIONSHIP_COLORS: Record<string, string> = {
-  [RelationshipType.SPOUSE]: '#ec407a',
-  [RelationshipType.FAMILY]: '#ab47bc',
-  [RelationshipType.COLLEAGUE]: '#42a5f5',
-  [RelationshipType.FRIENDS]: '#66bb6a',
-  [RelationshipType.EXTERNAL]: '#9e9e9e',
-  [RelationshipType.SPAM]: '#ef5350',
-  unknown: '#78909c',
-};
+interface ColumnColors {
+  relationshipColors: Record<string, string>;
+  actionColors: Record<string, string>;
+}
 
-// DataGrid column definitions - extracted outside component for better performance
-const getColumns = (): GridColDef<RecentAction>[] => [
-  {
-    field: 'updatedAt',
-    headerName: 'Time',
-    width: 120,
-    valueGetter: (value: string) => formatDistanceToNow(new Date(value), { addSuffix: true }),
-  },
-  {
-    field: 'senderName',
-    headerName: 'From',
-    flex: 1,
-    minWidth: 150,
-    valueGetter: (value: string, row: RecentAction) => value || row.senderEmail || '(Unknown)',
-  },
-  {
-    field: 'relationship',
-    headerName: 'Relationship',
-    width: 120,
-    renderCell: (params: GridRenderCellParams<RecentAction>) => {
-      if (params.row.senderEmail) {
+// DataGrid column definitions - accepts theme-aware colors
+function getColumns(colors: ColumnColors): GridColDef<RecentAction>[] {
+  return [
+    {
+      field: 'updatedAt',
+      headerName: 'Time',
+      width: 120,
+      valueGetter: (value: string) => formatDistanceToNow(new Date(value), { addSuffix: true }),
+    },
+    {
+      field: 'senderName',
+      headerName: 'From',
+      flex: 1,
+      minWidth: 150,
+      valueGetter: (value: string, row: RecentAction) => value || row.senderEmail || '(Unknown)',
+    },
+    {
+      field: 'relationship',
+      headerName: 'Relationship',
+      width: 120,
+      renderCell: (params: GridRenderCellParams<RecentAction>) => {
+        if (params.row.senderEmail) {
+          return (
+            <RelationshipSelector
+              emailAddress={params.row.senderEmail}
+              currentRelationship={params.row.relationship}
+            />
+          );
+        }
         return (
-          <RelationshipSelector
-            emailAddress={params.row.senderEmail}
-            currentRelationship={params.row.relationship}
+          <Chip
+            label={RelationshipType.LABELS.unknown}
+            size="small"
+            sx={{
+              backgroundColor: colors.relationshipColors.unknown ?? '#78909c',
+              color: 'white',
+            }}
           />
         );
-      }
-      return (
-        <Chip
-          label={RelationshipType.LABELS.unknown}
-          size="small"
-          sx={{
-            backgroundColor: RELATIONSHIP_COLORS.unknown,
-            color: 'white',
-          }}
-        />
-      );
+      },
     },
-  },
-  {
-    field: 'subject',
-    headerName: 'Subject',
-    flex: 2,
-    minWidth: 200,
-  },
-  {
-    field: 'actionTaken',
-    headerName: 'Action',
-    width: 130,
-    renderCell: (params: GridRenderCellParams<RecentAction>) => {
-      if (params.row.senderEmail) {
+    {
+      field: 'subject',
+      headerName: 'Subject',
+      flex: 2,
+      minWidth: 200,
+    },
+    {
+      field: 'actionTaken',
+      headerName: 'Action',
+      width: 130,
+      renderCell: (params: GridRenderCellParams<RecentAction>) => {
+        if (params.row.senderEmail) {
+          return (
+            <ActionSelector
+              emailAddress={params.row.senderEmail}
+              currentAction={params.row.actionTaken}
+              relationshipType={params.row.relationship}
+            />
+          );
+        }
+        const actionColor = colors.actionColors[params.row.actionTaken] ?? '#71717a';
+        const actionLabel = EmailActionType.LABELS[params.row.actionTaken] || params.row.actionTaken;
         return (
-          <ActionSelector
-            emailAddress={params.row.senderEmail}
-            currentAction={params.row.actionTaken}
-            relationshipType={params.row.relationship}
+          <Chip
+            label={actionLabel}
+            size="small"
+            sx={{ backgroundColor: actionColor, color: 'white' }}
           />
         );
-      }
-      const actionColor = EmailActionType.COLORS[params.row.actionTaken] || '#71717a';
-      const actionLabel = EmailActionType.LABELS[params.row.actionTaken] || params.row.actionTaken;
-      return (
-        <Chip
-          label={actionLabel}
-          size="small"
-          sx={{ backgroundColor: actionColor, color: 'white' }}
-        />
-      );
+      },
     },
-  },
-  {
-    field: 'emailAccount',
-    headerName: 'Account',
-    width: 70,
-    align: 'center',
-    headerAlign: 'center',
-    renderCell: (params: GridRenderCellParams<RecentAction>) => (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-        }}
-      >
+    {
+      field: 'emailAccount',
+      headerName: 'Account',
+      width: 70,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params: GridRenderCellParams<RecentAction>) => (
         <Box
           sx={{
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            backgroundColor: getEmailColor(params.row.emailAccount),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
           }}
-          title={params.row.emailAccount}
-        />
-      </Box>
-    ),
-  },
-  {
-    field: 'actions',
-    headerName: 'Details',
-    width: 80,
-    sortable: false,
-    renderCell: (params: GridRenderCellParams<RecentAction>) => (
-      <MuiLink
-        component={Link}
-        href={`/inbox?emailAccountId=${params.row.emailAccountId}&messageId=${encodeURIComponent(params.row.messageId)}`}
-        underline="hover"
-      >
-        View
-      </MuiLink>
-    ),
-  },
-];
+        >
+          <Box
+            sx={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              backgroundColor: getEmailColor(params.row.emailAccount),
+            }}
+            title={params.row.emailAccount}
+          />
+        </Box>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: 'Details',
+      width: 80,
+      sortable: false,
+      renderCell: (params: GridRenderCellParams<RecentAction>) => (
+        <MuiLink
+          component={Link}
+          href={`/inbox?emailAccountId=${params.row.emailAccountId}&messageId=${encodeURIComponent(params.row.messageId)}`}
+          underline="hover"
+        >
+          View
+        </MuiLink>
+      ),
+    },
+  ];
+}
 
 export function RecentActionsTable() {
   // Responsive - DataGrid needs conditional render, not CSS hide
   const isMobile = useMediaQuery('(max-width:899px)');
+  const theme = useTheme();
+  const actionColorsMap = useActionColors();
+
+  // Get theme-aware relationship colors
+  const relColors = relationshipColors[theme.palette.mode];
 
   const { data, error, isLoading } = useSWR<RecentActionsData>(
     '/api/dashboard/recent-actions?limit=20',
@@ -211,12 +203,15 @@ export function RecentActionsTable() {
     }));
   }, [data]);
 
-  const columns = useMemo(() => getColumns(), []);
+  const columns = useMemo(
+    () => getColumns({ relationshipColors: relColors, actionColors: actionColorsMap }),
+    [relColors, actionColorsMap]
+  );
 
   if (error) {
     return (
       <Box>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Recent Emails
         </Typography>
         <Paper sx={{ p: 3 }}>
@@ -229,7 +224,7 @@ export function RecentActionsTable() {
   if (isLoading) {
     return (
       <Box>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Recent Emails
         </Typography>
         <Paper>
@@ -244,7 +239,7 @@ export function RecentActionsTable() {
   if (!data || data.actions.length === 0) {
     return (
       <Box>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Recent Emails
         </Typography>
         <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -259,7 +254,9 @@ export function RecentActionsTable() {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h6">Recent Emails</Typography>
+        <Typography variant="sectionHeader">
+          Recent Emails
+        </Typography>
 
         {/* Email Account Legend */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -286,7 +283,7 @@ export function RecentActionsTable() {
         <Paper>
           <List disablePadding>
             {data.actions.map((action, index) => {
-              const actionColor = EmailActionType.COLORS[action.actionTaken] || '#71717a';
+              const actionColor = actionColorsMap[action.actionTaken as keyof typeof actionColorsMap] ?? '#71717a';
               const actionLabel = EmailActionType.LABELS[action.actionTaken] || action.actionTaken;
               return (
                 <ListItem
@@ -355,8 +352,8 @@ export function RecentActionsTable() {
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } },
             }}
-            rowHeight={40}
-            sx={{ border: 0 }}
+            rowHeight={44}
+            sx={getDataGridStyles(theme)}
           />
         </Paper>
       )}

@@ -1,9 +1,11 @@
 'use client';
 
 import { Box, Paper, Typography, Skeleton, Alert } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import useSWR from 'swr';
 import ReactECharts from 'echarts-for-react';
 import { EmailActionType } from '../../../../../server/src/types/email-action-tracking';
+import { useChartColors, useEChartsTheme } from '@/hooks/use-echarts-theme';
 
 // Raw action counts from API (all possible actions)
 interface RawActionCounts {
@@ -26,15 +28,6 @@ interface ActionsSummaryData {
     last30Days: RawActionCounts;
   };
 }
-
-// MUI palette-aligned colors
-const CHART_COLORS = {
-  drafted: '#1976d2',   // MUI primary.main (blue)
-  spam: '#d32f2f',      // MUI error.main (red)
-  moved: '#2e7d32',     // MUI success.main (green)
-  noAction: '#757575',  // MUI grey[600]
-  label: '#616161',     // MUI grey[700]
-};
 
 // Aggregate raw actions into display categories
 function aggregateActions(raw: RawActionCounts): ActionCounts {
@@ -61,6 +54,19 @@ function aggregateActions(raw: RawActionCounts): ActionCounts {
 }
 
 export function ActionsSummaryChart() {
+  const theme = useTheme();
+  const chartColors = useChartColors();
+  const echartsTheme = useEChartsTheme();
+
+  // Theme-aware chart colors
+  const CHART_COLORS = {
+    drafted: chartColors[0],  // primary (blue)
+    spam: chartColors[1],     // error (red)
+    moved: chartColors[2],    // success (green)
+    noAction: chartColors[3], // grey
+    label: theme.palette.text.secondary,
+  };
+
   const { data, error, isLoading } = useSWR<ActionsSummaryData>(
     '/api/dashboard/actions-summary',
     {
@@ -72,7 +78,7 @@ export function ActionsSummaryChart() {
   if (error) {
     return (
       <Box>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Recent Activity
         </Typography>
         <Paper sx={{ p: 3 }}>
@@ -85,7 +91,7 @@ export function ActionsSummaryChart() {
   if (isLoading || !data) {
     return (
       <Box>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Recent Activity
         </Typography>
         <Paper sx={{ p: 3 }}>
@@ -148,7 +154,24 @@ export function ActionsSummaryChart() {
   };
 
   const option = {
-    tooltip: { show: false },
+    tooltip: {
+      show: true,
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: echartsTheme.tooltip.backgroundColor,
+      borderColor: echartsTheme.tooltip.borderColor,
+      textStyle: echartsTheme.tooltip.textStyle,
+      formatter: (params: { seriesName: string; value: number; dataIndex: number }[]) => {
+        const idx = params[0]?.dataIndex ?? 0;
+        const total = totals[idx];
+        return `<strong>${periods[idx]}</strong><br/>
+          Drafted: ${actualCounts.drafted[idx]}<br/>
+          Spam: ${actualCounts.spam[idx]}<br/>
+          Moved: ${actualCounts.moved[idx]}<br/>
+          No Action: ${actualCounts.noAction[idx]}<br/>
+          <strong>Total: ${total}</strong>`;
+      },
+    },
     grid: {
       left: '3%',
       right: '3%',
@@ -163,7 +186,10 @@ export function ActionsSummaryChart() {
         interval: 0,
         rotate: 0,
         fontSize: 11,
+        color: echartsTheme.textStyle.color,
+        fontFamily: echartsTheme.textStyle.fontFamily,
       },
+      axisLine: echartsTheme.axisLine,
     },
     yAxis: {
       type: 'value',
@@ -282,7 +308,7 @@ export function ActionsSummaryChart() {
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>
+      <Typography variant="sectionHeader" gutterBottom>
         Recent Activity
       </Typography>
       <Paper sx={{ p: 2 }}>

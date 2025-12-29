@@ -35,6 +35,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 
 // Types
@@ -138,8 +139,11 @@ const getColumns = (
     field: 'is_default',
     headerName: 'Default',
     width: 100,
-    renderCell: (params: GridRenderCellParams<LLMProvider>) =>
-      params.value ? <Chip label="Default" size="small" color="primary" /> : null,
+    renderCell: (params: GridRenderCellParams<LLMProvider>) => (
+      <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        {params.value ? <Chip label="Default" size="small" color="primary" /> : null}
+      </Box>
+    ),
   },
   {
     field: 'actions',
@@ -147,10 +151,12 @@ const getColumns = (
     width: 160,
     sortable: false,
     renderCell: (params: GridRenderCellParams<LLMProvider>) => (
-      <ButtonGroup size="small" sx={{ my: 'auto' }}>
-        <Button onClick={() => onEdit(params.row)}>Edit</Button>
-        <Button color="error" onClick={() => onDelete(params.row)}>Delete</Button>
-      </ButtonGroup>
+      <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <ButtonGroup size="small">
+          <Button onClick={() => onEdit(params.row)}>Edit</Button>
+          <Button color="error" onClick={() => onDelete(params.row)}>Delete</Button>
+        </ButtonGroup>
+      </Box>
     ),
   },
 ];
@@ -379,6 +385,7 @@ function ProviderDialog({ open, onClose, provider, onSuccess }: ProviderDialogPr
 }
 
 export default function MuiLLMProvidersPage() {
+  usePageTitle('LLM Providers');
   const { user, signOut } = useAuth();
   // Responsive - DataGrid needs conditional render, not CSS hide
   const isMobile = useMediaQuery('(max-width:899px)');
@@ -439,7 +446,9 @@ export default function MuiLLMProvidersPage() {
       {/* Page Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <div>
-          <Typography variant="h4">LLM Providers</Typography>
+          <Typography variant="h4">
+            LLM Providers
+          </Typography>
           <Typography variant="body2" color="text.secondary">
             Configure AI providers for generating email replies
           </Typography>

@@ -43,6 +43,7 @@ import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useConfirm } from '@/components/confirm-dialog';
 import { EmailAccountResponse } from '@/types/email-account';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 
 // Form data interface
@@ -91,11 +92,11 @@ const getColumns = (
     flex: 1,
     minWidth: 200,
     renderCell: (params: GridRenderCellParams<EmailAccountResponse>) => (
-      <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
         <Typography variant="body2">{params.value}</Typography>
         {params.row.oauth_provider && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-            <FcGoogle style={{ fontSize: 12 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <FcGoogle style={{ fontSize: 14 }} />
             <Typography variant="caption" color="text.secondary">
               OAuth
             </Typography>
@@ -116,7 +117,7 @@ const getColumns = (
     headerName: 'Monitoring',
     width: 130,
     renderCell: (params: GridRenderCellParams<EmailAccountResponse>) => (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
         {params.value ? (
           <VisibilityIcon fontSize="small" color="primary" />
         ) : (
@@ -143,17 +144,19 @@ const getColumns = (
     width: 180,
     sortable: false,
     renderCell: (params: GridRenderCellParams<EmailAccountResponse>) => (
-      <ButtonGroup size="small" sx={{ my: 'auto' }}>
-        {params.row.oauth_provider ? (
-          <Button onClick={() => onReconnect(params.row)}>Reconnect</Button>
-        ) : (
-          <>
-            <Button onClick={() => onTest(params.row)}>Test</Button>
-            <Button onClick={() => onEdit(params.row)}>Edit</Button>
-          </>
-        )}
-        <Button color="error" onClick={() => onDelete(params.row)}>Delete</Button>
-      </ButtonGroup>
+      <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <ButtonGroup size="small">
+          {params.row.oauth_provider ? (
+            <Button onClick={() => onReconnect(params.row)}>Reconnect</Button>
+          ) : (
+            <>
+              <Button onClick={() => onTest(params.row)}>Test</Button>
+              <Button onClick={() => onEdit(params.row)}>Edit</Button>
+            </>
+          )}
+          <Button color="error" onClick={() => onDelete(params.row)}>Delete</Button>
+        </ButtonGroup>
+      </Box>
     ),
   },
 ];
@@ -541,6 +544,7 @@ function EditCredentialsDialog({ open, onClose, account, onSuccess }: EditCreden
 }
 
 export default function MuiEmailAccountsPage() {
+  usePageTitle('Email Accounts');
   const { user, signOut } = useAuth();
   // Responsive - DataGrid needs conditional render, not CSS hide
   const isMobile = useMediaQuery('(max-width:899px)');
@@ -658,7 +662,9 @@ export default function MuiEmailAccountsPage() {
       {/* Page Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <div>
-          <Typography variant="h4">Email Accounts</Typography>
+          <Typography variant="h4">
+            Email Accounts
+          </Typography>
           <Typography variant="body2" color="text.secondary">
             Connect your email accounts to enable AI-powered email assistance
           </Typography>

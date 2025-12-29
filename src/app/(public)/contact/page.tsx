@@ -5,6 +5,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import { MuiPublicLayout, PageHeader } from '@/components/mui';
+import { usePageTitle } from '@/hooks/use-page-title';
 
 interface ContactCardProps {
   icon: React.ReactNode;
@@ -17,7 +18,9 @@ function ContactCard({ icon, title, children }: ContactCardProps) {
     <Paper sx={{ p: 3 }}>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
         {icon}
-        <Typography variant="h6">{title}</Typography>
+        <Typography variant="sectionHeader">
+          {title}
+        </Typography>
       </Stack>
       {children}
     </Paper>
@@ -25,6 +28,7 @@ function ContactCard({ icon, title, children }: ContactCardProps) {
 }
 
 export default function MuiContactPage() {
+  usePageTitle('Contact');
   return (
     <MuiPublicLayout>
       <Container maxWidth="md" sx={{ py: 8 }}>
@@ -74,7 +78,9 @@ export default function MuiContactPage() {
         </ContactCard>
 
         <Stack spacing={1} alignItems="center" sx={{ mt: 6 }}>
-          <Typography variant="h6">Before You Reach Out</Typography>
+          <Typography variant="sectionHeader">
+            Before You Reach Out
+          </Typography>
           <Typography variant="body2">
             Check our{' '}
             <Link href="/faq" underline="hover">

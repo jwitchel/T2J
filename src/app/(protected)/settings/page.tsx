@@ -26,6 +26,7 @@ import {
 import { useMuiToast } from '@/hooks/use-mui-toast';
 import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
+import { usePageTitle } from '@/hooks/use-page-title';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 
 // Types
@@ -810,9 +811,6 @@ function ActionRulesPanel() {
       )}
       {relationshipRules.length > 0 && (
         <Box>
-          <Typography variant="caption" color="text.secondary" gutterBottom>
-            Relationship rules (applied to all contacts of a type, processed after sender rules):
-          </Typography>
           <Stack spacing={1} sx={{ mt: 1 }}>
             {relationshipRules.map((rule) => (
               <RuleRow key={rule.id} rule={rule} />
@@ -884,10 +882,10 @@ function ProfileTab() {
   return (
     <Stack spacing={3}>
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Profile Information
         </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Update your personal information
         </Typography>
         <Stack spacing={3}>
@@ -919,10 +917,10 @@ function ProfileTab() {
       </Paper>
 
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Typed Name Settings
         </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Configure how your name appears in generated email responses
         </Typography>
         <TypedNameSettingsPanel />
@@ -1006,10 +1004,10 @@ function RelationshipsTab() {
   return (
     <Stack spacing={3}>
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Relationship Categorization
         </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Configure domains and emails to automatically categorize contacts for more precise tone when drafting emails
         </Typography>
         <Stack spacing={3}>
@@ -1046,10 +1044,10 @@ function RelationshipsTab() {
       </Paper>
 
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="sectionHeader" gutterBottom>
           Action Override Rules
         </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Rules that override AI action decisions for specific relationships or senders
         </Typography>
         <ActionRulesPanel />
@@ -1062,8 +1060,8 @@ function RelationshipsTab() {
 function ServicesTab() {
   const { success, error: showError } = useMuiToast();
   const { data, isLoading } = useSWR<{ preferences: UserPreferences }>('/api/settings/profile');
-  const { data: accountsData } = useSWR<{ accounts: Array<{ id: string }> }>('/api/email-accounts');
-  const hasEmailAccounts = (accountsData?.accounts?.length ?? 0) > 0;
+  const { data: accountsData } = useSWR<Array<{ id: string }>>('/api/email-accounts');
+  const hasEmailAccounts = (accountsData?.length ?? 0) > 0;
   const [isSavingActions, setIsSavingActions] = useState(false);
   const [isTestingFolders, setIsTestingFolders] = useState(false);
   const [isCreatingFolders, setIsCreatingFolders] = useState(false);
@@ -1268,10 +1266,10 @@ function ServicesTab() {
     <>
       <Stack spacing={3}>
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="sectionHeader" gutterBottom>
             Email Processing
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Configure which processing stages are enabled. Unprocessed emails will remain in your inbox.
           </Typography>
           <Stack spacing={3}>
@@ -1291,7 +1289,7 @@ function ServicesTab() {
               <Typography variant="body1" gutterBottom>
                 Organize Your Email
               </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Automatically move emails that do not require a response to a specific folder
               </Typography>
               <Stack spacing={2} sx={{ pl: 3 }}>
@@ -1354,10 +1352,10 @@ function ServicesTab() {
         </Paper>
 
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="sectionHeader" gutterBottom>
             Email Folder Preferences
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Configure folders for organizing emails based on AI recommendations
           </Typography>
           {hasEmailAccounts ? (
@@ -1493,12 +1491,13 @@ function ServicesTab() {
 
 // Signatures Tab Component
 function SignaturesTab() {
+
   return (
     <Paper sx={{ p: 3 }}>
-      <Typography variant="h6" gutterBottom>
+      <Typography variant="sectionHeader" gutterBottom>
         Email Signature Detection
       </Typography>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Configure patterns to automatically detect and remove your email signature when analyzing your writing style
       </Typography>
       <SignaturePatternsPanel />
@@ -1563,10 +1562,10 @@ function SecurityTab() {
     <>
       <Stack spacing={3}>
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="sectionHeader" gutterBottom>
             Security
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Manage your password and security settings
           </Typography>
           <Button variant="outlined" onClick={() => setPasswordDialogOpen(true)}>
@@ -1575,10 +1574,10 @@ function SecurityTab() {
         </Paper>
 
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="sectionHeader" gutterBottom>
             Danger Zone
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Irreversible actions
           </Typography>
           <Button variant="contained" color="error">
@@ -1645,6 +1644,7 @@ function SecurityTab() {
 
 // Main Component
 export default function MuiSettingsPage() {
+  usePageTitle('Settings');
   const { user, signOut } = useAuth();
   const [tabValue, setTabValue] = useState(0);
 
@@ -1655,7 +1655,9 @@ export default function MuiSettingsPage() {
     <MuiAuthenticatedLayout user={user} onSignOut={signOut}>
       {/* Page Header */}
       <Box mb={3}>
-        <Typography variant="h4">Settings</Typography>
+        <Typography variant="h4">
+          Settings
+        </Typography>
         <Typography variant="body2" color="text.secondary">
           Manage your profile, relationships, and preferences
         </Typography>

@@ -2,8 +2,10 @@
 
 import { Box, Container, Typography, Paper, Stack, Divider, List, ListItem, ListItemText } from '@mui/material';
 import { MuiPublicLayout, PageHeader } from '@/components/mui';
+import { usePageTitle } from '@/hooks/use-page-title';
 
 export default function MuiLegalPage() {
+  usePageTitle('Legal');
   return (
     <MuiPublicLayout>
       <Container maxWidth="md" sx={{ py: 8 }}>
