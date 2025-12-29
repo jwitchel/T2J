@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { LazyLog, ScrollFollow } from '@melloware/react-logviewer';
-import { Box, Paper, Stack, IconButton, Tooltip, FormControlLabel, Switch } from '@mui/material';
+import { Box, Paper, Stack, IconButton, Tooltip, FormControlLabel, Switch, useTheme } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -13,6 +13,8 @@ interface MuiLogViewerProps {
 }
 
 export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewerProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [connected, setConnected] = useState(autoConnect);
   const [follow, setFollow] = useState(true);
   const [key, setKey] = useState(0);
@@ -26,6 +28,11 @@ export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewer
   const handleClear = () => {
     setKey((k) => k + 1);
   };
+
+  // Theme-aware colors for the log viewer
+  const logColors = isDark
+    ? { bg: '#222', color: '#fff' }
+    : { bg: '#fafafa', color: '#222' };
 
   return (
     <Paper sx={{ overflow: 'hidden' }}>
@@ -57,7 +64,25 @@ export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewer
           sx={{ ml: 1 }}
         />
       </Stack>
-      <Box sx={{ height, bgcolor: 'grey.900' }}>
+      <Box
+        sx={{
+          height,
+          bgcolor: logColors.bg,
+          '& .react-lazylog': {
+            backgroundColor: `${logColors.bg} !important`,
+            color: `${logColors.color} !important`,
+          },
+          '& .react-lazylog-searchbar': {
+            backgroundColor: `${isDark ? '#333' : '#f0f0f0'} !important`,
+            color: `${logColors.color} !important`,
+          },
+          '& .react-lazylog-searchbar-input': {
+            backgroundColor: `${isDark ? '#444' : '#fff'} !important`,
+            color: `${logColors.color} !important`,
+            borderColor: `${isDark ? '#555' : '#ccc'} !important`,
+          },
+        }}
+      >
         {wsUrl ? (
           <ScrollFollow
             key={key}
@@ -65,11 +90,14 @@ export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewer
             render={({ follow: scrollFollow }) => (
               <LazyLog
                 url={wsUrl}
+                websocket
                 follow={scrollFollow}
                 enableSearch
                 caseInsensitive
                 selectableLines
                 extraLines={1}
+                style={{ backgroundColor: logColors.bg, color: logColors.color }}
+                containerStyle={{ backgroundColor: logColors.bg }}
               />
             )}
           />
@@ -80,7 +108,7 @@ export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewer
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'grey.500',
+              color: 'text.secondary',
               fontFamily: 'monospace',
             }}
           >
