@@ -96,7 +96,35 @@ async function main() {
 
   // Better Auth routes - handles /api/auth/signup, /api/auth/signin, etc.
   // IMPORTANT: Don't use express.json() before better-auth
-  app.all('/api/auth/*', toNodeHandler(auth));
+  app.all('/api/auth/*', (req, res, next) => {
+    // Debug logging for auth issues
+    if (req.path.includes('sign-in') || req.path.includes('sign-up')) {
+      console.log('[Auth Debug]', {
+        path: req.path,
+        method: req.method,
+        origin: req.headers.origin,
+        host: req.headers.host,
+        xForwardedProto: req.headers['x-forwarded-proto'],
+        xForwardedHost: req.headers['x-forwarded-host'],
+        protocol: req.protocol,
+        secure: req.secure,
+        nodeEnv: process.env.NODE_ENV,
+        appUrl: process.env.APP_URL,
+        trustedOrigins: process.env.TRUSTED_ORIGINS,
+      });
+    }
+
+    // Intercept response to log Set-Cookie header
+    const originalSetHeader = res.setHeader.bind(res);
+    res.setHeader = function(name: string, value: string | number | readonly string[]) {
+      if (name.toLowerCase() === 'set-cookie') {
+        console.log('[Auth Debug] Set-Cookie header:', value);
+      }
+      return originalSetHeader(name, value);
+    };
+
+    next();
+  }, toNodeHandler(auth));
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
