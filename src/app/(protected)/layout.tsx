@@ -16,7 +16,12 @@ interface ProtectedLayoutProps {
  */
 export default async function ProtectedLayout({ children }: ProtectedLayoutProps) {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('better-auth.session_token');
+
+  // In production, better-auth prefixes cookies with __Secure- when secure: true
+  const secureCookie = cookieStore.get('__Secure-better-auth.session_token');
+  const devCookie = cookieStore.get('better-auth.session_token');
+  const sessionCookie = secureCookie || devCookie;
+  const cookieName = secureCookie ? '__Secure-better-auth.session_token' : 'better-auth.session_token';
 
   if (!sessionCookie?.value) {
     redirect('/signin');
@@ -26,7 +31,7 @@ export default async function ProtectedLayout({ children }: ProtectedLayoutProps
   const baseUrl = process.env.APP_URL || 'http://localhost:3001';
   const response = await fetch(`${baseUrl}/api/auth/get-session`, {
     headers: {
-      Cookie: `better-auth.session_token=${sessionCookie.value}`,
+      Cookie: `${cookieName}=${sessionCookie.value}`,
     },
     cache: 'no-store',
   });
