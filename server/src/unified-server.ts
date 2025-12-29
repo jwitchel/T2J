@@ -82,6 +82,10 @@ async function main() {
 
   const app = express();
 
+  // Trust proxy for Render (TLS termination at load balancer)
+  // Required for secure cookies and correct protocol detection
+  app.set('trust proxy', 1);
+
   app.use((req, _res, next) => {
     const skipPaths = ['/api/jobs/stats', '/health', '/_next', '/__nextjs', '/api/alerts/version'];
     if (!skipPaths.some(path => req.path.startsWith(path))) {
