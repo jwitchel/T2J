@@ -1,4 +1,4 @@
-# AI Email Assistant
+# Time to Just
 
 An AI-powered email assistant that generates email reply drafts matching your personal writing tone. Built with Next.js, Express.js, and better-auth.
 

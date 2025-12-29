@@ -1,4 +1,4 @@
-# AI Email Assistant Project - Claude Instructions
+# Time to Just (T2J) Project - Claude Instructions
 
 ## Project Overview
 This is an AI Email Assistant application that generates email reply drafts matching the user's personal writing tone. The project is managed through GitHub Issues and Projects.

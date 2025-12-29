@@ -1,6 +1,6 @@
 # Vector Services
 
-This directory contains the vector storage and embedding services for the AI Email Assistant's tone learning system using **PostgreSQL storage + Vectra in-memory search** with **dual embeddings** (semantic + style).
+This directory contains the vector storage and embedding services for T2J's tone learning system using **PostgreSQL storage + Vectra in-memory search** with **dual embeddings** (semantic + style).
 
 ## Architecture Overview
 

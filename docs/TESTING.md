@@ -1,4 +1,4 @@
-# Testing Guide for AI Email Assistant
+# Testing Guide for Time to Just
 
 ## Overview
 
