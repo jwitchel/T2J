@@ -39,8 +39,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import SyncIcon from '@mui/icons-material/Sync';
 import { FcGoogle } from 'react-icons/fc';
-import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { EmailAccountResponse } from '@/types/email-account';
 import { useAuth } from '@/lib/auth-context';
 import { MuiAuthenticatedLayout } from '@/components/mui';
@@ -556,7 +556,7 @@ export default function MuiEmailAccountsPage() {
   const { success, error: showError } = useMuiToast();
 
   // Confirmation dialog
-  const confirm = useConfirm();
+  const showConfirm = useConfirm();
 
   // Dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -568,38 +568,29 @@ export default function MuiEmailAccountsPage() {
     setEditDialogOpen(true);
   };
 
-  const handleDeleteClick = async (account: EmailAccountResponse) => {
-    let confirmed = false;
-    try {
-      await confirm({
-        title: 'Delete Email Account',
-        description: `Are you sure you want to delete ${account.email_address}? This action cannot be undone.`,
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
-      });
-      confirmed = true;
-    } catch {
-      // User cancelled - do nothing
-      return;
-    }
-
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch(`/api/email-accounts/${account.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (response.ok) {
-        success('Email account deleted successfully');
-        mutate('/api/email-accounts');
-      } else {
-        const data = await response.json();
-        showError(data.error || 'Failed to delete account');
-      }
-    } catch {
-      showError('Network error. Please try again.');
-    }
+  const handleDeleteClick = (account: EmailAccountResponse) => {
+    showConfirm({
+      title: 'Delete Email Account',
+      description: `Are you sure you want to delete ${account.email_address}? This action cannot be undone.`,
+      confirmationText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/email-accounts/${account.id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (response.ok) {
+            success('Email account deleted successfully');
+            mutate('/api/email-accounts');
+          } else {
+            const data = await response.json();
+            showError(data.error || 'Failed to delete account');
+          }
+        } catch {
+          showError('Network error. Please try again.');
+        }
+      },
+    });
   };
 
   const handleTestClick = async (account: EmailAccountResponse) => {

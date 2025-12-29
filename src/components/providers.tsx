@@ -3,7 +3,7 @@
 import { ThemeProvider } from '@/components/theme-provider';
 import { MuiThemeProvider } from '@/components/mui-theme-provider';
 import { MuiSnackbarProvider } from '@/components/mui-snackbar-provider';
-import { ConfirmProvider } from 'material-ui-confirm';
+import { ConfirmProvider } from '@/components/confirm-dialog';
 import { AuthProvider } from '@/lib/auth-context';
 import { AlertProvider } from '@/lib/alert-context';
 import { SWRProvider } from '@/components/swr-provider';
@@ -22,7 +22,7 @@ export function Providers({ children }: ProvidersProps) {
     >
       <MuiThemeProvider>
         <MuiSnackbarProvider>
-          <ConfirmProvider defaultOptions={{ dialogProps: { disableRestoreFocus: true } }}>
+          <ConfirmProvider>
             <AuthProvider>
               <SWRProvider>
                 <AlertProvider>

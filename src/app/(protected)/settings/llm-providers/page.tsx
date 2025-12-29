@@ -32,8 +32,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
-import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 
@@ -390,7 +390,7 @@ export default function MuiLLMProvidersPage() {
   const { success, error: showError } = useMuiToast();
 
   // Confirmation dialog
-  const confirm = useConfirm();
+  const showConfirm = useConfirm();
 
   // Dialog state - unified for add/edit
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -406,28 +406,25 @@ export default function MuiLLMProvidersPage() {
     setDialogOpen(true);
   };
 
-  const handleDeleteClick = async (provider: LLMProvider) => {
-    try {
-      await confirm({
-        title: 'Delete LLM Provider',
-        description: `Are you sure you want to delete ${provider.provider_name}? This action cannot be undone.`,
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
-      });
-      const response = await fetch(`/api/llm-providers/${provider.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (response.ok) {
-        success('LLM provider deleted successfully');
-        mutate('/api/llm-providers');
-      } else {
-        const data = await response.json();
-        showError(data.error || 'Failed to delete provider');
-      }
-    } catch {
-      // User cancelled - do nothing
-    }
+  const handleDeleteClick = (provider: LLMProvider) => {
+    showConfirm({
+      title: 'Delete LLM Provider',
+      description: `Are you sure you want to delete ${provider.provider_name}? This action cannot be undone.`,
+      confirmationText: 'Delete',
+      onConfirm: async () => {
+        const response = await fetch(`/api/llm-providers/${provider.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        if (response.ok) {
+          success('LLM provider deleted successfully');
+          mutate('/api/llm-providers');
+        } else {
+          const data = await response.json();
+          showError(data.error || 'Failed to delete provider');
+        }
+      },
+    });
   };
 
   // Show nothing while loading auth - protected layout handles redirect

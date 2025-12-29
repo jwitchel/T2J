@@ -23,8 +23,8 @@ import {
   CircularProgress,
   TextField,
 } from '@mui/material';
-import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
 import { MuiAuthenticatedLayout } from '@/components/mui';
 
@@ -525,7 +525,7 @@ function RegexTesterDialog({
 // Signature Patterns Panel Component
 function SignaturePatternsPanel() {
   const { success, error: showError } = useMuiToast();
-  const confirm = useConfirm();
+  const showConfirm = useConfirm();
   const [patterns, setPatterns] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -581,18 +581,13 @@ function SignaturePatternsPanel() {
     setPatterns([...patterns, pattern]);
   };
 
-  const handleRemovePattern = async (index: number) => {
-    try {
-      await confirm({
-        title: 'Delete Signature Pattern',
-        description: 'Are you sure you want to delete this pattern? This action cannot be undone.',
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
-      });
-    } catch {
-      return;
-    }
-    setPatterns(patterns.filter((_, i) => i !== index));
+  const handleRemovePattern = (index: number) => {
+    showConfirm({
+      title: 'Delete Signature Pattern',
+      description: 'Are you sure you want to delete this pattern? This action cannot be undone.',
+      confirmationText: 'Delete',
+      onConfirm: () => setPatterns((prev) => prev.filter((_, i) => i !== index)),
+    });
   };
 
   if (isLoading) {
@@ -679,7 +674,7 @@ function SignaturePatternsPanel() {
 // Action Rules Panel Component
 function ActionRulesPanel() {
   const { success, error: showError } = useMuiToast();
-  const confirm = useConfirm();
+  const showConfirm = useConfirm();
   const [rules, setRules] = useState<ActionRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -703,41 +698,32 @@ function ActionRulesPanel() {
     loadRules();
   }, []);
 
-  const handleDeleteClick = async (rule: ActionRule) => {
-    let confirmed = false;
-    try {
-      await confirm({
-        title: 'Delete Action Rule',
-        description: 'Are you sure you want to delete this rule? This action cannot be undone.',
-        confirmationText: 'Delete',
-        confirmationButtonProps: { color: 'error' },
-      });
-      confirmed = true;
-    } catch {
-      // User cancelled
-      return;
-    }
-
-    if (!confirmed) return;
-
-    setDeletingId(rule.id);
-    try {
-      const response = await fetch(`/api/action-rules/${rule.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (response.ok) {
-        setRules(rules.filter((r) => r.id !== rule.id));
-        success('Action rule deleted');
-      } else {
-        const data = await response.json();
-        showError(data.error || 'Failed to delete rule');
-      }
-    } catch {
-      showError('Network error. Please try again.');
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDeleteClick = (rule: ActionRule) => {
+    showConfirm({
+      title: 'Delete Action Rule',
+      description: 'Are you sure you want to delete this rule? This action cannot be undone.',
+      confirmationText: 'Delete',
+      onConfirm: async () => {
+        setDeletingId(rule.id);
+        try {
+          const response = await fetch(`/api/action-rules/${rule.id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+          if (response.ok) {
+            setRules((prev) => prev.filter((r) => r.id !== rule.id));
+            success('Action rule deleted');
+          } else {
+            const data = await response.json();
+            showError(data.error || 'Failed to delete rule');
+          }
+        } catch {
+          showError('Network error. Please try again.');
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   const senderRules = rules.filter((r) => r.conditionType === 'sender');

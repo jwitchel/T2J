@@ -24,8 +24,8 @@ import {
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
 import { MuiAuthenticatedLayout, MuiLogViewer } from '@/components/mui';
 
@@ -199,7 +199,7 @@ export default function MuiTonePage() {
 
   // Toast and confirm
   const { success, error: showError } = useMuiToast();
-  const confirm = useConfirm();
+  const showConfirm = useConfirm();
 
   // Initialize selected account
   useEffect(() => {
@@ -270,29 +270,25 @@ export default function MuiTonePage() {
   };
 
   // Wipe data handler
-  const handleWipeData = async () => {
-    try {
-      await confirm({
-        title: 'Wipe All Training Data',
-        description: 'This will permanently delete all stored email data from the database. This cannot be undone.',
-        confirmationText: 'Wipe Data',
-        confirmationButtonProps: { color: 'error' },
-      });
+  const handleWipeData = () => {
+    showConfirm({
+      title: 'Wipe All Training Data',
+      description: 'This will permanently delete all stored email data from the database. This cannot be undone.',
+      confirmationText: 'Wipe Data',
+      onConfirm: async () => {
+        const response = await fetch('/api/training/wipe', {
+          method: 'POST',
+          credentials: 'include',
+        });
 
-      const response = await fetch('/api/training/wipe', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        success('Emails wiped successfully');
-        mutate('/api/tone-profile');
-      } else {
-        showError('Failed to wipe data');
-      }
-    } catch {
-      // User cancelled
-    }
+        if (response.ok) {
+          success('Emails wiped successfully');
+          mutate('/api/tone-profile');
+        } else {
+          showError('Failed to wipe data');
+        }
+      },
+    });
   };
 
   // Error state
@@ -433,7 +429,7 @@ export default function MuiTonePage() {
             </Box>
 
             {/* Real-time training logs */}
-            <MuiLogViewer height={300} autoConnect={false} />
+            <MuiLogViewer height={300} autoConnect={true} channel="training" />
           </Stack>
         </Paper>
       )}

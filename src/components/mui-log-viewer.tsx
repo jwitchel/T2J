@@ -10,9 +10,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 interface MuiLogViewerProps {
   height?: number | string;
   autoConnect?: boolean;
+  channel?: 'training' | 'jobs' | 'imap' | 'system';
 }
 
-export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewerProps) {
+export function MuiLogViewer({ height = 400, autoConnect = false, channel }: MuiLogViewerProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [connected, setConnected] = useState(autoConnect);
@@ -22,8 +23,9 @@ export function MuiLogViewer({ height = 400, autoConnect = false }: MuiLogViewer
   const wsUrl = useMemo(() => {
     if (typeof window === 'undefined' || !connected) return undefined;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws?format=text`;
-  }, [connected]);
+    const channelParam = channel ? `&channel=${channel}` : '';
+    return `${protocol}//${window.location.host}/ws?format=text${channelParam}`;
+  }, [connected, channel]);
 
   const handleClear = () => {
     setKey((k) => k + 1);

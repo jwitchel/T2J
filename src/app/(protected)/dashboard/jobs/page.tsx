@@ -23,8 +23,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import WaitingIcon from '@mui/icons-material/HourglassEmpty';
 import ActiveIcon from '@mui/icons-material/Loop';
-import { useConfirm } from 'material-ui-confirm';
 import { useMuiToast } from '@/hooks/use-mui-toast';
+import { useConfirm } from '@/components/confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
 import { MuiAuthenticatedLayout, MuiLogViewer } from '@/components/mui';
 
@@ -248,7 +248,7 @@ function QueueStatsDisplay({ label, stats }: { label: string; stats: QueueStats 
 export default function MuiJobsPage() {
   const { user, signOut } = useAuth();
   const { success, error: showError } = useMuiToast();
-  const confirm = useConfirm();
+  const showConfirm = useConfirm();
 
   // State
   const [refreshKey, setRefreshKey] = useState(0);
@@ -433,49 +433,37 @@ export default function MuiJobsPage() {
     });
   };
 
-  const handleClearQueue = async () => {
-    try {
-      await confirm({
-        title: 'Clear Waiting Jobs',
-        description: 'Remove all waiting/queued jobs from both queues? Active and completed jobs will remain. This cannot be undone.',
-        confirmationText: 'Clear Jobs',
-        confirmationButtonProps: { color: 'error' },
-      });
-    } catch {
-      return;
-    }
-
-    await handleApiRequest({
-      endpoint: '/api/jobs/clear-pending-jobs',
-      onSuccess: (data) => {
-        success(`Cleared ${data.cleared || 0} pending jobs (queued/prioritized)`);
-        fetchStats();
-      },
-      defaultErrorMessage: 'Failed to clear pending jobs',
-      logPrefix: 'Error clearing pending jobs',
+  const handleClearQueue = () => {
+    showConfirm({
+      title: 'Clear Waiting Jobs',
+      description: 'Remove all waiting/queued jobs from both queues? Active and completed jobs will remain. This cannot be undone.',
+      confirmationText: 'Clear Jobs',
+      onConfirm: () => handleApiRequest({
+        endpoint: '/api/jobs/clear-pending-jobs',
+        onSuccess: (data) => {
+          success(`Cleared ${data.cleared || 0} pending jobs (queued/prioritized)`);
+          fetchStats();
+        },
+        defaultErrorMessage: 'Failed to clear pending jobs',
+        logPrefix: 'Error clearing pending jobs',
+      }),
     });
   };
 
-  const handleObliterateQueue = async () => {
-    try {
-      await confirm({
-        title: 'DANGER: Obliterate All Queues',
-        description: 'This will delete ALL jobs (waiting, active, completed, failed) from all queues. All job history will be lost. This cannot be undone.',
-        confirmationText: 'Obliterate Everything',
-        confirmationButtonProps: { color: 'error' },
-      });
-    } catch {
-      return;
-    }
-
-    await handleApiRequest({
-      endpoint: '/api/jobs/clear-all-queues',
-      onSuccess: (data) => {
-        success(`Obliterated ${data.cleared || 0} jobs from all queues`);
-        fetchStats();
-      },
-      defaultErrorMessage: 'Failed to obliterate all queues',
-      logPrefix: 'Error obliterating all queues',
+  const handleObliterateQueue = () => {
+    showConfirm({
+      title: 'DANGER: Obliterate All Queues',
+      description: 'This will delete ALL jobs (waiting, active, completed, failed) from all queues. All job history will be lost. This cannot be undone.',
+      confirmationText: 'Obliterate Everything',
+      onConfirm: () => handleApiRequest({
+        endpoint: '/api/jobs/clear-all-queues',
+        onSuccess: (data) => {
+          success(`Obliterated ${data.cleared || 0} jobs from all queues`);
+          fetchStats();
+        },
+        defaultErrorMessage: 'Failed to obliterate all queues',
+        logPrefix: 'Error obliterating all queues',
+      }),
     });
   };
 
@@ -940,7 +928,7 @@ export default function MuiJobsPage() {
         <Typography variant="h6" sx={{ mb: 1 }}>
           Real-Time Logs
         </Typography>
-        <MuiLogViewer height={400} autoConnect={true} />
+        <MuiLogViewer height={400} autoConnect={true} channel="jobs" />
       </Box>
     </MuiAuthenticatedLayout>
   );
