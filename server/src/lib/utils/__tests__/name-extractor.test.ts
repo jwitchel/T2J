@@ -30,11 +30,22 @@ describe('NameExtractor', () => {
           .toBe('John Doe');
       });
 
-      it('should capitalize all words including quoted nicknames', () => {
+      it('should preserve original casing from display names', () => {
+        // Display names should keep their original casing - the sender chose it intentionally
         expect(NameExtractor.extractName('test@example.com', 'John "The Rock" Doe'))
           .toBe('John "The Rock" Doe');
         expect(NameExtractor.extractName('test@example.com', 'john "the rock" doe'))
-          .toBe('John "The Rock" Doe');
+          .toBe('john "the rock" doe');
+      });
+
+      it('should preserve brand name casing', () => {
+        // Brand names like HSBCnet, AT&T, LinkedIn should not be mangled
+        expect(NameExtractor.extractName('alerts@hsbc.com', 'HSBCnet Alert'))
+          .toBe('HSBCnet Alert');
+        expect(NameExtractor.extractName('noreply@att.com', 'AT&T Wireless'))
+          .toBe('AT&T Wireless');
+        expect(NameExtractor.extractName('news@linkedin.com', 'LinkedIn News'))
+          .toBe('LinkedIn News');
       });
 
       it('should handle names with leading quote only', () => {

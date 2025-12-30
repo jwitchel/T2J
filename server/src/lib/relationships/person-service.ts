@@ -323,67 +323,53 @@ export class PersonService {
    * @param client - Optional transaction client. If provided, operation is part of transaction.
    */
   async findOrCreatePerson(params: CreatePersonParams, client?: PoolClient): Promise<PersonWithDetails> {
-    // Trust caller - params.userId is typed as string
     this._validateName(params.name);
     this._validateEmail(params.emailAddress);
 
     const normalizedEmail = this._normalizeEmail(params.emailAddress);
+    const trimmedName = params.name.trim();
 
     return await withTransaction(this.pool, async (db) => {
-      // First check if person exists with this email
-      const existingCheck = await db.query(
-        `SELECT p.id FROM people p
+      // Check if person exists with this email (get name too for potential update)
+      const existing = await db.query(
+        `SELECT p.id, p.name FROM people p
          INNER JOIN person_emails pe ON pe.person_id = p.id
          WHERE p.user_id = $1 AND pe.email_address = $2`,
         [params.userId, normalizedEmail]
       );
 
       let personId: string;
-      let emailAlreadyExists = false;
 
-      if (existingCheck.rows.length > 0) {
-        // Person already exists with this email
-        personId = existingCheck.rows[0].id;
-        emailAlreadyExists = true;
+      if (existing.rows.length > 0) {
+        // Person exists - maybe update name if new one is better
+        personId = existing.rows[0].id;
+        const existingName = existing.rows[0].name;
+
+        // Update name if new has space and existing doesn't (real display name vs email prefix)
+        if (trimmedName.includes(' ') && !existingName.includes(' ')) {
+          await db.query(
+            `UPDATE people SET name = $1, updated_at = NOW() WHERE id = $2`,
+            [trimmedName, personId]
+          );
+        }
       } else {
-        // Person doesn't exist with this email, create or find by name
-        const personResult = await db.query(
+        // Create new person with email
+        const insertResult = await db.query(
           `INSERT INTO people (user_id, name, relationship_type, relationship_user_set, relationship_confidence, created_at, updated_at)
            VALUES ($1, $2, $3, false, $4, NOW(), NOW())
-           ON CONFLICT (user_id, name) DO NOTHING
            RETURNING id`,
-          [params.userId, params.name.trim(), params.relationshipType || null, params.confidence || 1.0]
+          [params.userId, trimmedName, params.relationshipType || null, params.confidence || 1.0]
         );
+        personId = insertResult.rows[0].id;
 
-        if (personResult.rows.length > 0) {
-          // We created a new person
-          personId = personResult.rows[0].id;
-        } else {
-          // Person with this name already exists, find them
-          const existing = await db.query(
-            `SELECT id FROM people WHERE user_id = $1 AND name = $2`,
-            [params.userId, params.name.trim()]
-          );
-
-          if (existing.rows.length === 0) {
-            throw new PersonServiceError('Failed to create or find person');
-          }
-
-          personId = existing.rows[0].id;
-        }
-      }
-
-      // Add the email (skip if person was found by this email)
-      if (!emailAlreadyExists) {
         await db.query(
           `INSERT INTO person_emails (person_id, email_address, is_primary, created_at)
-           VALUES ($1, $2, true, NOW())
-           ON CONFLICT (person_id, email_address) DO NOTHING`,
+           VALUES ($1, $2, true, NOW())`,
           [personId, normalizedEmail]
         );
       }
 
-      // Update relationship if provided (only if not user_set)
+      // Update relationship if provided and not user-set
       if (params.relationshipType) {
         await db.query(
           `UPDATE people
@@ -395,7 +381,7 @@ export class PersonService {
         );
       }
 
-      // Query person details WITHIN the transaction before committing
+      // Return full person details
       const personDetails = await this.getPersonById(personId, params.userId, db);
       if (!personDetails) {
         throw new PersonNotFoundError(`Person ${personId} not found`);

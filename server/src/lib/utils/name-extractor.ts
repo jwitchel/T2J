@@ -3,19 +3,19 @@
  */
 export class NameExtractor {
   /**
-   * Extract person name from email address and recipient name
-   * Priority: recipientName (if valid) > formatted email prefix as fallback
+   * Extract person name from email address and display name
+   * Priority: displayName from FROM header (preserved as-is) > formatted email prefix as fallback
    *
    * @param emailAddress - The email address (e.g., "john.doe@example.com")
-   * @param recipientName - Optional recipient name from email headers (e.g., "John Doe" or '"John Doe"')
-   * @returns Cleaned and normalized name
+   * @param displayName - Optional display name from email headers (e.g., "John Doe" or '"John Doe"')
+   * @returns Cleaned name with original casing preserved
    *
    * @example
-   * extractName('raswheeler@gmail.com', 'Jessica Wheeler') // => 'Jessica Wheeler'
-   * extractName('raswheeler@gmail.com', '"Jessica Wheeler"') // => 'Jessica Wheeler'
+   * extractName('alerts@hsbc.com', 'HSBCnet Alert') // => 'HSBCnet Alert' (casing preserved)
+   * extractName('jessicajones@gmail.com', 'Jessica Jones') // => 'Jessica Jones'
+   * extractName('jessicajones@gmail.com', '"Jessica Jones"') // => 'Jessica Jones' (cleans quotes)
    * extractName('test@example.com', 'Viola, John L.') // => 'John L. Viola'
-   * extractName('john.doe@example.com', undefined) // => 'John Doe'
-   * extractName('j.w.smith@example.com', undefined) // => 'J W Smith'
+   * extractName('john.doe@example.com', undefined) // => 'John Doe' (fallback: title-case email prefix)
    */
   public static extractName(emailAddress: string, recipientName?: string): string {
     // If we have a valid recipient name, use it
@@ -33,17 +33,19 @@ export class NameExtractor {
   }
 
   /**
-   * Clean recipient name by removing quotes, normalizing whitespace, and flipping Last, First format
+   * Clean recipient name from email headers - preserves original casing
+   * The sender chose their display name intentionally (e.g., "HSBCnet", "AT&T", "LinkedIn")
+   * Only performs minimal cleanup: quote removal, Last/First flip, whitespace normalization
    *
    * @param recipientName - Raw recipient name from email headers
    * @returns Cleaned name or empty string if invalid
    *
    * @example
-   * cleanRecipientName('"Jessica Wheeler"') // => 'Jessica Wheeler'
+   * cleanRecipientName('"Jessica Jones"') // => 'Jessica Jones'
    * cleanRecipientName('  John   Doe  ') // => 'John Doe'
    * cleanRecipientName('Viola, John L.') // => 'John L. Viola'
    * cleanRecipientName('Smith, Jane') // => 'Jane Smith'
-   * cleanRecipientName('john doe') // => 'John Doe'
+   * cleanRecipientName('HSBCnet Alert') // => 'HSBCnet Alert' (preserves casing)
    * cleanRecipientName('""') // => ''
    */
   private static cleanRecipientName(recipientName: string): string {
@@ -69,11 +71,8 @@ export class NameExtractor {
     // 6. Normalize internal whitespace
     cleanName = cleanName.replace(/\s+/g, ' ');
 
-    // 7. Capitalize each word
-    return cleanName
-      .split(' ')
-      .map(word => this.capitalizeWord(word))
-      .join(' ');
+    // NO capitalization - preserve the sender's chosen display name
+    return cleanName;
   }
 
   /**
@@ -86,7 +85,7 @@ export class NameExtractor {
    * @example
    * formatEmailPrefix('john.doe@example.com') // => 'John Doe'
    * formatEmailPrefix('j.w.smith@example.com') // => 'J W Smith'
-   * formatEmailPrefix('raswheeler@gmail.com') // => 'Raswheeler'
+   * formatEmailPrefix('jessicajones@gmail.com') // => 'jessicajones'
    */
   private static formatEmailPrefix(emailAddress: string): string {
     // Extract the part before @

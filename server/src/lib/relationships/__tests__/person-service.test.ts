@@ -590,4 +590,77 @@ describe('PersonService', () => {
       ).rejects.toThrow(ValidationError);
     });
   });
+
+  describe('findOrCreatePerson', () => {
+    it('should create a new person when email does not exist', async () => {
+      const person = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'New Person',
+        emailAddress: 'newperson@example.com'
+      });
+
+      expect(person.id).toBeDefined();
+      expect(person.name).toBe('New Person');
+      expect(person.emails).toHaveLength(1);
+      expect(person.emails[0].email_address).toBe('newperson@example.com');
+    });
+
+    it('should return existing person when email exists', async () => {
+      // First create a person
+      const first = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'First Name',
+        emailAddress: 'existing@example.com'
+      });
+
+      // Try to create again with same email
+      const second = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'Second Name',
+        emailAddress: 'existing@example.com'
+      });
+
+      expect(second.id).toBe(first.id);
+    });
+
+    it('should update name when new name is better (has space but existing does not)', async () => {
+      // Create person with email-prefix style name (no space)
+      const first = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'Media',
+        emailAddress: 'news@durangoherald.com'
+      });
+      expect(first.name).toBe('Media');
+
+      // Now find again with a proper display name (has space)
+      const updated = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'Durango Herald',
+        emailAddress: 'news@durangoherald.com'
+      });
+
+      // Name should be updated
+      expect(updated.name).toBe('Durango Herald');
+      expect(updated.id).toBe(first.id);
+    });
+
+    it('should not update name when existing name already has space', async () => {
+      // Create person with full name
+      const first = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'John Doe',
+        emailAddress: 'john@example.com'
+      });
+
+      // Try to update with another name
+      const second = await personService.findOrCreatePerson({
+        userId: testUserId,
+        name: 'Johnny D',
+        emailAddress: 'john@example.com'
+      });
+
+      // Name should NOT be updated (existing was already good)
+      expect(second.name).toBe('John Doe');
+    });
+  });
 });
