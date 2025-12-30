@@ -25,6 +25,7 @@ import { RelationshipType } from '../relationships/types';
 import { personService } from '../relationships/person-service';
 import PostalMime, { Email as PostalMimeEmail, Address } from 'postal-mime';
 import { actionRulesService } from '../action-rules-service';
+import { ContextFlags } from '../llm-client';
 import { ActionRuleMatchResult } from '../../types/action-rules';
 import addressparser from 'nodemailer/lib/addressparser';
 import { withTransaction } from '../db/transaction-utils';
@@ -112,7 +113,7 @@ export interface ProcessEmailParams {
   accountId: string;
   userId: string;
   providerId: string;
-  generatedDraft?: any; // Optional pre-generated draft to avoid LLM non-determinism
+  generatedDraft?: DraftEmail; // Optional pre-generated draft to avoid LLM non-determinism
 }
 
 export interface ProcessEmailResult {
@@ -155,10 +156,24 @@ export class InboxProcessor {
   }
 
   /**
+   * Compute structural context flags from parsed email data
+   * These are objective facts about the email structure, not semantic analysis
+   * @private
+   */
+  private _computeStructuralContextFlags(parsedData: ParsedEmailData): Pick<ContextFlags, 'isThreaded' | 'hasAttachments' | 'isGroupEmail'> {
+    const { parsed, processedEmail } = parsedData;
+    return {
+      isThreaded: processedEmail.inReplyTo !== null,
+      hasAttachments: parsed.attachments.length > 0,
+      isGroupEmail: processedEmail.to.length + processedEmail.cc.length > 1
+    };
+  }
+
+  /**
    * Extract email body, handling HTML if no plain text is available
    * @private
    */
-  private async _extractEmailBody(parsed: any): Promise<string> {
+  private async _extractEmailBody(parsed: PostalMimeEmail): Promise<string> {
     let emailBody = parsed.text;
 
     // MIME allows emails with only HTML content (no text/plain part)
@@ -413,7 +428,7 @@ export class InboxProcessor {
   ): string {
     const folderPrefs = preferences.folderPreferences;
     const actionRouter = new EmailActionRouter(folderPrefs);
-    const routeResult = actionRouter.getActionRoute(action as any);
+    const routeResult = actionRouter.getActionRoute(action);
     return routeResult.folder;
   }
 
@@ -452,6 +467,7 @@ export class InboxProcessor {
     effectiveAction: EmailActionType,
     draft: DraftEmail | null,
     destinationFolder: string,
+    parsedData: ParsedEmailData,
     client: PoolClient
   ): Promise<void> {
     // Parse with simpleParser for storage service compatibility
@@ -472,11 +488,12 @@ export class InboxProcessor {
     };
 
     // Build LLM response object (may be minimal if no draft was generated)
+    // Note: modelName not currently tracked in DraftEmail - would need pipeline enhancement
     const llmResponse = draft ? {
       meta: draft.meta,
-      generatedAt: (draft as any).generatedAt,
+      generatedAt: draft.draftMetadata.timestamp,
       providerId: context.providerId,
-      modelName: (draft as any).modelName,
+      modelName: 'unknown',
       draftId: draft.id,
       relationship: draft.relationship,
       spamAnalysis: draft.draftMetadata?.spamAnalysis,
@@ -488,7 +505,7 @@ export class InboxProcessor {
         inboundMsgAddressedTo: 'unknown',
         inboundMsgIsRequesting: 'unknown',
         urgencyLevel: 'low',
-        contextFlags: { isThreaded: false, hasAttachments: false, isGroupEmail: false }
+        contextFlags: this._computeStructuralContextFlags(parsedData)
       },
       generatedAt: new Date().toISOString(),
       providerId: context.providerId,
@@ -667,8 +684,23 @@ export class InboxProcessor {
     const senderEmail = parsedData.processedEmail.from[0].address.toLowerCase();
     const ruleResult = await this._checkUserRules(context, senderEmail);
     if (ruleResult.matched && ruleResult.action) {
-      console.log(`[InboxProcessor] User rule matched: ${ruleResult.rule?.conditionType}=${ruleResult.rule?.conditionValue} -> ${ruleResult.action}`);
-      return { rawAction: ruleResult.action as EmailActionType, analysis: null };
+      const ruleDescription = `User rule: ${ruleResult.rule?.conditionType}=${ruleResult.rule?.conditionValue} -> ${ruleResult.action}`;
+      console.log(`[InboxProcessor] ${ruleDescription}`);
+      return {
+        rawAction: ruleResult.action as EmailActionType,
+        analysis: {
+          meta: {
+            recommendedAction: ruleResult.action as EmailActionType,
+            keyConsiderations: [ruleDescription],
+            contextFlags: {
+              ...this._computeStructuralContextFlags(parsedData),
+              inboundMsgAddressedTo: 'you' as const,
+              urgencyLevel: 'low' as const
+            }
+          },
+          relationship: { type: 'rule-based', confidence: 1.0 }
+        }
+      };
     }
 
     if (isSpam) {
@@ -735,9 +767,7 @@ export class InboxProcessor {
           recommendedAction: EmailActionType.SILENT_SPAM,
           keyConsiderations: spamResult.indicators,
           contextFlags: {
-            isThreaded: false,
-            hasAttachments: false,
-            isGroupEmail: false,
+            ...this._computeStructuralContextFlags(parsedData),
             inboundMsgAddressedTo: 'you',
             urgencyLevel: 'low'
           }
@@ -775,7 +805,8 @@ export class InboxProcessor {
         parsedData,
         userContext,
         { ...analysis.meta, recommendedAction: effectiveAction },
-        analysis.relationship
+        analysis.relationship,
+        spamResult  // Pass spamResult to store indicators
       );
     }
 
@@ -885,7 +916,7 @@ export class InboxProcessor {
 
     // Save email to database in a transaction
     await withTransaction(pool, (client) =>
-      this._saveToDatabase(context, effectiveAction, draft, destinationFolder, client)
+      this._saveToDatabase(context, effectiveAction, draft, destinationFolder, parsedData, client)
     );
 
     const imapResult = await this._performImapOperation(context, effectiveAction, draft);

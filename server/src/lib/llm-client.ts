@@ -273,6 +273,13 @@ export class LLMClient {
         'spam check'
       );
 
+      // Ensure spamIndicators is always a non-empty array
+      if (!Array.isArray(parsed.meta.spamIndicators) || parsed.meta.spamIndicators.length === 0) {
+        parsed.meta.spamIndicators = parsed.meta.isSpam
+          ? ['Detected as spam by content analysis']
+          : ['Passed spam screening'];
+      }
+
       return { meta: parsed.meta };
     } catch (error: unknown) {
       this._handleJSONError(error, 'Spam check');
@@ -297,6 +304,11 @@ export class LLMClient {
         'missing meta field',
         'action analysis'
       );
+
+      // Ensure keyConsiderations is always a non-empty array
+      if (!Array.isArray(parsed.meta.keyConsiderations) || parsed.meta.keyConsiderations.length === 0) {
+        parsed.meta.keyConsiderations = ['Action determined by email classification rules'];
+      }
 
       return { meta: parsed.meta };
     } catch (error: unknown) {
