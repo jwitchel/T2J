@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Paper,
@@ -15,7 +15,7 @@ import {
   ListItemText,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridRenderCellParams, GridPaginationModel } from '@mui/x-data-grid';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { formatDistanceToNow } from 'date-fns';
@@ -182,14 +182,25 @@ export function RecentActionsTable() {
   const theme = useTheme();
   const actionColorsMap = useActionColors();
 
+  // Pagination state for server-side pagination
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 10,
+  });
+
   // Get theme-aware relationship colors
   const relColors = relationshipColors[theme.palette.mode];
 
-  const { data, error, isLoading } = useSWR<RecentActionsData>(
-    '/api/dashboard/recent-actions?limit=20',
+  // Build URL with pagination params
+  const offset = paginationModel.page * paginationModel.pageSize;
+  const apiUrl = `/api/dashboard/recent-actions?limit=${paginationModel.pageSize}&offset=${offset}`;
+
+  const { data, error, isLoading, isValidating } = useSWR<RecentActionsData>(
+    apiUrl,
     {
       refreshInterval: 30000,
       revalidateOnFocus: true,
+      keepPreviousData: true, // Prevent flash of empty state during pagination
     }
   );
 
@@ -347,21 +358,16 @@ export function RecentActionsTable() {
             columns={columns}
             autoHeight
             disableRowSelectionOnClick
-            hideFooter={data.actions.length <= 10}
-            pageSizeOptions={[10, 20]}
-            initialState={{
-              pagination: { paginationModel: { pageSize: 10 } },
-            }}
+            paginationMode="server"
+            rowCount={data.total}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 20, 50]}
+            loading={isValidating}
             rowHeight={44}
             sx={getDataGridStyles(theme)}
           />
         </Paper>
-      )}
-
-      {data.total > 20 && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 2 }}>
-          Showing 20 of {data.total} total actions
-        </Typography>
       )}
     </Box>
   );
