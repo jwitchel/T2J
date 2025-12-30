@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth';
 import { pool } from '../lib/db';
+import Imap from 'imap';
 
 import { encryptPassword } from '../lib/crypto';
 import { validateEmailAccount } from '../middleware/validation';
@@ -10,7 +11,6 @@ import {
   ImapConnectionError
 } from '../types/email-account';
 import { ImapOperations } from '../lib/imap-operations';
-import { withImapContext } from '../lib/imap-context';
 import { realTimeLogger } from '../lib/real-time-logger';
 import { jobSchedulerManager, SchedulerId } from '../lib/job-scheduler-manager';
 import { userAlertService } from '../lib/user-alert-service';
@@ -42,59 +42,54 @@ export function detectSentFolder(imapHost: string): string {
   return SENT_FOLDERS.DEFAULT;
 }
 
-// Real IMAP connection test
-async function testImapConnection(
-  config: CreateEmailAccountRequest,
-  userId: string
-): Promise<void> {
-  // Create a temporary account config for testing
-  const tempAccount = {
-    id: 'temp-test',
-    userId,
-    email: config.email_address,
-    imapHost: config.imap_host,
-    imapPort: config.imap_port,
-    imapUsername: config.imap_username,
-    imapPasswordEncrypted: encryptPassword(config.imap_password),
-    imapSecure: config.imap_secure,
-    sentFolder: detectSentFolder(config.imap_host)
-  };
-
-  const imapOps = new ImapOperations(tempAccount);
-  
-  try {
-    // Use context to ensure consistent lifecycle
-    const success = await withImapContext(tempAccount.id, userId, async () => {
-      return imapOps.testConnection(true);
+// Simple single-attempt IMAP connection test (no retries, no pool)
+async function testImapConnection(config: CreateEmailAccountRequest): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const imap = new Imap({
+      user: config.imap_username,
+      password: config.imap_password,
+      host: config.imap_host,
+      port: config.imap_port,
+      tls: config.imap_secure ?? (config.imap_port === 993),
+      tlsOptions: { rejectUnauthorized: false },
+      authTimeout: 10000,
+      connTimeout: 10000
     });
-    
-    if (!success) {
-      throw new ImapConnectionError('Connection test failed', 'CONNECTION_FAILED');
-    }
-    
-    console.log(`IMAP connection test passed for ${config.email_address}`);
-  } catch (error: any) {
-    // Map common IMAP errors to our error types
-    if (error.code === 'AUTHENTICATIONFAILED' || error.message?.includes('Authentication')) {
-      throw new ImapConnectionError('Authentication failed', 'AUTHENTICATIONFAILED');
-    } else if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' || error.message?.includes('connect')) {
-      throw new ImapConnectionError('Cannot connect to IMAP server', 'ENOTFOUND');
-    } else if (error.code === 'CONNECTION_FAILED') {
-      throw error;
-    } else {
-      throw new ImapConnectionError(`IMAP error: ${error.message}`, 'UNKNOWN');
-    }
-  }
+
+    const cleanup = () => {
+      try { imap.end(); } catch { /* ignore */ }
+    };
+
+    imap.once('ready', () => {
+      console.log(`IMAP connection test passed for ${config.email_address}`);
+      cleanup();
+      resolve();
+    });
+
+    imap.once('error', (err: Error & { source?: string }) => {
+      cleanup();
+      const msg = err.message || 'Unknown error';
+
+      if (msg.includes('Invalid credentials') || msg.includes('Authentication') || err.source === 'authentication') {
+        reject(new ImapConnectionError('Invalid credentials', 'AUTHENTICATIONFAILED'));
+      } else if (msg.includes('ENOTFOUND') || msg.includes('ETIMEDOUT') || msg.includes('connect')) {
+        reject(new ImapConnectionError('Cannot connect to IMAP server', 'ENOTFOUND'));
+      } else {
+        reject(new ImapConnectionError(msg, 'UNKNOWN'));
+      }
+    });
+
+    imap.connect();
+  });
 }
 
 // Test email account connection
 router.post('/test', requireAuth, validateEmailAccount, async (req, res): Promise<void> => {
   try {
-    const userId = req.user.id;
     const accountData = req.body as CreateEmailAccountRequest;
-    
+
     // Test IMAP connection
-    await testImapConnection(accountData, userId);
+    await testImapConnection(accountData);
     
     res.json({ success: true, message: 'Connection successful' });
   } catch (error) {
@@ -179,7 +174,7 @@ router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<vo
     
     // Test IMAP connection
     try {
-      await testImapConnection(accountData, userId);
+      await testImapConnection(accountData);
     } catch (error) {
       if (error instanceof ImapConnectionError) {
         if (error.code === 'AUTHENTICATIONFAILED') {
@@ -258,13 +253,13 @@ router.post('/', requireAuth, validateEmailAccount, async (req, res): Promise<vo
   }
 });
 
-// Test email account connection
+// Test existing email account connection (single attempt, no retries)
 router.post('/:id/test', requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.user.id;
     const accountId = req.params.id;
 
-    // Verify the account belongs to the user
+    // Verify the account belongs to the user and get credentials
     const accountResult = await pool.query(
       'SELECT * FROM email_accounts WHERE id = $1 AND user_id = $2',
       [accountId, userId]
@@ -276,47 +271,58 @@ router.post('/:id/test', requireAuth, async (req, res): Promise<void> => {
     }
 
     const account = accountResult.rows[0];
-    console.log('Testing connection for account:', {
-      email: account.email_address,
-      hasOAuth: !!account.oauth_provider,
-      hasPassword: !!account.imap_password_encrypted
-    });
-    
-    try {
-      const success = await withImapContext(accountId, userId, async () => {
+
+    // For OAuth accounts, use the existing ImapOperations (needs token refresh)
+    if (account.oauth_provider) {
+      try {
         const imapOps = await ImapOperations.fromAccountId(accountId, userId);
-        return imapOps.testConnection(true);
-      });
-      
-      if (!success) {
-        res.status(400).json({ 
-          error: 'Connection test failed',
-          details: 'IMAP_TEST_FAILED'
-        });
-        return;
+        const success = await imapOps.testConnection(false);
+        if (!success) {
+          res.status(400).json({ error: 'Connection test failed', details: 'IMAP_TEST_FAILED' });
+          return;
+        }
+        res.json({ success: true, message: 'Connection successful' });
+      } catch (error: any) {
+        if (error?.code === 'AUTH_REFRESH_FAILED') {
+          res.status(401).json({
+            error: 'OAUTH_REAUTH_REQUIRED',
+            message: 'Email provider session expired or revoked. Please reconnect your account.'
+          });
+          return;
+        }
+        res.status(400).json({ error: `Connection failed: ${error.message}`, details: error.code || 'UNKNOWN_ERROR' });
       }
-      
-      res.json({ 
-        success: true, 
-        message: 'Connection successful'
-      });
-    } catch (error: any) {
-      console.error('IMAP test connection error:', error);
-      if (error?.code === 'AUTH_REFRESH_FAILED') {
-        res.status(401).json({
-          error: 'OAUTH_REAUTH_REQUIRED',
-          message: 'Email provider session expired or revoked. Please reconnect your account.'
-        });
-        return;
-      }
-      res.status(400).json({ 
-        error: `Connection failed: ${error.message}`,
-        details: error.code || 'UNKNOWN_ERROR'
-      });
+      return;
     }
-  } catch (error: any) {
+
+    // For password-based accounts, use simple direct test (no pool, no retries)
+    const { decryptPassword } = await import('../lib/crypto');
+    const password = decryptPassword(account.imap_password_encrypted);
+
+    await testImapConnection({
+      email_address: account.email_address,
+      imap_username: account.imap_username,
+      imap_password: password,
+      imap_host: account.imap_host,
+      imap_port: account.imap_port,
+      imap_secure: account.imap_secure
+    });
+
+    res.json({ success: true, message: 'Connection successful' });
+  } catch (error) {
     console.error('Test connection error:', error);
-    res.status(500).json({ error: error.message || 'Failed to test connection' });
+    if (error instanceof ImapConnectionError) {
+      if (error.code === 'AUTHENTICATIONFAILED') {
+        res.status(401).json({ error: 'Invalid credentials', message: 'Please check your username and password.' });
+      } else if (error.code === 'ENOTFOUND') {
+        res.status(400).json({ error: 'Cannot connect to server', message: 'Check your IMAP server settings.' });
+      } else {
+        res.status(400).json({ error: error.message, details: error.code });
+      }
+    } else {
+      const message = error instanceof Error ? error.message : 'Failed to test connection';
+      res.status(500).json({ error: message });
+    }
   }
 });
 

@@ -28,6 +28,7 @@ import {
   IconButton,
   Divider,
   Switch,
+  CircularProgress,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -84,7 +85,8 @@ const getColumns = (
   onDelete: (account: EmailAccountResponse) => void,
   onTest: (account: EmailAccountResponse) => void,
   onReconnect: (account: EmailAccountResponse) => void,
-  onToggleMonitoring: (account: EmailAccountResponse, enabled: boolean) => void
+  onToggleMonitoring: (account: EmailAccountResponse, enabled: boolean) => void,
+  testingAccountId: string | null
 ): GridColDef<EmailAccountResponse>[] => [
   {
     field: 'email_address',
@@ -150,7 +152,13 @@ const getColumns = (
             <Button onClick={() => onReconnect(params.row)}>Reconnect</Button>
           ) : (
             <>
-              <Button onClick={() => onTest(params.row)}>Test</Button>
+              <Button
+                onClick={() => onTest(params.row)}
+                loading={testingAccountId === params.row.id}
+                disabled={testingAccountId !== null}
+              >
+                Test
+              </Button>
               <Button onClick={() => onEdit(params.row)}>Edit</Button>
             </>
           )}
@@ -371,7 +379,7 @@ function AddAccountDialog({ open, onClose, onSuccess }: AddAccountDialogProps) {
           variant="outlined"
           onClick={handleSubmit(testConnection)}
           loading={isTesting}
-          disabled={!emailAddress}
+          disabled={!emailAddress || isTesting}
         >
           Test Connection
         </Button>
@@ -527,6 +535,7 @@ function EditCredentialsDialog({ open, onClose, account, onSuccess }: EditCreden
           variant="outlined"
           onClick={handleSubmit(testConnection)}
           loading={isTesting}
+          disabled={isTesting}
         >
           Test Connection
         </Button>
@@ -534,7 +543,7 @@ function EditCredentialsDialog({ open, onClose, account, onSuccess }: EditCreden
           variant="contained"
           onClick={handleSubmit(onSubmit)}
           loading={isSaving}
-          disabled={!connectionTested}
+          disabled={!connectionTested || isSaving}
         >
           Save Changes
         </Button>
@@ -562,6 +571,7 @@ export default function MuiEmailAccountsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<EmailAccountResponse | null>(null);
+  const [testingAccountId, setTestingAccountId] = useState<string | null>(null);
 
   const openEditDialog = (account: EmailAccountResponse) => {
     setSelectedAccount(account);
@@ -594,6 +604,7 @@ export default function MuiEmailAccountsPage() {
   };
 
   const handleTestClick = async (account: EmailAccountResponse) => {
+    setTestingAccountId(account.id);
     try {
       const response = await fetch(`/api/email-accounts/${account.id}/test`, {
         method: 'POST',
@@ -607,6 +618,8 @@ export default function MuiEmailAccountsPage() {
       }
     } catch {
       showError('Network error. Please try again.');
+    } finally {
+      setTestingAccountId(null);
     }
   };
 
@@ -715,8 +728,16 @@ export default function MuiEmailAccountsPage() {
                         </IconButton>
                       ) : (
                         <>
-                          <IconButton onClick={() => handleTestClick(account)} title="Test Connection">
-                            <PlayArrowIcon />
+                          <IconButton
+                            onClick={() => handleTestClick(account)}
+                            title="Test Connection"
+                            disabled={testingAccountId !== null}
+                          >
+                            {testingAccountId === account.id ? (
+                              <CircularProgress size={20} />
+                            ) : (
+                              <PlayArrowIcon />
+                            )}
                           </IconButton>
                           <IconButton onClick={() => openEditDialog(account)} title="Edit">
                             <EditIcon />
@@ -771,7 +792,7 @@ export default function MuiEmailAccountsPage() {
           <Paper>
             <DataGrid
               rows={accounts}
-              columns={getColumns(openEditDialog, handleDeleteClick, handleTestClick, handleReconnectClick, handleToggleMonitoring)}
+              columns={getColumns(openEditDialog, handleDeleteClick, handleTestClick, handleReconnectClick, handleToggleMonitoring, testingAccountId)}
               autoHeight
               disableRowSelectionOnClick
               hideFooter={accounts.length <= 10}
