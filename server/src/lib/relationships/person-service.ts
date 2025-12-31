@@ -165,7 +165,7 @@ export class PersonService {
   /**
    * Log operation for debugging
    */
-  private _logOperation(operation: string, userId: string, details?: any): void {
+  private _logOperation(operation: string, userId: string, details?: Record<string, unknown>): void {
     if (!this.suppressLogs) {
       console.log(`PersonService.${operation}:`, {
         userId,
@@ -341,17 +341,12 @@ export class PersonService {
       let personId: string;
 
       if (existing.rows.length > 0) {
-        // Person exists - maybe update name if new one is better
+        // Person exists - always update name from latest email's From header
         personId = existing.rows[0].id;
-        const existingName = existing.rows[0].name;
-
-        // Update name if new has space and existing doesn't (real display name vs email prefix)
-        if (trimmedName.includes(' ') && !existingName.includes(' ')) {
-          await db.query(
-            `UPDATE people SET name = $1, updated_at = NOW() WHERE id = $2`,
-            [trimmedName, personId]
-          );
-        }
+        await db.query(
+          `UPDATE people SET name = $1, updated_at = NOW() WHERE id = $2`,
+          [trimmedName, personId]
+        );
       } else {
         // Create new person with email
         const insertResult = await db.query(
@@ -711,7 +706,7 @@ export function getPersonService(): PersonService {
 
 // Export singleton for backwards compatibility
 export const personService = new Proxy({} as PersonService, {
-  get(_, prop) {
-    return (getPersonService() as any)[prop];
+  get(_, prop: string | symbol) {
+    return getPersonService()[prop as keyof PersonService];
   }
 });
